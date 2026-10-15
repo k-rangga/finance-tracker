@@ -76,6 +76,21 @@ const cases = [
     parse('FW: Incoming Transaction to Your blu 💸', ME, fwd('blu <receipts@blubybcadigital.id>', 'Incoming Transaction to Your blu 💸', "Hi Budi,\nThere's an incoming transaction to your bluAccount.\nTransfer Amount\nRp75.000,00\n\n[logo]\nSITI AMINAH\nBCA\n[https://bcadigital.co.id/email_/icon-arrow-grey-1.png]\n[img]\nBudi Santoso, S\nbluAccount\n#teamblu")),
     { kind: 'income', amount: 75000, category: 'Income', title: 'SITI AMINAH' },
   ],
+  [
+    'BCA journal transfer (Transfer Type) to own blu → Transfer',
+    parse('FW: Internet Transaction Journal', ME, fwd('BCA <bca@bca.co.id>', 'Internet Transaction Journal', 'Hello BUDI SANTOSO,\nStatus : Successful\nTransfer Type : Transfer to BLU BY BCA DIGITAL\nBeneficiary Account\n  Beneficiary Name : BUDI SANTOSO, S\n  Beneficiary Bank : BLU BY BCA DIGITAL\nAmount : IDR 10,000,000.00\nFee : IDR 2,500.00\nReference No. : 20260925X')),
+    { kind: 'transfer', amount: 10000000, category: 'Transfer' },
+  ],
+  [
+    'BCA journal transfer to someone else → spend titled with their name',
+    parse('FW: Internet Transaction Journal', ME, fwd('BCA <bca@bca.co.id>', 'Internet Transaction Journal', 'Hi BUDI SANTOSO,\nTransfer Type : Transfer to BCA Account\nBeneficiary Name : SITI AMINAH\nTransfer Amount : IDR 36,000.00\nReference No. : 95271')),
+    { kind: 'spend', amount: 36000, title: 'SITI AMINAH' },
+  ],
+  [
+    'GrabFood receipt (Indonesian) → restaurant + order id ref',
+    parse('FW: Your Grab E-Receipt', ME, fwd('Grab <no-reply@grab.com>', 'Your Grab E-Receipt', '[E-receipt]\nSelamat menikmati makanan Anda!\nTOTAL\nRp 172000 TANGGAL | WAKTU\n26 Sep 26 09:47 +0700\nDetail Pesanan\nJenis Kendaraan:\nGrabFood\n\nPesanan ID\nA-9SNARFAGWUHIAV\n\nPesanan Dari:\nBakmi Kun - Kota Wisata\nRuko Fresh Market 5\nSubtotal Rp 336000\nTOTAL (INCL. TAX) Rp 172000')),
+    { kind: 'spend', amount: 172000, title: 'Bakmi Kun - Kota Wisata', category: 'Dining', ref: 'grab:A-9SNARFAGWUHIAV' },
+  ],
   ['Newsletter → null', parse('Newsletter', 'News <n@x.com>', 'No amounts here'), null],
   ['Plain Netflix (not forwarded)', parse('Your Netflix bill', 'Netflix <info@netflix.com>', 'Amount charged: Rp 186.000\nPlan: Premium'), { amount: 186000, title: 'Netflix', category: 'Subscriptions' }],
 ];

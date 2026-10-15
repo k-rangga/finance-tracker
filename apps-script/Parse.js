@@ -109,9 +109,9 @@ function isSelf_(name, holderNames) {
 }
 
 function parseBcaJournal_(subject, text) {
-  if (!/internet transaction journal|mybca|klikbca/i.test(subject + text.slice(0, 600)) || !/transaction type\s*:/i.test(text)) return null;
+  if (!/internet transaction journal|mybca|klikbca/i.test(subject + text.slice(0, 600)) || !/(transaction|transfer) type\s*:/i.test(text)) return null;
   const f = fields_(text);
-  const type = f['transaction type'] || '';
+  const type = f['transaction type'] || f['transfer type'] || '';
   const amt = money_(f['total payment'] || f['top up amount'] || f['transfer amount'] || f['amount'] || f['total'] || f['nominal'] || '');
   if (!amt) return null;
   const to = f['payment to'] || f['beneficiary name'] || f['receiver name'] || f['recipient name'] || f['to account name'] || f['account name'] || f['merchant name'] || '';
@@ -180,17 +180,19 @@ function parseGrab_(subject, from, text) {
   const total = text.match(/Total(?: Paid)?\s*\n\s*(?:Rp\s?)?([\d.,]+)/i);
   const amt = money_(total ? 'Rp' + total[1] : '');
   if (!amt) return null;
-  const booking = text.match(/Booking ID\s*:?\s*(A-[A-Z0-9]{8,})/i);
+  // Rides say "Booking ID", food/mart orders (Indonesian receipts) say "Pesanan ID" or "Order ID".
+  const booking = text.match(/(?:Booking|Pesanan|Order)\s*ID\s*:?\s*\n?\s*(A-[A-Z0-9]{8,})/i);
+  const vehicle = (text.match(/Jenis Kendaraan\s*:?\s*\n?\s*([^\n]+)/i) || [])[1] || '';
+  const shop = ((text.match(/(?:Pesanan Dari|Order(?:ed)? from)\s*:?\s*\n?\s*([^\n]{2,80})/i) || [])[1] || '').trim();
   const firstLine = text.split('\n').map(l => l.trim()).filter(l => l && !/^[_\[<]|^(from|sent|to|subject)\s*:/i.test(l))[0] || '';
   let category = 'Transport';
   let title = 'Grab ' + (firstLine.match(/bike|car|taxi/i) ? firstLine : 'ride');
-  if (/grabfood|food|order from|restaurant/i.test(text.slice(0, 2000)) && !/enjoyed your ride/i.test(text)) {
-    category = 'Dining';
-    const shop = text.match(/(?:order(?:ed)? from|from)\s*\n?\s*([^\n]{3,60})/i);
-    title = shop && !/grab|no-reply/i.test(shop[1]) ? shop[1].trim() : 'GrabFood';
-  } else if (/grabmart|mart/i.test(text.slice(0, 2000)) && !/enjoyed your ride/i.test(text)) {
+  if (/mart/i.test(vehicle) || (/grabmart/i.test(text.slice(0, 2000)) && !/enjoyed your ride/i.test(text))) {
     category = 'Groceries';
-    title = 'GrabMart';
+    title = shop || 'GrabMart';
+  } else if (/food/i.test(vehicle) || shop || (/grabfood|menikmati makanan|enjoy your (food|meal)/i.test(text.slice(0, 2000)) && !/enjoyed your ride/i.test(text))) {
+    category = 'Dining';
+    title = shop || 'GrabFood';
   } else if (/grabexpress|express|delivery/i.test(firstLine)) {
     category = 'Shopping';
     title = 'GrabExpress';
