@@ -104,6 +104,11 @@ export function Portfolio({ cycle, P, prices, onOpenPrices, onOpenTrade }: Props
               <span role="columnheader" style={{ padding: '0 16px', textAlign: 'right' }}>P/L</span>
               <span role="columnheader" style={{ padding: '0 28px 0 16px' }}>Stop → target</span>
             </div>
+            {rows.length === 0 && (
+              <div style={{ padding: '32px 28px', borderTop: `1px solid ${C.border}`, fontSize: 14, color: C.textMuted }}>
+                No open positions. Use New entry to log your first buy.
+              </div>
+            )}
             {rows.map(p => {
               const t = p.t;
               const hasPlan = !!(t.tg && t.sl);

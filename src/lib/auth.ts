@@ -1,74 +1,66 @@
+import { useEffect, useState } from 'react';
+import { supabase } from './supabase';
 import { KEYS, storage } from './storage';
 
 /**
- * Auth boundary. Today it keeps a demo session in localStorage; Google sign-in
- * uses Google Identity Services when VITE_GOOGLE_CLIENT_ID is set (with the
- * Gmail read-only scope the receipt sync will need), otherwise it falls back to
- * the demo session so the app stays usable locally.
+ * Auth boundary. With Supabase configured this is real accounts (email +
+ * password, Google). Without it, a demo session kept in localStorage.
  */
 
-export const isAuthed = () => storage.getRaw(KEYS.auth) !== '0';
-export const setAuthed = (v: boolean) => storage.setRaw(KEYS.auth, v ? '1' : '0');
+export type User = { id: string; email: string | null };
 
-export async function signInWithPassword(email: string, password: string): Promise<void> {
-  // Replace with a call to the real auth backend.
-  void email;
-  void password;
-  setAuthed(true);
+const LOCAL_USER: User = { id: 'local', email: null };
+
+/** undefined while the session is being restored, null when signed out. */
+export function useUser(): User | null | undefined {
+  const [user, setUser] = useState<User | null | undefined>(() => (supabase ? undefined : storage.getRaw(KEYS.auth) !== '0' ? LOCAL_USER : null));
+
+  useEffect(() => {
+    if (!supabase) {
+      const onChange = () => setUser(storage.getRaw(KEYS.auth) !== '0' ? LOCAL_USER : null);
+      window.addEventListener('mt-auth', onChange);
+      return () => window.removeEventListener('mt-auth', onChange);
+    }
+    const toUser = (s: { user: { id: string; email?: string | null } } | null) => (s ? { id: s.user.id, email: s.user.email ?? null } : null);
+    supabase.auth.getSession().then(({ data }) => setUser(toUser(data.session)));
+    const { data } = supabase.auth.onAuthStateChange((_e, session) => setUser(prev => (prev?.id === session?.user.id ? prev : toUser(session))));
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  return user;
 }
 
-type TokenResponse = { access_token?: string; error?: string };
-type GoogleOAuth = {
-  accounts: {
-    oauth2: {
-      initTokenClient(cfg: { client_id: string; scope: string; callback: (r: TokenResponse) => void }): { requestAccessToken(): void };
-      revoke(token: string, done?: () => void): void;
-    };
-  };
+const setLocal = (v: boolean) => {
+  storage.setRaw(KEYS.auth, v ? '1' : '0');
+  window.dispatchEvent(new Event('mt-auth'));
 };
 
-const GOOGLE_SCOPE = 'openid email profile https://www.googleapis.com/auth/gmail.readonly';
-let googleToken: string | null = null;
+export const isDemoAuth = () => !supabase;
 
-function loadGis(): Promise<GoogleOAuth> {
-  const w = window as unknown as { google?: GoogleOAuth };
-  if (w.google?.accounts?.oauth2) return Promise.resolve(w.google);
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'https://accounts.google.com/gsi/client';
-    s.async = true;
-    s.onload = () => (w.google ? resolve(w.google) : reject(new Error('Google sign-in failed to load.')));
-    s.onerror = () => reject(new Error('Google sign-in failed to load.'));
-    document.head.appendChild(s);
-  });
+export async function signInWithPassword(email: string, password: string): Promise<void> {
+  if (!supabase) return setLocal(true);
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw new Error(error.message === 'Invalid login credentials' ? 'Email or password is incorrect.' : error.message);
+}
+
+/** Returns true when the account still needs its email confirmed. */
+export async function signUp(email: string, password: string): Promise<boolean> {
+  if (!supabase) {
+    setLocal(true);
+    return false;
+  }
+  const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } });
+  if (error) throw new Error(error.message);
+  return !data.session;
 }
 
 export async function signInWithGoogle(): Promise<void> {
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-  if (!clientId) {
-    setAuthed(true);
-    return;
-  }
-  const google = await loadGis();
-  await new Promise<void>((resolve, reject) => {
-    google.accounts.oauth2
-      .initTokenClient({
-        client_id: clientId,
-        scope: GOOGLE_SCOPE,
-        callback: r => {
-          if (r.error || !r.access_token) return reject(new Error('Google sign-in was cancelled.'));
-          googleToken = r.access_token;
-          resolve();
-        },
-      })
-      .requestAccessToken();
-  });
-  setAuthed(true);
+  if (!supabase) return setLocal(true);
+  const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
+  if (error) throw new Error(/not enabled/i.test(error.message) ? 'Google sign-in is not set up yet. Use email and password for now.' : error.message);
 }
 
-export function signOut() {
-  const w = window as unknown as { google?: GoogleOAuth };
-  if (googleToken && w.google) w.google.accounts.oauth2.revoke(googleToken);
-  googleToken = null;
-  setAuthed(false);
+export async function signOut(): Promise<void> {
+  if (!supabase) return setLocal(false);
+  await supabase.auth.signOut();
 }

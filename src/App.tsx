@@ -3,14 +3,14 @@ import s from './styles/ui.module.css';
 import { IC, Icon } from './components/Icon';
 import { Logo } from './components/Logo';
 import { SettingsDialog } from './components/SettingsDialog';
-import { KEYS, storage, usePersistent } from './lib/storage';
+import { KEYS, storage } from './lib/storage';
 import { getCycle } from './lib/cycle';
 import { computeBudget } from './lib/budget';
 import { dayLabel, dayMonth, startOfToday } from './lib/format';
 import { useSettings } from './lib/settings';
-import { isAuthed, signOut } from './lib/auth';
+import { signOut } from './lib/auth';
+import { useData } from './lib/data';
 import { loadCycleTransactions, loadUpcomingBills } from './data/transactions';
-import { Login } from './screens/Login';
 import { Summary } from './screens/Summary';
 import { Categories } from './screens/Categories';
 import { Activity, type ActivityFilter } from './screens/Activity';
@@ -27,14 +27,13 @@ const TABS: { key: Tab; label: string; short: string; icon: string }[] = [
   { key: 'invest', label: 'Investment journal', short: 'Invest', icon: IC.trend },
 ];
 
-export default function App() {
-  const [authed, setAuthedState] = useState(isAuthed);
+export default function App({ email }: { email: string | null }) {
   const [collapsed, setCollapsed] = useState(() => storage.getRaw(KEYS.nav) === 'mini');
   const [tab, setTabState] = useState<Tab>(() => {
     const t = storage.getRaw(KEYS.tab) as Tab | null;
     return t && TABS.some(x => x.key === t) ? t : 'summary';
   });
-  const [recat, setRecat] = usePersistent<Record<string, string>>(KEYS.recat, () => ({}));
+  const { recat, setOverride, saveError, dismissError } = useData();
   const [txFilter, setTxFilter] = useState<ActivityFilter>({ range: 'week', cat: '', q: '' });
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -58,20 +57,7 @@ export default function App() {
     storage.setRaw(KEYS.nav, mini ? 'mini' : 'full');
     setCollapsed(mini);
   };
-  const logout = () => {
-    signOut();
-    setAuthedState(false);
-  };
-  const recategorise = useCallback(
-    (id: string, orig: string, cat: string) =>
-      setRecat(prev => {
-        const next = { ...prev };
-        if (cat === orig) delete next[id];
-        else next[id] = cat;
-        return next;
-      }),
-    [setRecat],
-  );
+  const logout = () => void signOut();
   const showTransactions = useCallback(
     (cat: string) => {
       setTxFilter({ range: 'cycle', cat, q: '' });
@@ -87,7 +73,6 @@ export default function App() {
     [setTab],
   );
 
-  if (!authed) return <Login onSignedIn={() => setAuthedState(true)} />;
 
   const current = TABS.find(t => t.key === tab)!;
   const raw25 = new Date(cycle.next.getFullYear(), cycle.next.getMonth(), 25);
@@ -190,17 +175,26 @@ export default function App() {
             </button>
           </header>
 
+          {saveError && (
+            <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--red-tint)', color: 'var(--red-ink)', borderRadius: 16, padding: '12px 16px', fontSize: 14 }}>
+              <span style={{ marginRight: 'auto' }}>{saveError}</span>
+              <button type="button" className={s.btnGhost} style={{ color: 'inherit', padding: '0 8px' }} onClick={dismissError}>
+                Dismiss
+              </button>
+            </div>
+          )}
+
           {tab === 'summary' && <Summary cycle={cycle} budget={budget} onOpenCategory={showCategory} />}
           {tab === 'categories' && (
             <Categories cycle={cycle} budget={budget} open={openCat} setOpen={setOpenCat} onShowTransactions={showTransactions} />
           )}
-          {tab === 'tx' && <Activity cycle={cycle} budget={budget} filter={txFilter} setFilter={setTxFilter} onRecat={recategorise} />}
+          {tab === 'tx' && <Activity cycle={cycle} budget={budget} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} />}
           {tab === 'plan' && <SavingsPlan cycle={cycle} budget={budget} onOpenInvest={() => setTab('invest')} />}
           {tab === 'invest' && <Invest cycle={cycle} />}
         </div>
       </main>
 
-      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <SettingsDialog email={email} onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

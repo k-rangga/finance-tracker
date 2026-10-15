@@ -1,5 +1,3 @@
-import { useCallback, useState } from 'react';
-
 /**
  * Small persistence layer. Everything the app saves goes through here so the
  * localStorage backend can later be swapped for an API without touching screens.
@@ -44,20 +42,3 @@ export const storage = {
     storage.setRaw(key, JSON.stringify(value));
   },
 };
-
-type Updater<T> = T | ((prev: T) => T);
-
-/** useState that mirrors its value to storage as JSON. */
-export function usePersistent<T>(key: string, initial: () => T): [T, (v: Updater<T>) => void] {
-  const [value, setValue] = useState<T>(() => storage.get<T | null>(key, null) ?? initial());
-  const set = useCallback(
-    (v: Updater<T>) =>
-      setValue(prev => {
-        const next = typeof v === 'function' ? (v as (p: T) => T)(prev) : v;
-        storage.set(key, next);
-        return next;
-      }),
-    [key],
-  );
-  return [value, set];
-}

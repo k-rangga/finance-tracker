@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { KEYS, usePersistent } from './storage';
 import { fmtFull, fmtShort, type Currency } from './format';
+import { useData } from './data';
 
 export type Settings = {
   income: number;
@@ -42,17 +42,17 @@ type Ctx = {
 const SettingsCtx = createContext<Ctx | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const [stored, setStored] = usePersistent<Settings>(KEYS.settings, () => DEFAULT_SETTINGS);
+  const { settings: stored, saveSettings } = useData();
   const settings = useMemo(() => ({ ...DEFAULT_SETTINGS, ...stored }), [stored]);
   const value = useMemo<Ctx>(
     () => ({
       settings,
-      update: patch => setStored(prev => ({ ...DEFAULT_SETTINGS, ...prev, ...patch })),
+      update: patch => saveSettings({ ...settings, ...patch }),
       full: (v, s) => fmtFull(v, settings.currency, s),
       short: (v, s) => fmtShort(v, settings.currency, s),
       ofIncome: pct => (pct / 100) * settings.income,
     }),
-    [settings, setStored],
+    [settings, saveSettings],
   );
   return <SettingsCtx.Provider value={value}>{children}</SettingsCtx.Provider>;
 }

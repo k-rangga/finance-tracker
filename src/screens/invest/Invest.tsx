@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import s from '../../styles/ui.module.css';
 import { IC, Icon } from '../../components/Icon';
-import { KEYS, storage, usePersistent } from '../../lib/storage';
-import { addDays, fmtFull, fmtShort, toISO } from '../../lib/format';
+import { useData } from '../../lib/data';
+import { fmtFull, fmtShort, toISO } from '../../lib/format';
 import { useSettings } from '../../lib/settings';
 import type { Cycle } from '../../lib/cycle';
-import { computePortfolio, SEED_JOURNAL, type Prices, type Snap, type Trade } from './model';
+import { computePortfolio } from './model';
 import { Portfolio } from './Portfolio';
 import { Progress } from './Progress';
 import { Journal, type JournalFilter } from './Journal';
@@ -37,29 +37,22 @@ export function useInvestFmt() {
 export function Invest({ cycle }: { cycle: Cycle }) {
   const { settings } = useSettings();
   const todayISO = toISO(cycle.today);
-  const [journal, setJournal] = usePersistent<Trade[]>(KEYS.journal, () => SEED_JOURNAL);
-  const [prices, setPrices] = usePersistent<Prices>(KEYS.prices, () => ({ map: {}, at: toISO(addDays(cycle.today, -4)) }));
+  const { journal, prices, snaps, mode, saveTrade, savePrices, saveSnapshot } = useData();
   const [sub, setSub] = useState<Sub>('portfolio');
   const [jf, setJf] = useState<JournalFilter>('all');
   const [jOpen, setJOpen] = useState<string | null>(null);
   const [pxOpen, setPxOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
-  const [snaps, setSnaps] = useState<Snap[]>([]);
 
   const P = useMemo(() => computePortfolio(journal, prices, settings.fxRate, cycle.today.getFullYear()), [journal, prices, settings.fxRate, cycle.today]);
 
   // Record one value snapshot per day so Progress builds a real history over time.
+  const lastSnap = snaps[snaps.length - 1];
   useEffect(() => {
-    const list = storage.get<Snap[]>(KEYS.snaps, []);
-    const last = list[list.length - 1];
-    const c = Math.max(P.cost - P.realized, P.cost * 0.5);
-    if (!last || last.d !== todayISO || Math.abs(last.v - P.tot) > 1) {
-      if (last && last.d === todayISO) list.pop();
-      list.push({ d: todayISO, v: P.tot, c });
-      storage.set(KEYS.snaps, list);
-    }
-    setSnaps(list);
-  }, [P.tot, P.cost, P.realized, todayISO]);
+    if (!(P.tot > 0)) return;
+    if (lastSnap && lastSnap.d === todayISO && Math.abs(lastSnap.v - P.tot) <= 1) return;
+    saveSnapshot({ d: todayISO, v: P.tot, c: Math.max(P.cost - P.realized, P.cost * 0.5) });
+  }, [P.tot, P.cost, P.realized, todayISO, lastSnap, saveSnapshot]);
 
   const goJournal = useCallback((id: string) => {
     setSub('journal');
@@ -84,7 +77,7 @@ export function Invest({ cycle }: { cycle: Cycle }) {
       </div>
 
       {sub === 'portfolio' && <Portfolio cycle={cycle} P={P} prices={prices} onOpenPrices={() => setPxOpen(true)} onOpenTrade={goJournal} />}
-      {sub === 'progress' && <Progress today={cycle.today} snaps={snaps} />}
+      {sub === 'progress' && <Progress today={cycle.today} snaps={snaps} sample={mode === 'local'} />}
       {sub === 'journal' && (
         <Journal
           today={cycle.today}
@@ -95,7 +88,10 @@ export function Invest({ cycle }: { cycle: Cycle }) {
           setFilter={setJf}
           openId={jOpen}
           setOpenId={setJOpen}
-          onClose={(id, ex) => setJournal(j => j.map(t => (t.id === id ? { ...t, ex } : t)))}
+          onClose={(id, ex) => {
+            const t = journal.find(x => x.id === id);
+            if (t) saveTrade({ ...t, ex });
+          }}
         />
       )}
       {sub === 'review' && <Review today={cycle.today} P={P} onOpenTrade={goJournal} />}
@@ -105,7 +101,7 @@ export function Invest({ cycle }: { cycle: Cycle }) {
           P={P}
           onClose={() => setPxOpen(false)}
           onSave={map => {
-            setPrices({ map: { ...prices.map, ...map }, at: todayISO });
+            savePrices({ map: { ...prices.map, ...map }, at: todayISO });
             setPxOpen(false);
           }}
         />
@@ -116,7 +112,7 @@ export function Invest({ cycle }: { cycle: Cycle }) {
           portfolioValue={P.tot}
           onClose={() => setFormOpen(false)}
           onSave={t => {
-            setJournal(j => [t, ...j]);
+            saveTrade(t);
             setFormOpen(false);
             goJournal(t.id);
           }}
