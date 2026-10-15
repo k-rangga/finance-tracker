@@ -64,6 +64,7 @@ const ACTIONS = {
   listLabels: () => listLabels_(),
   chooseLabel: p => chooseLabel_(p.name),
   syncNow: () => syncGmail_(),
+  reimportGmail: () => reimportGmail_(),
   disconnectGmail: () => disconnectGmail_(),
 };
 

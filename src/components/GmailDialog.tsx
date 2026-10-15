@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import s from '../styles/ui.module.css';
 import { Modal } from './ui';
 import { useData } from '../lib/data';
-import { chooseLabel, disconnectGmail, listLabels, syncNow, type SyncResult } from '../lib/gmail';
+import { chooseLabel, disconnectGmail, listLabels, reimportGmail, syncNow, type SyncResult } from '../lib/gmail';
 import { C } from '../lib/tokens';
 
 export function syncedAgo(iso: string | null): string {
@@ -18,7 +18,9 @@ export function syncedAgo(iso: string | null): string {
 
 const resultText = (r: SyncResult) =>
   `Read ${r.scanned} ${r.scanned === 1 ? 'email' : 'emails'}, imported ${r.imported} new ${r.imported === 1 ? 'receipt' : 'receipts'}` +
-  (r.skipped ? ` · ${r.skipped} had no amount and were skipped` : '') +
+  (r.duplicates ? ` · ${r.duplicates} ${r.duplicates === 1 ? 'duplicate' : 'duplicates'} merged` : '') +
+  (r.reversed ? ` · ${r.reversed} cancelled ${r.reversed === 1 ? 'charge' : 'charges'} removed` : '') +
+  (r.skipped ? ` · ${r.skipped} not imported (no amount, duplicates or reversals)` : '') +
   '.' +
   (r.more ? ` ${r.remaining} more to read: press Sync now to continue (it also continues at the daily sync).` : '');
 
@@ -115,6 +117,24 @@ export function GmailDialog({ onClose }: { onClose: () => void }) {
             }
           >
             {busy === 'sync' ? 'Syncing… (up to 5 min)' : 'Sync now'}
+          </button>
+        )}
+        {gmail.label_name && !changed && (
+          <button
+            type="button"
+            className={s.btnOutline}
+            disabled={!!busy}
+            title="Clear imported transactions and read the label again with the current rules. Your category changes are kept."
+            onClick={() =>
+              run('reimport', async () => {
+                if (!window.confirm('Re-import clears the imported transactions and reads the label again with the latest rules. Your category changes are kept. Continue?')) return '';
+                const r = await reimportGmail();
+                await refreshImports();
+                return 'Re-imported. ' + resultText(r);
+              })
+            }
+          >
+            {busy === 'reimport' ? 'Re-importing… (up to 5 min)' : 'Re-import all'}
           </button>
         )}
         {gmail.label_name && (

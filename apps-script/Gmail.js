@@ -69,48 +69,111 @@ function syncGmail_() {
     readColumn_('skipped', 'id').forEach(id => (have[id] = true));
     const todo = ids.filter(id => !have[id]);
 
-    const rows = [];
-    const notReceipts = [];
-    let skipped = 0;
+    const parsed = [];
     let done = 0;
-    const now = new Date().toISOString();
     while (done < todo.length && Date.now() - started < TIME_BUDGET_MS) {
       const batch = todo.slice(done, done + FETCH_BATCH);
-      fetchMessages_(token, batch).forEach(m => {
-        const p = parseReceipt({ subject: m.subject, from: m.from, text: m.text.slice(0, 20000) });
-        if (!p) {
-          skipped++;
-          notReceipts.push({ id: m.id, subject: m.subject.slice(0, 300), seen_at: now });
-          return;
-        }
-        rows.push({
-          id: m.id,
-          occurred_at: new Date(Number(m.internalDate)).toISOString(),
-          title: p.title,
-          category: p.category,
-          amount: p.amount,
-          currency: p.currency,
-          source: p.source,
-          sender: m.from.slice(0, 200),
-          subject: m.subject.slice(0, 300),
-          imported_at: now,
-        });
-      });
+      fetchMessages_(token, batch).forEach(m => parsed.push({ m: m, p: parseReceipt({ subject: m.subject, from: m.from, text: m.text.slice(0, 20000) }) }));
       done += batch.length;
     }
-
-    // Already-imported messages keep their first parse; category fixes live in `overrides`.
-    const imported = appendNew_('transactions', 'id', rows);
-    appendNew_('skipped', 'id', notReceipts);
+    const r = storeParsed_(parsed);
     const more = done < todo.length;
     // Only move the sync window forward once everything in it has been read.
-    setProps_('gmail', { label: g.label, lastSyncedAt: more ? g.lastSyncedAt || null : now, lastStatus: more ? 'partial' : 'ok', lastCount: ids.length });
-    return { imported: imported, skipped: skipped, scanned: done, more: more, remaining: todo.length - done };
+    setProps_('gmail', { label: g.label, lastSyncedAt: more ? g.lastSyncedAt || null : new Date().toISOString(), lastStatus: more ? 'partial' : 'ok', lastCount: ids.length });
+    return { imported: r.imported, skipped: r.skipped, duplicates: r.duplicates, reversed: r.reversed, scanned: done, more: more, remaining: todo.length - done };
   } catch (e) {
     const msg = String(e && e.message ? e.message : e);
     setProps_('gmail', Object.assign({}, g, { lastStatus: 'error: ' + msg.slice(0, 200) }));
     throw new Error(msg);
   }
+}
+
+/** Receipts from the merchant beat card or bank alerts for the same purchase. */
+const SOURCE_RANK = { 'Ride app email': 3, 'Marketplace email': 3, 'Billing email': 3, 'Bank email': 2, 'E-wallet email': 2, 'Card receipt': 1 };
+const rank_ = s => SOURCE_RANK[s] || 2;
+
+/**
+ * Save parsed messages: one transaction per purchase (shared `ref` = same purchase, best source kept),
+ * reversals remove the charge they cancel, and everything else is noted in `skipped` so it isn't read again.
+ */
+function storeParsed_(parsed) {
+  const now = new Date().toISOString();
+  const existing = readTable_('transactions');
+  const byRef = {};
+  existing.forEach(r => {
+    if (r.ref) byRef[r.ref] = { id: r.id, source: r.source, stored: true };
+  });
+  const rows = {};
+  const skipped = [];
+  const replaced = [];
+  const reversals = [];
+  let duplicates = 0;
+  parsed
+    .slice()
+    .sort((a, b) => Number(a.m.internalDate) - Number(b.m.internalDate))
+    .forEach(x => {
+      const m = x.m;
+      const p = x.p;
+      const skip = reason => skipped.push({ id: m.id, subject: m.subject.slice(0, 300), seen_at: now, reason: reason });
+      if (!p) return skip('no amount');
+      if (p.kind === 'reversal') {
+        reversals.push(p.ref);
+        return skip('reversal of ' + (p.ref || 'unknown charge'));
+      }
+      const row = {
+        id: m.id,
+        occurred_at: new Date(Number(m.internalDate)).toISOString(),
+        title: p.title,
+        category: p.category,
+        amount: p.amount,
+        currency: p.currency,
+        source: p.source,
+        sender: m.from.slice(0, 200),
+        subject: m.subject.slice(0, 300),
+        imported_at: now,
+        ref: p.ref,
+        kind: p.kind,
+      };
+      const prev = p.ref && byRef[p.ref];
+      if (prev) {
+        duplicates++;
+        if (rank_(row.source) <= rank_(prev.source)) return skip('duplicate of ' + prev.id);
+        // This email describes the purchase better (e.g. the Grab receipt after the card alert): swap it in.
+        if (prev.stored) replaced.push(prev.id);
+        else delete rows[prev.id];
+        skipped.push({ id: prev.id, subject: '', seen_at: now, reason: 'duplicate of ' + row.id });
+      }
+      if (p.ref) byRef[p.ref] = { id: row.id, source: row.source, stored: false };
+      rows[row.id] = row;
+    });
+
+  // A reversal cancels the charge with the same reference, whether stored before or in this batch.
+  let reversed = 0;
+  reversals.filter(Boolean).forEach(ref => {
+    const hit = byRef[ref];
+    if (!hit) return;
+    reversed++;
+    if (hit.stored) replaced.push(hit.id);
+    else delete rows[hit.id];
+    skipped.push({ id: hit.id, subject: '', seen_at: now, reason: 'reversed' });
+    delete byRef[ref];
+  });
+
+  if (replaced.length) deleteWhere_('transactions', 'id', replaced);
+  const list = Object.keys(rows).map(k => rows[k]);
+  const imported = appendNew_('transactions', 'id', list);
+  appendNew_('skipped', 'id', skipped);
+  return { imported: imported, skipped: skipped.length, duplicates: duplicates, reversed: reversed };
+}
+
+/** Rebuild the transactions tab from Gmail with the current rules. Category fixes (overrides) are kept. */
+function reimportGmail_() {
+  const g = gmailState_();
+  if (!g.label) throw new Error('Choose a Gmail label first.');
+  clearTable_('transactions');
+  clearTable_('skipped');
+  setProps_('gmail', { label: g.label });
+  return syncGmail_();
 }
 
 // ---- Gmail REST API (via the script's own OAuth token) ----

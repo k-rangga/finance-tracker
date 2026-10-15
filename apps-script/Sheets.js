@@ -6,7 +6,7 @@
  */
 
 const TABLES = {
-  transactions: ['id', 'occurred_at', 'title', 'category', 'amount', 'currency', 'source', 'sender', 'subject', 'imported_at'],
+  transactions: ['id', 'occurred_at', 'title', 'category', 'amount', 'currency', 'source', 'sender', 'subject', 'imported_at', 'ref', 'kind'],
   overrides: ['tx_id', 'category', 'updated_at'],
   trades: [
     'id', 'market', 'ticker', 'name', 'buy_date', 'price', 'quantity', 'fee', 'style', 'conviction', 'target', 'stop',
@@ -15,7 +15,7 @@ const TABLES = {
   ],
   snapshots: ['day', 'value', 'contributed'],
   /** Gmail messages already read that weren't receipts, so they aren't downloaded again. */
-  skipped: ['id', 'subject', 'seen_at'],
+  skipped: ['id', 'subject', 'seen_at', 'reason'],
 };
 
 const NUMERIC = {
@@ -50,6 +50,11 @@ function tab_(name) {
     sh.getRange(1, 1, sh.getMaxRows(), TABLES[name].length).setNumberFormat('@');
     sh.getRange(1, 1, 1, TABLES[name].length).setValues([TABLES[name]]).setFontWeight('bold');
     sh.setFrozenRows(1);
+  } else {
+    // Columns are only ever added at the end; bring an older header row up to date.
+    const cols = TABLES[name];
+    const head = sh.getRange(1, 1, 1, cols.length).getValues()[0].map(String);
+    if (head.join('|') !== cols.join('|')) sh.getRange(1, 1, 1, cols.length).setNumberFormat('@').setValues([cols]).setFontWeight('bold');
   }
   return sh;
 }
@@ -123,6 +128,34 @@ function deleteRow_(name, key, value) {
     if (last < 2) return;
     const keys = sh.getRange(2, col, last - 1, 1).getValues().map(r => String(r[0]));
     for (let i = keys.length - 1; i >= 0; i--) if (keys[i] === String(value)) sh.deleteRow(i + 2);
+  });
+}
+
+/** Delete every data row whose `key` column is in `values`. */
+function deleteWhere_(name, key, values) {
+  const want = {};
+  values.forEach(v => (want[String(v)] = true));
+  return withLock_(() => {
+    const sh = tab_(name);
+    const last = sh.getLastRow();
+    if (last < 2) return 0;
+    const keys = sh.getRange(2, TABLES[name].indexOf(key) + 1, last - 1, 1).getValues().map(r => String(r[0]));
+    let n = 0;
+    for (let i = keys.length - 1; i >= 0; i--)
+      if (want[keys[i]]) {
+        sh.deleteRow(i + 2);
+        n++;
+      }
+    return n;
+  });
+}
+
+/** Remove all data rows, keeping the header. */
+function clearTable_(name) {
+  return withLock_(() => {
+    const sh = tab_(name);
+    const last = sh.getLastRow();
+    if (last > 1) sh.getRange(2, 1, last - 1, sh.getLastColumn()).clearContent();
   });
 }
 

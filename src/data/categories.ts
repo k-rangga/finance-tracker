@@ -12,6 +12,10 @@ export type Category = {
 };
 
 export const INCOME_CATEGORY = 'Income';
+/** Money moved between your own accounts: shown in Activity, never counted as spending or income. */
+export const TRANSFER_CATEGORY = 'Transfer';
+/** Categories a transaction can be moved to besides the budget ones. */
+export const OTHER_CATEGORIES = [TRANSFER_CATEGORY, INCOME_CATEGORY];
 export const SAVINGS_TARGET_PCT = 60;
 
 export const CATEGORIES: Category[] = [

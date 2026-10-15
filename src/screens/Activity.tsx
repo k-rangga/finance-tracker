@@ -6,7 +6,7 @@ import type { Cycle } from '../lib/cycle';
 import { dayLabel } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
-import { CATEGORIES, categoryByName, INCOME_CATEGORY } from '../data/categories';
+import { CATEGORIES, categoryByName, OTHER_CATEGORIES } from '../data/categories';
 
 export type Range = 'today' | 'week' | 'last' | 'cycle';
 export type ActivityFilter = { range: Range; cat: string; q: string };
@@ -45,7 +45,8 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat }: Props) {
     if (!g) groups.push((g = { label, items: [] }));
     g.items.push(t);
   }
-  const out = txs.filter(t => !t.isIncome).reduce((a, t) => a + t.amount, 0);
+  const out = txs.filter(t => !t.isIncome && !t.isTransfer).reduce((a, t) => a + t.amount, 0);
+  const moved = txs.filter(t => t.isTransfer).reduce((a, t) => a + t.amount, 0);
   const bills = budget.bills.filter(b => !cat || b.category === cat);
 
   return (
@@ -87,12 +88,16 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat }: Props) {
               {c.name}
             </option>
           ))}
-          <option value={INCOME_CATEGORY}>{INCOME_CATEGORY}</option>
+          {OTHER_CATEGORIES.map(c => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
         </select>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
         <span aria-live="polite">
-          {txs.length} {txs.length === 1 ? 'transaction' : 'transactions'} · {full(out)} spent
+          {txs.length} {txs.length === 1 ? 'transaction' : 'transactions'} · {full(out)} spent{moved ? ` · ${full(moved)} moved between your accounts` : ''}
         </span>
         <span>Change a category to fix a Gmail mis-read · totals update everywhere</span>
       </div>
@@ -112,7 +117,7 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat }: Props) {
           <div key={g.label} style={{ display: 'flex', flexDirection: 'column' }}>
             <h2 style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, letterSpacing: 0, padding: '16px 24px 6px' }}>{g.label}</h2>
             {g.items.map(t => (
-              <TxRow key={t.id} t={t} onRecat={onRecat} amount={(t.isIncome ? '+ ' : '- ') + full(t.amount)} />
+              <TxRow key={t.id} t={t} onRecat={onRecat} amount={(t.isIncome ? '+ ' : t.isTransfer ? '' : '- ') + full(t.amount)} />
             ))}
           </div>
         ))}
@@ -155,48 +160,51 @@ function TxRow({ t, amount, onRecat }: { t: TxView; amount: string; onRecat: Pro
   const ic = iconColors(c?.type);
   return (
     <div className={s.hoverRow} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 24px' }}>
-      <IconChip d={c ? c.icon : IC.coins} bg={ic.bg} ink={ic.ink} />
+      <IconChip d={c ? c.icon : t.isTransfer ? IC.transfer : IC.coins} bg={ic.bg} ink={ic.ink} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginRight: 'auto', minWidth: 0 }}>
         <span style={{ fontSize: 15, fontWeight: 700 }}>{t.title}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: C.textMuted }}>
-          {t.isIncome ? (
-            <span style={{ fontWeight: 700, color: C.accent800, background: C.accentTint, borderRadius: 999, padding: '4px 10px' }}>Income</span>
-          ) : (
-            <select
-              value={t.cat}
-              onChange={e => onRecat(t.id, t.category, e.target.value)}
-              aria-label={`Category for ${t.title}`}
-              title="Change category"
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: ic.ink,
-                backgroundColor: ic.bg,
-                backgroundImage: chevron(ic.ink.slice(1)),
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 10px center',
-                appearance: 'none',
-                WebkitAppearance: 'none',
-                border: 'none',
-                borderRadius: 999,
-                padding: '6px 30px 6px 12px',
-                minHeight: 30,
-                cursor: 'pointer',
-              }}
-            >
-              {CATEGORIES.map(o => (
-                <option key={o.name} value={o.name}>
-                  {o.name}
+          <select
+            value={t.cat}
+            onChange={e => onRecat(t.id, t.category, e.target.value)}
+            aria-label={`Category for ${t.title}`}
+            title="Change category"
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: ic.ink,
+              backgroundColor: ic.bg,
+              backgroundImage: chevron(ic.ink.slice(1)),
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 10px center',
+              appearance: 'none',
+              WebkitAppearance: 'none',
+              border: 'none',
+              borderRadius: 999,
+              padding: '6px 30px 6px 12px',
+              minHeight: 30,
+              cursor: 'pointer',
+            }}
+          >
+            {CATEGORIES.map(o => (
+              <option key={o.name} value={o.name}>
+                {o.name}
+              </option>
+            ))}
+            <optgroup label="Not spending">
+              {OTHER_CATEGORIES.map(o => (
+                <option key={o} value={o}>
+                  {o === 'Transfer' ? 'Transfer (own accounts)' : o}
                 </option>
               ))}
-            </select>
-          )}
+            </optgroup>
+          </select>
           <span>{t.source}</span>
           {t.edited && <span style={{ fontWeight: 700, color: C.accent600 }}>✎ Recategorised from {t.category}</span>}
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>
-        <span style={{ fontSize: 15, fontWeight: 700, color: t.isIncome ? C.accent600 : C.redInk }}>{amount}</span>
+        <span style={{ fontSize: 15, fontWeight: 700, color: t.isIncome ? C.accent600 : t.isTransfer ? C.textMuted : C.redInk }}>{amount}</span>
         <span style={{ fontSize: 12, color: C.textMuted }}>{t.time}</span>
       </div>
     </div>

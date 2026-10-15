@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build && cp dist/index.html apps-script/Index.html",
     "typecheck": "tsc -b --noEmit",
-    "push": "npm run build && cd apps-script && clasp --user personal push -f",
-    "deploy": "npm run push && cd apps-script && clasp --user personal deploy -i AKfycbz5wlPdIQnckBezbe81csIb84QH_uc-Rl5yZS9fYUnUr38TFqOXhhrGujXo2axUFZcs -d \"$(git log -1 --format=%s)\""
+    "push": "npm test && npm run build && cd apps-script && clasp --user personal push -f",
+    "deploy": "npm run push && cd apps-script && clasp --user personal deploy -i AKfycbz5wlPdIQnckBezbe81csIb84QH_uc-Rl5yZS9fYUnUr38TFqOXhhrGujXo2axUFZcs -d \"$(git log -1 --format=%s)\"",
+    "test": "node apps-script/test/parse.test.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

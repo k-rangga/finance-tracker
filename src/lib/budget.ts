@@ -1,4 +1,4 @@
-import { CATEGORIES, INCOME_CATEGORY, SAVINGS_TARGET_PCT, type Category } from '../data/categories';
+import { CATEGORIES, INCOME_CATEGORY, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY, type Category } from '../data/categories';
 import type { Bill, Transaction } from '../data/transactions';
 import { weekOf, type Cycle } from './cycle';
 import { sum } from './format';
@@ -32,6 +32,7 @@ export type TxView = Transaction & {
   week: number;
   edited: boolean;
   isIncome: boolean;
+  isTransfer: boolean;
 };
 
 export type CatView = Category & {
@@ -88,7 +89,7 @@ export function computeBudget(args: {
     .map(t => {
       const cat = recat[t.id] ?? t.category;
       const offset = cycle.offsetOf(t.date);
-      return { ...t, cat, offset, week: weekOf(offset), edited: cat !== t.category, isIncome: t.category === INCOME_CATEGORY };
+      return { ...t, cat, offset, week: weekOf(offset), edited: cat !== t.category, isIncome: cat === INCOME_CATEGORY, isTransfer: cat === TRANSFER_CATEGORY };
     })
     .sort((a, b) => b.date.getTime() - a.date.getTime() || b.time.localeCompare(a.time));
 
