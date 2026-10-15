@@ -19,7 +19,7 @@ const ctx = {
   },
 };
 vm.createContext(ctx);
-for (const f of ['Parse.js', 'Gmail.js']) vm.runInContext(fs.readFileSync(dir + f, 'utf8'), ctx, { filename: f });
+for (const f of ['Parse.js', 'Gmail.js', 'Code.js']) vm.runInContext(fs.readFileSync(dir + f, 'utf8'), ctx, { filename: f });
 const parse = (subject, from, text) => vm.runInContext('parseReceipt', ctx)({ subject, from, text });
 
 const fwd = (from, subject, body) => `________________________________\nFrom: ${from}\nSent: Thursday, October 15, 2026 10:47:50 AM\nTo: someone@outlook.com\nSubject: ${subject}\n\n${body}`;
@@ -168,6 +168,21 @@ for (const [name, got, want] of cases) {
     failed++;
     console.log('FAIL', name, '—', e.message, '\n     ', JSON.stringify(got));
   }
+}
+
+// Google Finance symbols and quote cells.
+{
+  const sym = vm.runInContext('financeSymbol_', ctx);
+  assert.equal(sym('IDX', 'sini'), 'IDX:SINI');
+  assert.equal(sym('US', 'AAPL'), 'AAPL');
+  assert.equal(sym('US', 'NASDAQ:GOOGL'), 'NASDAQ:GOOGL');
+  assert.equal(sym('Crypto', 'BTC'), 'CURRENCY:BTCUSD');
+  const price = vm.runInContext('quotePrice_', ctx);
+  assert.equal(price(7900), 7900);
+  assert.equal(price('#N/A'), null);
+  assert.equal(price(''), null);
+  assert.equal(price('Loading...'), null);
+  console.log('ok   Google Finance symbols (IDX:, CURRENCY:…USD) and #N/A / blank quotes are skipped');
 }
 
 // Automatic sync hours (Asia/Jakarta): 00, 06, 08 … 22; the hourly trigger does nothing at other hours.

@@ -6,13 +6,14 @@ import { useSettings } from '../../lib/settings';
 import { C, plInk } from '../../lib/tokens';
 import { buyFee, levOf, levTag, liqOf, MARKETS, MK_COLOR, MK_NAME, nat, qtyLabel, type Market, type Portfolio as PortfolioModel, type Prices } from './model';
 import { useInvestFmt } from './Invest';
+import type { PriceRefresh } from './Journal';
 
-type Props = { cycle: Cycle; P: PortfolioModel; prices: Prices; onOpenPrices: () => void; onOpenTrade: (id: string) => void };
+type Props = { cycle: Cycle; P: PortfolioModel; prices: Prices; refresh: PriceRefresh; onOpenPrices: () => void; onOpenTrade: (id: string) => void };
 
 
 const GRID = 'minmax(190px,1.3fr) 110px 150px 140px 130px minmax(200px,1.3fr)';
 
-export function Portfolio({ cycle, P, prices, onOpenPrices, onOpenTrade }: Props) {
+export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade }: Props) {
   const { settings, full, short, ofIncome } = useSettings();
   const { dF, dS } = useInvestFmt();
   const caps: Record<Market, number> = { IDX: settings.idxCap, US: settings.usCap, Crypto: settings.cryptoCap };
@@ -33,7 +34,11 @@ export function Portfolio({ cycle, P, prices, onOpenPrices, onOpenTrade }: Props
   const pxNote =
     'Prices updated ' +
     (age <= 0 ? 'today' : age === 1 ? 'yesterday' : age + ' days ago') +
-    (stale ? ' · weekly update overdue' : ' · next update ' + dayMonth(addDays(parseISO(prices.at), 7)));
+    (prices.quotedAt
+      ? ' · Google Finance checked ' + new Date(prices.quotedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+      : stale
+        ? ' · weekly update overdue'
+        : ' · next update ' + dayMonth(addDays(parseISO(prices.at), 7)));
 
   const rows = [...P.pos].sort((a, b) => b.val - a.val);
 
@@ -93,10 +98,18 @@ export function Portfolio({ cycle, P, prices, onOpenPrices, onOpenTrade }: Props
           <h2 className={s.h2}>Holdings</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: stale ? C.amberInk : C.textMuted }}>{pxNote}</span>
-            <button type="button" className={s.btnOutline} onClick={onOpenPrices}>
-              Update prices
+            <button type="button" className={s.btnOutline} onClick={refresh.refresh} disabled={refresh.busy}>
+              {refresh.busy ? 'Refreshing…' : 'Refresh prices'}
+            </button>
+            <button type="button" className={s.btnGhost} onClick={onOpenPrices}>
+              Enter prices
             </button>
           </div>
+          {refresh.msg && (
+            <span role="status" style={{ flexBasis: '100%', fontSize: 12, color: C.textMuted }}>
+              {refresh.msg}
+            </span>
+          )}
           <span style={{ flexBasis: '100%', fontSize: 12, color: C.textMuted }}>Grey tick = entry, dot = last price · tap a row for its journal entry</span>
         </div>
         <div style={{ overflowX: 'auto' }}>
@@ -155,7 +168,7 @@ export function Portfolio({ cycle, P, prices, onOpenPrices, onOpenTrade }: Props
                   <span role="cell" style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 16px' }}>
                     <span>
                       {nat(p.last, t.mk)}
-                      {P.hasPrice(t) ? '' : ' · no price'}
+                      {!P.hasPrice(t) ? ' · no price' : prices.auto?.[t.tk] ? '' : ' · manual'}
                     </span>
                     <span style={{ fontSize: 12, color: C.textMuted }}>avg {nat(t.px, t.mk)}</span>
                   </span>

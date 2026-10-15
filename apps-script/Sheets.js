@@ -18,6 +18,8 @@ const TABLES = {
     'exit_price', 'exit_date', 'followed_plan', 'rating', 'lesson', 'created_at',
   ],
   snapshots: ['day', 'value', 'contributed'],
+  /** Avg up / avg down buys and notes on a journal entry. */
+  trade_updates: ['id', 'trade_id', 'at', 'kind', 'price', 'quantity', 'fee', 'note', 'created_at'],
   /** Gmail messages already read that weren't receipts, so they aren't downloaded again. */
   skipped: ['id', 'subject', 'seen_at', 'reason'],
 };
@@ -26,6 +28,7 @@ const NUMERIC = {
   transactions: ['amount'],
   trades: ['price', 'quantity', 'fee', 'conviction', 'target', 'stop', 'leverage', 'exit_price', 'rating'],
   snapshots: ['value', 'contributed'],
+  trade_updates: ['price', 'quantity', 'fee'],
 };
 
 let SS_ = null;

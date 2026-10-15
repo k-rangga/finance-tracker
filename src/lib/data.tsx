@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Backend, UserData } from './backend';
 import type { Settings } from './settings';
-import type { Prices, Snap, Trade } from '../screens/invest/model';
+import type { Prices, Snap, Trade, TradeUpdate } from '../screens/invest/model';
 import { getCycle } from './cycle';
 import { addDays, startOfToday } from './format';
 
@@ -21,6 +21,8 @@ type Ctx = UserData & {
   /** Your share of an expense as a fraction (0–1); `null` counts the full amount. */
   setShare: (txId: string, ratio: number | null) => void;
   saveTrade: (t: Trade) => void;
+  saveUpdate: (u: TradeUpdate) => void;
+  deleteUpdate: (id: string) => void;
   savePrices: (p: Prices) => void;
   saveSnapshot: (s: Snap) => void;
 };
@@ -98,6 +100,14 @@ export function DataProvider({ backend, children, loading, failed }: { backend: 
       saveTrade: t => {
         setData(d => d && { ...d, journal: d.journal.some(x => x.id === t.id) ? d.journal.map(x => (x.id === t.id ? t : x)) : [t, ...d.journal] });
         write(backend.saveTrade(t));
+      },
+      saveUpdate: x => {
+        setData(d => d && { ...d, updates: [...d.updates.filter(y => y.id !== x.id), x] });
+        write(backend.saveUpdate(x));
+      },
+      deleteUpdate: id => {
+        setData(d => d && { ...d, updates: d.updates.filter(y => y.id !== id) });
+        write(backend.deleteUpdate(id));
       },
       savePrices: p => {
         setData(d => d && { ...d, prices: p });

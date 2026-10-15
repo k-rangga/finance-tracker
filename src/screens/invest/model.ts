@@ -28,7 +28,29 @@ export type Trade = {
   ex?: { px: number; d: string; fp?: FollowedPlan; rt?: number; ls?: string };
 };
 
-export type Prices = { map: Record<string, number>; at: string };
+/**
+ * Last prices by ticker. `at`: date of the last update (ISO day).
+ * `auto`: tickers last priced from Google Finance (ticker → quote time); any other price was typed in.
+ * `quotedAt`: when Google Finance was last asked (ISO timestamp), to refresh about every 30 minutes.
+ */
+export type Prices = { map: Record<string, number>; at: string; auto?: Record<string, string>; quotedAt?: string };
+
+/** An update on an open position: buying more (average up or down) or just a note. */
+export type UpdateKind = 'avg_up' | 'avg_down' | 'note';
+export type TradeUpdate = {
+  id: string;
+  tradeId: string;
+  /** When it happened (ISO timestamp). */
+  at: string;
+  kind: UpdateKind;
+  /** Avg up/down only: buy price, quantity (shares or units, like Trade.q) and fee (auto when missing). */
+  px?: number;
+  q?: number;
+  fee?: number;
+  note?: string;
+};
+
+export const UPDATE_LABEL: Record<UpdateKind, string> = { avg_up: 'Avg up', avg_down: 'Avg down', note: 'Note' };
 export type Snap = { d: string; v: number; c: number };
 
 export const MARKETS: Market[] = ['IDX', 'US', 'Crypto'];
@@ -53,6 +75,43 @@ export const levOf = (t: Pick<Trade, 'lev'>) => t.lev || 1;
 export const liqOf = (t: Trade) => t.px * (1 - dirOf(t) / levOf(t));
 export const levTag = (t: Trade) => (levOf(t) > 1 ? `${levOf(t)}x ${t.dir || 'Long'}` : '');
 export const buyFee = (t: Trade) => (t.fee != null ? t.fee : t.px * t.q * (t.mk === 'IDX' ? 0.0015 : 0.001));
+/** Fee of an avg up/down buy: as entered, else the same auto rate as the first buy. */
+export const addFee = (t: Pick<Trade, 'mk'>, u: TradeUpdate) => (u.fee != null ? u.fee : (u.px ?? 0) * (u.q ?? 0) * (t.mk === 'IDX' ? 0.0015 : 0.001));
+export const isAdd = (u: TradeUpdate) => u.kind !== 'note' && (u.px ?? 0) > 0 && (u.q ?? 0) > 0;
+
+/** A position at one moment: quantity, average buy price, and cost including all buy fees (native currency). */
+export type PosState = { q: number; avg: number; cost: number };
+
+/**
+ * The position after each update, oldest first: `before` and `after` for every update (a note leaves it unchanged).
+ * The average is quantity-weighted over the buys; fees are carried in the cost, as for the first buy.
+ */
+export function positionHistory(t: Trade, updates: TradeUpdate[]) {
+  let cur: PosState = { q: t.q, avg: t.px, cost: t.px * t.q + buyFee(t) };
+  return updates
+    .filter(u => u.tradeId === t.id)
+    .sort((a, b) => a.at.localeCompare(b.at))
+    .map(u => {
+      const before = cur;
+      if (isAdd(u)) {
+        const q = before.q + u.q!;
+        cur = { q, avg: (before.avg * before.q + u.px! * u.q!) / q, cost: before.cost + u.px! * u.q! + addFee(t, u) };
+      }
+      return { u, before, after: cur };
+    });
+}
+
+/**
+ * The trade as it stands with its avg ups/downs folded in: total quantity, weighted average price and total buy fees.
+ * The stored entry is never changed; everything that values the position uses this.
+ */
+export function effectiveTrade(t: Trade, updates: TradeUpdate[]): Trade {
+  const adds = updates.filter(u => u.tradeId === t.id && isAdd(u));
+  if (!adds.length) return t;
+  const q = t.q + sum(adds.map(u => u.q!));
+  const px = (t.px * t.q + sum(adds.map(u => u.px! * u.q!))) / q;
+  return { ...t, px, q, fee: buyFee(t) + sum(adds.map(u => addFee(t, u))) };
+}
 export const sellFee = (t: Trade) => (t.ex ? t.ex.px * t.q * (t.mk === 'IDX' ? 0.0025 : 0.001) : 0);
 /** Reward in units of planned risk. */
 export const rMultiple = (t: Trade, px: number) => (t.sl && (t.px - t.sl) * dirOf(t) > 0 ? (px - t.px) / (t.px - t.sl) : null);
@@ -117,7 +176,8 @@ export type Draft = {
   cd: string;
   tg: string;
   sl: string;
-  cv: Trade['cv'];
+  /** Required: null until chosen. */
+  cv: Trade['cv'] | null;
   lev: number;
   dir: 'Long' | 'Short';
   tags: string;
@@ -135,11 +195,9 @@ export function entryRules(D: Draft): Rule[] {
   if (D.st !== 'Swing' && lev === 1) return [];
   const okSl = sl > 0 && px > 0 && (px - sl) * dr > 0;
   const rr = okSl && tg > 0 ? (tg - px) / (px - sl) : 0;
-  const r: Rule[] = [
-    { label: 'Stop loss set', ok: okSl },
-    { label: 'Catalyst with a date', ok: !!(D.cat.trim() && D.cd) },
-    { label: 'Reward : risk at least 2 : 1', ok: rr >= 2 },
-  ];
+  // Target and catalyst are optional; reward : risk is only checked once a target is set.
+  const r: Rule[] = [{ label: 'Stop loss set', ok: okSl }];
+  if (tg > 0) r.push({ label: 'Reward : risk at least 2 : 1', ok: rr >= 2 });
   if (lev > 1) {
     const liq = px * (1 - dr / lev);
     r.push({ label: 'Stop hits before liquidation', ok: okSl && (sl - liq) * dr > 0 });

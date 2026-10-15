@@ -37,6 +37,7 @@ const ACTIONS = {
     links: links_(),
     shares: shares_(),
     trades: readTable_('trades'),
+    updates: readTable_('trade_updates'),
     prices: props_('prices', null),
     snaps: readTable_('snapshots'),
     txRows: transactionsSince_(p.since),
@@ -67,6 +68,16 @@ const ACTIONS = {
     upsertRow_('trades', 'id', Object.assign({}, p.trade, { created_at: p.trade.created_at || new Date().toISOString() }));
     return true;
   },
+  saveTradeUpdate: p => {
+    upsertRow_('trade_updates', 'id', Object.assign({}, p.update, { created_at: p.update.created_at || new Date().toISOString() }));
+    return true;
+  },
+  deleteTradeUpdate: p => {
+    deleteRow_('trade_updates', 'id', p.id);
+    return true;
+  },
+  /** Current prices from Google Finance for [{ tk, mk }] → { ticker: { price, at } }; unknown symbols are left out. */
+  quotes: p => quotes_(p.items || []),
   savePrices: p => {
     setProps_('prices', p.prices);
     return true;
@@ -133,6 +144,54 @@ function transactionsSince_(since) {
       const category = investmentCategory_({ kind: r.kind, category: acc.category, title: r.title });
       return { id: r.id, occurred_at: r.occurred_at, title: r.title, category: category, amount: r.amount, currency: r.currency, source: r.source, account: acc.account, to_account: acc.to_account || null };
     });
+}
+
+// ---- Google Finance quotes ----
+// Apps Script has no Google Finance API, so prices come from the GOOGLEFINANCE spreadsheet function on a
+// hidden `quotes` tab. Data can be delayed up to 20 minutes; small IDX caps may return #N/A (left out).
+
+/** IDX:BBCA, the US ticker as stored (or EXCHANGE:TICKER), CURRENCY:BTCUSD. */
+function financeSymbol_(mk, tk) {
+  tk = String(tk || '').trim().toUpperCase();
+  if (tk.indexOf(':') >= 0) return tk;
+  if (mk === 'IDX') return 'IDX:' + tk;
+  if (mk === 'Crypto') return 'CURRENCY:' + tk + 'USD';
+  return tk;
+}
+
+/** A quote cell's value as a price, or null for #N/A, blanks and anything not yet loaded. */
+function quotePrice_(v) {
+  const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, ''));
+  return isFinite(n) && n > 0 ? n : null;
+}
+
+function quotes_(items) {
+  const out = {};
+  if (!items.length) return out;
+  const book = ss_();
+  let sh = book.getSheetByName('quotes');
+  if (!sh) {
+    sh = book.insertSheet('quotes');
+    sh.hideSheet();
+  }
+  sh.clear();
+  const n = items.length;
+  sh.getRange(1, 1, n, 2).setNumberFormat('@').setValues(items.map(i => [String(i.tk), financeSymbol_(i.mk, i.tk)]));
+  sh.getRange(1, 3, n, 1).setFormulas(items.map((_, k) => ['=IFERROR(GOOGLEFINANCE(B' + (k + 1) + ',"price"),"")']));
+  // GOOGLEFINANCE fills in after a recalculation; give slow symbols a couple more tries.
+  let vals = [];
+  for (let attempt = 0; attempt < 3; attempt++) {
+    SpreadsheetApp.flush();
+    vals = sh.getRange(1, 1, n, 3).getValues();
+    if (!vals.some(r => /loading/i.test(String(r[2])))) break;
+    Utilities.sleep(1500);
+  }
+  const at = new Date().toISOString();
+  vals.forEach(r => {
+    const price = quotePrice_(r[2]);
+    if (price != null) out[r[0]] = { price: price, at: at };
+  });
+  return out;
 }
 
 // ---- script properties (small JSON values) ----

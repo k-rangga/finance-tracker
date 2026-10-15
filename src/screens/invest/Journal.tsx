@@ -16,11 +16,14 @@ import {
   numIn,
   qtyLabel,
   rMultiple,
+  isAdd,
   type FollowedPlan,
   type Portfolio,
   type Trade,
+  type TradeUpdate,
 } from './model';
 import { useInvestFmt } from './Invest';
+import { UpdateDetail, UpdateForm, UpdateTimeline } from './Updates';
 
 export type JournalFilter = 'all' | 'open' | 'closed' | 'IDX' | 'US' | 'Crypto';
 
@@ -34,7 +37,18 @@ type Props = {
   openId: string | null;
   setOpenId: (id: string | null) => void;
   onClose: (id: string, ex: NonNullable<Trade['ex']>) => void;
+  /** Entries as stored (first buy only); `journal` holds them with avg ups/downs folded in. */
+  stored: Trade[];
+  updates: TradeUpdate[];
+  onEdit: (t: Trade) => void;
+  onSaveUpdate: (u: TradeUpdate) => void;
+  onDeleteUpdate: (id: string) => void;
+  /** Google Finance refresh, shared with Portfolio. */
+  prices: PriceRefresh;
 };
+
+/** "Refresh prices" state, shared by Portfolio and Journal. */
+export type PriceRefresh = { refresh: () => void; busy: boolean; msg: string };
 
 export const FP_COLORS: Record<FollowedPlan, [string, string]> = {
   Yes: [C.accentTint, C.accent800],
@@ -44,8 +58,12 @@ export const FP_COLORS: Record<FollowedPlan, [string, string]> = {
 
 type CloseDraft = { px: string; d: string; fp: FollowedPlan; rt: number; ls: string };
 
-export function Journal({ today, todayISO, P, journal, filter, setFilter, openId, setOpenId, onClose }: Props) {
+export function Journal({ today, todayISO, P, journal, filter, setFilter, openId, setOpenId, onClose, stored, updates, onEdit, onSaveUpdate, onDeleteUpdate, prices }: Props) {
   const { dS } = useInvestFmt();
+  /** Add/edit update form, and the detail view of one update. */
+  const [form, setForm] = useState<{ t: Trade; editing?: TradeUpdate } | null>(null);
+  const [detail, setDetail] = useState<{ t: Trade; u: TradeUpdate } | null>(null);
+  const storedOf = (t: Trade) => stored.find(x => x.id === t.id) ?? t;
   const [closing, setClosing] = useState<string | null>(null);
   const [cd, setCd] = useState<CloseDraft>({ px: '', d: todayISO, fp: 'Yes', rt: 3, ls: '' });
   const [err, setErr] = useState('');
@@ -75,6 +93,16 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <button type="button" className={s.btnOutline} onClick={prices.refresh} disabled={prices.busy}>
+          {prices.busy ? 'Refreshing prices…' : 'Refresh prices'}
+        </button>
+        {prices.msg && (
+          <span role="status" style={{ fontSize: 13, color: C.textMuted }}>
+            {prices.msg}
+          </span>
+        )}
+      </div>
       <div className={s.pills} role="group" aria-label="Filter entries">
         {filters.map(([k, l]) => (
           <button
@@ -104,7 +132,7 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
           const st: [string, string, string] = !cl ? ['Open', C.divider, C.textMuted] : pl > 0 ? ['Win', C.accentTint, C.accent800] : ['Loss', C.redTint, C.redInk];
           const cdays = t.cd ? diffDays(today, parseISO(t.cd)) : null;
           const plan: { k: string; v: string; sub: string; ink?: string }[] = [
-            { k: 'Entry', v: nat(t.px, t.mk), sub: qtyLabel(t) },
+            { k: t.q !== storedOf(t).q ? 'Avg entry' : 'Entry', v: nat(t.px, t.mk), sub: qtyLabel(t) + (t.q !== storedOf(t).q ? ` · ${1 + updates.filter(u => u.tradeId === t.id && isAdd(u)).length} buys` : '') },
             { k: 'Target', v: t.tg ? nat(t.tg, t.mk) : '—', sub: t.tg ? fmtPct(((t.tg - t.px) / t.px) * 100) : 'Not set' },
             { k: 'Stop', v: t.sl ? nat(t.sl, t.mk) : '—', sub: t.sl ? fmtPct(((t.sl - t.px) / t.px) * 100) : 'Not set' },
             { k: 'Reward : risk', v: rr ? rr.toFixed(1) + ' : 1' : '—', sub: rr ? (rr >= 2 ? 'Meets 2 : 1' : 'Below 2 : 1') : 'Needs target and stop', ink: rr && rr < 2 ? C.amberInk : undefined },
@@ -200,10 +228,26 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
                       <p style={{ fontSize: 14, lineHeight: 1.55 }}>{t.ex!.ls || 'No lesson written.'}</p>
                     </div>
                   )}
-                  {!cl && closing !== t.id && (
-                    <button type="button" className={s.btnOutline} style={{ alignSelf: 'flex-start' }} onClick={() => startClose(t)}>
-                      Close trade
-                    </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <span className={s.eyebrow}>Updates</span>
+                    <UpdateTimeline t={storedOf(t)} updates={updates} onOpen={u => setDetail({ t, u })} />
+                  </div>
+                  {closing !== t.id && (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {!cl && (
+                        <button type="button" className={s.btnOutline} onClick={() => startClose(t)}>
+                          Close trade
+                        </button>
+                      )}
+                      {!cl && (
+                        <button type="button" className={s.btnOutline} onClick={() => setForm({ t })}>
+                          Add update
+                        </button>
+                      )}
+                      <button type="button" className={s.btnGhost} onClick={() => onEdit(storedOf(t))}>
+                        Edit
+                      </button>
+                    </div>
                   )}
                   {!cl && closing === t.id && (
                     <div style={{ background: '#fff', border: `1.5px solid ${C.accent600}`, borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -265,6 +309,36 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
           );
         })}
       </div>
+      {form && (
+        <UpdateForm
+          t={storedOf(form.t)}
+          avg={form.t.px}
+          last={P.lastOf(form.t)}
+          editing={form.editing}
+          onClose={() => setForm(null)}
+          onSave={u => {
+            onSaveUpdate(u);
+            setForm(null);
+          }}
+        />
+      )}
+      {detail && (
+        <UpdateDetail
+          t={storedOf(detail.t)}
+          updates={updates}
+          update={detail.u}
+          last={P.lastOf(detail.t)}
+          onClose={() => setDetail(null)}
+          onEdit={() => {
+            setForm({ t: detail.t, editing: detail.u });
+            setDetail(null);
+          }}
+          onDelete={() => {
+            onDeleteUpdate(detail.u.id);
+            setDetail(null);
+          }}
+        />
+      )}
     </div>
   );
 }

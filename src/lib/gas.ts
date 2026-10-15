@@ -41,6 +41,7 @@ type Dev = Record<string, unknown> & {
   links?: Record<string, string>;
   shares?: Record<string, number>;
   trades: Record<string, unknown>[];
+  updates?: { id: string }[];
   snapshots: { day: string }[];
   /** Sample imported rows for working on the UI locally (set by hand in localStorage). */
   txRows?: unknown[];
@@ -68,7 +69,7 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
   const gmail = { google_email: 'dev@localhost', label_name: (d.label as string) ?? null, last_synced_at: null, last_sync_status: null, last_sync_count: null };
   switch (action) {
     case 'getState':
-      return { email: 'dev@localhost', settings: d.settings ?? null, recat: d.overrides, links: d.links ?? {}, shares: d.shares ?? {}, trades: d.trades, prices: d.prices ?? null, snaps: d.snapshots, txRows: d.txRows ?? [], gmail };
+      return { email: 'dev@localhost', settings: d.settings ?? null, recat: d.overrides, links: d.links ?? {}, shares: d.shares ?? {}, trades: d.trades, updates: d.updates ?? [], prices: d.prices ?? null, snaps: d.snapshots, txRows: d.txRows ?? [], gmail };
     case 'getImports':
       return { txRows: d.txRows ?? [], gmail };
     case 'saveSettings':
@@ -94,6 +95,21 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       const t = q.trade as { id: string };
       d.trades = [t, ...d.trades.filter(x => x.id !== t.id)];
       return save();
+    }
+    case 'saveTradeUpdate': {
+      const x = q.update as { id: string };
+      d.updates = [...(d.updates ?? []).filter(y => y.id !== x.id), x];
+      return save();
+    }
+    case 'deleteTradeUpdate':
+      d.updates = (d.updates ?? []).filter(y => y.id !== q.id);
+      return save();
+    case 'quotes': {
+      // Stand-in for Google Finance: prices from `quotes` in localStorage; anything missing acts like #N/A.
+      const at = new Date().toISOString();
+      const known = (d.quotes ?? {}) as Record<string, number>;
+      const items = (q.items ?? []) as { tk: string }[];
+      return Object.fromEntries(items.filter(i => known[i.tk] > 0).map(i => [i.tk, { price: known[i.tk], at }]));
     }
     case 'savePrices':
       d.prices = q.prices;

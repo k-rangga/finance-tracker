@@ -3,33 +3,53 @@ import s from '../../styles/ui.module.css';
 import { Modal, Options } from '../../components/ui';
 import { useSettings } from '../../lib/settings';
 import { C } from '../../lib/tokens';
-import { entryRules, nat, numIn, type Draft, type Market, type Trade } from './model';
+import { entryRules, nat, numIn, type Draft, type FollowedPlan, type Market, type Trade } from './model';
 import { useInvestFmt } from './Invest';
 
-type Props = { todayISO: string; portfolioValue: number; onClose: () => void; onSave: (t: Trade) => void };
+type Props = {
+  todayISO: string;
+  portfolioValue: number;
+  /** The stored entry to edit (never the averaged position); omit for a new entry. */
+  editing?: Trade;
+  onClose: () => void;
+  onSave: (t: Trade) => void;
+};
 
-export function EntryModal({ todayISO, portfolioValue, onClose, onSave }: Props) {
+type ExitDraft = { px: string; d: string; fp: FollowedPlan; rt: number; ls: string };
+
+const str = (v: number | undefined) => (v == null ? '' : String(v));
+
+/** Draft from a stored entry (IDX quantity back to lots). */
+const draftOf = (t: Trade): Draft => ({
+  mk: t.mk,
+  tk: t.tk,
+  nm: t.nm ?? '',
+  d: t.d,
+  px: str(t.px),
+  q: str(t.mk === 'IDX' ? t.q / 100 : t.q),
+  fee: str(t.fee),
+  st: t.st,
+  th: t.th ?? '',
+  cat: t.cat ?? '',
+  cd: t.cd ?? '',
+  tg: str(t.tg),
+  sl: str(t.sl),
+  cv: t.cv ?? null,
+  lev: t.lev ?? 1,
+  dir: t.dir ?? 'Long',
+  tags: t.tags ?? '',
+});
+
+export function EntryModal({ todayISO, portfolioValue, editing, onClose, onSave }: Props) {
   const { settings } = useSettings();
   const { dF } = useInvestFmt();
-  const [D, setDraft] = useState<Draft>({
-    mk: 'IDX',
-    tk: '',
-    nm: '',
-    d: todayISO,
-    px: '',
-    q: '',
-    fee: '',
-    st: 'Swing',
-    th: '',
-    cat: '',
-    cd: '',
-    tg: '',
-    sl: '',
-    cv: 3,
-    lev: 1,
-    dir: 'Long',
-    tags: '',
-  });
+  const [D, setDraft] = useState<Draft>(() =>
+    editing
+      ? draftOf(editing)
+      : { mk: 'IDX', tk: '', nm: '', d: todayISO, px: '', q: '', fee: '', st: 'Swing', th: '', cat: '', cd: '', tg: '', sl: '', cv: null, lev: 1, dir: 'Long', tags: '' },
+  );
+  const ex0 = editing?.ex;
+  const [X, setX] = useState<ExitDraft | null>(() => (ex0 ? { px: String(ex0.px), d: ex0.d, fp: ex0.fp ?? 'Yes', rt: ex0.rt ?? 3, ls: ex0.ls ?? '' } : null));
   const [err, setErr] = useState('');
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => {
     setDraft(d => ({ ...d, [k]: v }));
@@ -63,12 +83,16 @@ export function EntryModal({ todayISO, portfolioValue, onClose, onSave }: Props)
     const tk = D.tk.trim().toUpperCase();
     const fee = numIn(D.fee, D.mk);
     if (!tk || !(px > 0) || !(q > 0)) return setErr('Ticker, entry price and quantity are required.');
+    if (D.cv == null) return setErr('Choose a conviction level from 1 to 5.');
+    const exPx = X ? numIn(X.px, D.mk) : NaN;
+    if (X && !(exPx > 0)) return setErr('Enter the exit price.');
     if (sl > 0 && (px - sl) * dr <= 0) return setErr(`Stop loss must be ${dr > 0 ? 'below' : 'above'} the entry price.`);
     if (tg > 0 && (tg - px) * dr <= 0) return setErr(`Target must be ${dr > 0 ? 'above' : 'below'} the entry price.`);
     const bad = rules.filter(r => !r.ok);
-    if (bad.length) return setErr('Entry rules not met: ' + bad.map(r => r.label.toLowerCase()).join(', ') + '.');
+    // New entries must meet the rules; edits of older entries can still be saved (the rules stay visible).
+    if (bad.length && !editing) return setErr('Entry rules not met: ' + bad.map(r => r.label.toLowerCase()).join(', ') + '.');
     const t: Trade = {
-      id: 'u' + Date.now(),
+      id: editing?.id ?? 'u' + Date.now(),
       mk: D.mk,
       tk,
       nm: D.nm.trim(),
@@ -85,6 +109,7 @@ export function EntryModal({ todayISO, portfolioValue, onClose, onSave }: Props)
       ...(D.tags.trim() ? { tags: D.tags.trim() } : {}),
       ...(fee >= 0 ? { fee } : {}),
       ...(lev > 1 ? { lev, dir: dr < 0 ? 'Short' : 'Long' } : {}),
+      ...(X ? { ex: { px: exPx, d: X.d || todayISO, fp: X.fp, rt: X.rt, ls: X.ls.trim() } } : {}),
     };
     onSave(t);
   };
@@ -105,7 +130,7 @@ export function EntryModal({ todayISO, portfolioValue, onClose, onSave }: Props)
   const grid = (min: number) => ({ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`, gap: 12 }) as const;
 
   return (
-    <Modal title="New journal entry" onClose={onClose} width={680}>
+    <Modal title={editing ? `Edit ${editing.tk}` : 'New journal entry'} onClose={onClose} width={680}>
       <div style={{ ...grid(220), gap: 16 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span className={s.label}>Market</span>
@@ -144,25 +169,57 @@ export function EntryModal({ todayISO, portfolioValue, onClose, onSave }: Props)
         {text('fee', `Fee (${cur})`, { numeric: true, placeholder: D.mk === 'IDX' ? 'Auto 0.15%' : 'Auto 0.1%' })}
       </div>
       <div style={grid(200)}>
-        {text('tg', `Target (${cur})`, { numeric: true, placeholder: D.st === 'Long-term' ? 'Optional for long-term' : '' })}
+        {text('tg', `Target (${cur}, optional)`, { numeric: true })}
         {text('sl', `Stop (${cur})`, { numeric: true, placeholder: 'Price that proves you wrong' })}
       </div>
       <div style={grid(200)}>
-        {text('cat', 'Catalyst', { placeholder: 'Earnings, dividend, RUPS, rate decision' })}
+        {text('cat', 'Catalyst (optional)', { placeholder: 'Earnings, dividend, RUPS, rate decision' })}
         <label className={s.field}>
-          Catalyst date
+          Catalyst date (optional)
           <input className={s.input} type="date" value={D.cd} onChange={e => set('cd', e.target.value)} />
         </label>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <span className={s.label}>Conviction</span>
-        <Options label="Conviction" round items={[1, 2, 3, 4, 5] as const} value={D.cv} onChange={v => set('cv', v)} />
+        <span className={s.label}>
+          Conviction <span style={{ fontWeight: 500, color: C.textMuted }}>(required)</span>
+        </span>
+        <Options label="Conviction" round items={[1, 2, 3, 4, 5] as const} value={D.cv as Trade['cv']} onChange={v => set('cv', v)} />
       </div>
       <label className={s.field}>
         Thesis
         <textarea className={s.input} rows={3} value={D.th} onChange={e => set('th', e.target.value)} placeholder="The setup, what the market is missing, and what would prove you wrong" />
       </label>
       {text('tags', 'Tags', { placeholder: 'bank, dividend' })}
+      {X && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, borderTop: `1px solid ${C.divider}`, paddingTop: 16 }}>
+          <span className={s.label}>Exit</span>
+          <div style={grid(160)}>
+            <label className={s.field}>
+              Exit price ({cur})
+              <input className={s.input} inputMode="decimal" value={X.px} onChange={e => {
+                  setX({ ...X, px: e.target.value });
+                  setErr('');
+                }} />
+            </label>
+            <label className={s.field}>
+              Exit date
+              <input className={s.input} type="date" value={X.d} onChange={e => setX({ ...X, d: e.target.value })} />
+            </label>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span className={s.label}>Followed plan?</span>
+            <Options label="Followed plan" items={['Yes', 'Partly', 'No'] as const} value={X.fp} onChange={fp => setX({ ...X, fp })} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span className={s.label}>Rating (process, not outcome)</span>
+            <Options label="Rating" round items={[1, 2, 3, 4, 5] as const} value={X.rt as 1} onChange={rt => setX({ ...X, rt })} />
+          </div>
+          <label className={s.field}>
+            Lesson
+            <textarea className={s.input} rows={3} value={X.ls} onChange={e => setX({ ...X, ls: e.target.value })} />
+          </label>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span className={s.label}>Entry rules</span>
@@ -192,7 +249,7 @@ export function EntryModal({ todayISO, portfolioValue, onClose, onSave }: Props)
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button type="button" className={s.btnPrimary} onClick={save}>
-          Save entry
+          {editing ? 'Save changes' : 'Save entry'}
         </button>
         <button type="button" className={s.btnGhost} onClick={onClose}>
           Cancel

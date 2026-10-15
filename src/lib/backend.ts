@@ -1,7 +1,7 @@
 import { run } from './gas';
 import { DEFAULT_SETTINGS, type Settings } from './settings';
 import { addDays, startOfToday, toISO } from './format';
-import type { Prices, Snap, Trade } from '../screens/invest/model';
+import type { Market, Prices, Snap, Trade, TradeUpdate } from '../screens/invest/model';
 import type { TxRow } from '../data/transactions';
 
 export type GmailConnection = {
@@ -23,6 +23,8 @@ export type UserData = {
   /** Your share of an expense as a fraction of its amount: { txId: 0–1 }. */
   shares: Record<string, number>;
   journal: Trade[];
+  /** Avg up / avg down buys and notes on journal entries. */
+  updates: TradeUpdate[];
   prices: Prices;
   snaps: Snap[];
   /** Imported Gmail receipts from the start of the previous pay cycle. */
@@ -42,6 +44,8 @@ export type Backend = {
   /** `ratio: null` counts the full amount again. */
   setShare(txId: string, ratio: number | null): Promise<void>;
   saveTrade(t: Trade): Promise<void>;
+  saveUpdate(u: TradeUpdate): Promise<void>;
+  deleteUpdate(id: string): Promise<void>;
   savePrices(p: Prices): Promise<void>;
   saveSnapshot(s: Snap): Promise<void>;
 };
@@ -126,6 +130,42 @@ const toRow = (t: Trade): TradeRow => ({
   lesson: t.ex?.ls ?? null,
 });
 
+type UpdateRow = {
+  id: string;
+  trade_id: string;
+  at: string;
+  kind: TradeUpdate['kind'];
+  price: number | null;
+  quantity: number | null;
+  fee: number | null;
+  note: string | null;
+};
+
+const toUpdate = (r: UpdateRow): TradeUpdate => ({
+  id: r.id,
+  tradeId: r.trade_id,
+  at: r.at,
+  kind: r.kind,
+  px: u(r.price),
+  q: u(r.quantity),
+  fee: u(r.fee),
+  note: u(r.note),
+});
+
+const toUpdateRow = (x: TradeUpdate): UpdateRow => ({
+  id: x.id,
+  trade_id: x.tradeId,
+  at: x.at,
+  kind: x.kind,
+  price: x.px ?? null,
+  quantity: x.q ?? null,
+  fee: x.fee ?? null,
+  note: x.note || null,
+});
+
+/** Google Finance prices by ticker (see `quotes_` in apps-script/Code.js). Symbols it can't price are left out. */
+export const fetchQuotes = (items: { tk: string; mk: Market }[]) => run<Record<string, { price: number; at: string }>>('quotes', { items });
+
 type State = {
   email: string | null;
   settings: Settings | null;
@@ -133,6 +173,7 @@ type State = {
   links?: Record<string, string>;
   shares?: Record<string, number>;
   trades: TradeRow[];
+  updates?: UpdateRow[];
   prices: Prices | null;
   snaps: { day: string; value: number; contributed: number }[];
   txRows: TxRow[];
@@ -150,6 +191,7 @@ export const backend: Backend = {
       links: s.links ?? {},
       shares: s.shares ?? {},
       journal: s.trades.map(toTrade).sort((a, b) => b.d.localeCompare(a.d)),
+      updates: (s.updates ?? []).map(toUpdate),
       prices: s.prices ?? defaultPrices(),
       snaps: s.snaps.map(r => ({ d: r.day, v: r.value, c: r.contributed })).sort((a, b) => a.d.localeCompare(b.d)),
       txRows: s.txRows,
@@ -162,6 +204,8 @@ export const backend: Backend = {
   setLink: async (incomeId, expenseId) => void (await run('setLink', { incomeId, expenseId })),
   setShare: async (txId, ratio) => void (await run('setShare', { txId, ratio })),
   saveTrade: async t => void (await run('saveTrade', { trade: toRow(t) })),
+  saveUpdate: async x => void (await run('saveTradeUpdate', { update: toUpdateRow(x) })),
+  deleteUpdate: async id => void (await run('deleteTradeUpdate', { id })),
   savePrices: async prices => void (await run('savePrices', { prices })),
   saveSnapshot: async s => void (await run('saveSnapshot', { snap: { day: s.d, value: s.v, contributed: s.c } })),
 };
