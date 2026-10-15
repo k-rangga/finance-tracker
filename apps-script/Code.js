@@ -9,11 +9,14 @@
 
 const TZ = 'Asia/Jakarta';
 const APP_TITLE = 'Personal Spending Tracker';
+/** Browser tab icon: the cat logo, assets/favicon.png on the repo's main branch. Apps Script needs a PNG URL. */
+const FAVICON_URL = 'https://raw.githubusercontent.com/k-rangga/finance-tracker/main/assets/favicon.png';
 
 function doGet() {
   ensureSetup_();
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle(APP_TITLE)
+    .setFaviconUrl(FAVICON_URL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 }
