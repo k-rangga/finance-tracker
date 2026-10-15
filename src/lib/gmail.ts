@@ -1,6 +1,7 @@
 import { run } from './gas';
 
-export type SyncResult = { imported: number; skipped: number; scanned: number };
+/** `more`: stopped before the Apps Script time limit; `remaining` emails are read on the next run. */
+export type SyncResult = { imported: number; skipped: number; scanned: number; more?: boolean; remaining?: number };
 
 export const listLabels = () => run<string[]>('listLabels');
 /** Saves the label and imports its last 62 days. */

@@ -14,6 +14,8 @@ const TABLES = {
     'exit_price', 'exit_date', 'followed_plan', 'rating', 'lesson', 'created_at',
   ],
   snapshots: ['day', 'value', 'contributed'],
+  /** Gmail messages already read that weren't receipts, so they aren't downloaded again. */
+  skipped: ['id', 'subject', 'seen_at'],
 };
 
 const NUMERIC = {
@@ -71,6 +73,18 @@ function readTable_(name) {
       });
       return o;
     });
+}
+
+/** One column's values (as strings), without the header. */
+function readColumn_(name, key) {
+  const sh = tab_(name);
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  return sh
+    .getRange(2, TABLES[name].indexOf(key) + 1, last - 1, 1)
+    .getValues()
+    .map(r => String(r[0]))
+    .filter(Boolean);
 }
 
 function rowOf_(name, obj) {

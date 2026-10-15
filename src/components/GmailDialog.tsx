@@ -19,7 +19,8 @@ export function syncedAgo(iso: string | null): string {
 const resultText = (r: SyncResult) =>
   `Read ${r.scanned} ${r.scanned === 1 ? 'email' : 'emails'}, imported ${r.imported} new ${r.imported === 1 ? 'receipt' : 'receipts'}` +
   (r.skipped ? ` · ${r.skipped} had no amount and were skipped` : '') +
-  '.';
+  '.' +
+  (r.more ? ` ${r.remaining} more to read: press Sync now to continue (it also continues at the daily sync).` : '');
 
 export function GmailDialog({ onClose }: { onClose: () => void }) {
   const { gmail, refreshImports } = useData();
@@ -49,6 +50,7 @@ export function GmailDialog({ onClose }: { onClose: () => void }) {
   };
 
   const lastError = gmail.last_sync_status?.startsWith('error') ? gmail.last_sync_status.replace(/^error:\s*/, '') : null;
+  const partial = gmail.last_sync_status === 'partial';
   const changed = !!pick && pick !== gmail.label_name;
 
   return (
@@ -69,6 +71,7 @@ export function GmailDialog({ onClose }: { onClose: () => void }) {
           )}
         </span>
         {lastError && <span style={{ fontSize: 13, fontWeight: 700, color: C.redInk }}>Last sync failed: {lastError}</span>}
+        {partial && <span style={{ fontSize: 13, fontWeight: 700, color: C.amberInk }}>Import not finished yet. Press Sync now to continue.</span>}
       </div>
       <label className={s.field}>
         Label with your receipts
@@ -96,7 +99,7 @@ export function GmailDialog({ onClose }: { onClose: () => void }) {
               })
             }
           >
-            {busy === 'label' ? 'Importing…' : 'Save label & import'}
+            {busy === 'label' ? 'Importing… (up to 5 min)' : 'Save label & import'}
           </button>
         ) : (
           <button
@@ -111,7 +114,7 @@ export function GmailDialog({ onClose }: { onClose: () => void }) {
               })
             }
           >
-            {busy === 'sync' ? 'Syncing…' : 'Sync now'}
+            {busy === 'sync' ? 'Syncing… (up to 5 min)' : 'Sync now'}
           </button>
         )}
         {gmail.label_name && (
