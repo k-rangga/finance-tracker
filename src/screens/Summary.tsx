@@ -34,8 +34,8 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
     return {
       key: t.id,
       title: t.title,
-      sub: `${dayMonth(t.date)} · ${t.time} · ${t.cat} · ${t.source}`,
-      value: (t.isIncome ? '+ ' : '- ') + full(t.amount),
+      sub: `${dayMonth(t.date)} · ${t.time} · ${t.cat} · ${t.source}` + (t.reimbursed ? ` · ${full(t.reimbursed)} paid back by ${t.paidBackBy.join(', ')}` : ''),
+      value: (t.isIncome ? '+ ' : '- ') + full(t.isIncome ? t.amount : t.net),
       ink: t.isIncome ? C.accent800 : C.redInk,
       icon: c ? c.icon : IC.coins,
       cat: t.cat,
@@ -55,7 +55,7 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
   const count = (n: number) => (n ? n + (n === 1 ? ' transaction' : ' transactions') : '');
 
   const rows: { id: string; label: string; value: string; items: Item[]; note?: string; strong?: boolean }[] = [
-    { id: 'inc', label: 'Income', value: full(b.income), items: b.txs.filter(t => t.isIncome).map(txItem) },
+    { id: 'inc', label: 'Income', value: full(b.income), items: b.txs.filter(t => t.isIncome && !t.reimbursesId).map(txItem) },
     {
       id: 'save',
       label: `Savings (${SAVINGS_TARGET_PCT}%)`,

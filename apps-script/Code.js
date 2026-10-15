@@ -31,6 +31,7 @@ const ACTIONS = {
     email: Session.getEffectiveUser().getEmail(),
     settings: props_('settings', null),
     recat: overrides_(),
+    links: links_(),
     trades: readTable_('trades'),
     prices: props_('prices', null),
     snaps: readTable_('snapshots'),
@@ -46,6 +47,11 @@ const ACTIONS = {
   setOverride: p => {
     if (p.category == null) deleteRow_('overrides', 'tx_id', p.txId);
     else upsertRow_('overrides', 'tx_id', { tx_id: p.txId, category: p.category, updated_at: new Date().toISOString() });
+    return true;
+  },
+  setLink: p => {
+    if (p.expenseId == null) deleteRow_('links', 'income_id', p.incomeId);
+    else upsertRow_('links', 'income_id', { income_id: p.incomeId, expense_id: p.expenseId, updated_at: new Date().toISOString() });
     return true;
   },
   saveTrade: p => {
@@ -83,6 +89,15 @@ function overrides_() {
   const out = {};
   readTable_('overrides').forEach(r => {
     out[r.tx_id] = r.category;
+  });
+  return out;
+}
+
+/** { incomeId: expenseId } */
+function links_() {
+  const out = {};
+  readTable_('links').forEach(r => {
+    out[r.income_id] = r.expense_id;
   });
   return out;
 }

@@ -18,6 +18,8 @@ export type UserData = {
   email: string | null;
   settings: Settings;
   recat: Record<string, string>;
+  /** Reimbursements: { incomeId: expenseId }. */
+  links: Record<string, string>;
   journal: Trade[];
   prices: Prices;
   snaps: Snap[];
@@ -33,6 +35,8 @@ export type Backend = {
   saveSettings(s: Settings): Promise<void>;
   /** `category: null` removes the override. */
   setOverride(txId: string, category: string | null): Promise<void>;
+  /** `expenseId: null` removes the link. */
+  setLink(incomeId: string, expenseId: string | null): Promise<void>;
   saveTrade(t: Trade): Promise<void>;
   savePrices(p: Prices): Promise<void>;
   saveSnapshot(s: Snap): Promise<void>;
@@ -122,6 +126,7 @@ type State = {
   email: string | null;
   settings: Settings | null;
   recat: Record<string, string>;
+  links?: Record<string, string>;
   trades: TradeRow[];
   prices: Prices | null;
   snaps: { day: string; value: number; contributed: number }[];
@@ -137,6 +142,7 @@ export const backend: Backend = {
       email: s.email,
       settings: { ...DEFAULT_SETTINGS, ...(s.settings ?? {}) },
       recat: s.recat,
+      links: s.links ?? {},
       journal: s.trades.map(toTrade).sort((a, b) => b.d.localeCompare(a.d)),
       prices: s.prices ?? defaultPrices(),
       snaps: s.snaps.map(r => ({ d: r.day, v: r.value, c: r.contributed })).sort((a, b) => a.d.localeCompare(b.d)),
@@ -147,6 +153,7 @@ export const backend: Backend = {
   loadImports: since => run('getImports', { since: since.toISOString() }),
   saveSettings: async settings => void (await run('saveSettings', { settings })),
   setOverride: async (txId, category) => void (await run('setOverride', { txId, category })),
+  setLink: async (incomeId, expenseId) => void (await run('setLink', { incomeId, expenseId })),
   saveTrade: async t => void (await run('saveTrade', { trade: toRow(t) })),
   savePrices: async prices => void (await run('savePrices', { prices })),
   saveSnapshot: async s => void (await run('saveSnapshot', { snap: { day: s.d, value: s.v, contributed: s.c } })),

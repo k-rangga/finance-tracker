@@ -8,6 +8,8 @@
 const TABLES = {
   transactions: ['id', 'occurred_at', 'title', 'category', 'amount', 'currency', 'source', 'sender', 'subject', 'imported_at', 'ref', 'kind', 'account', 'to_account'],
   overrides: ['tx_id', 'category', 'updated_at'],
+  /** Reimbursements: an incoming transfer that pays you back for (part of) an expense. */
+  links: ['income_id', 'expense_id', 'updated_at'],
   trades: [
     'id', 'market', 'ticker', 'name', 'buy_date', 'price', 'quantity', 'fee', 'style', 'conviction', 'target', 'stop',
     'catalyst', 'catalyst_date', 'thesis', 'tags', 'leverage', 'direction',

@@ -36,6 +36,14 @@ export type TxView = Transaction & {
   /** Any move between your own accounts, card bill payments included. */
   isTransfer: boolean;
   isCcPayment: boolean;
+  /** Salary is never a reimbursement. */
+  isSalary: boolean;
+  /** Income only: the expense this pays you back for. */
+  reimbursesId?: string;
+  /** Expenses only: how much was paid back, by whom, and what's left as your own spending. */
+  reimbursed: number;
+  paidBackBy: string[];
+  net: number;
 };
 
 export type CardView = {
@@ -113,6 +121,32 @@ export function cardViews(txs: TxView[], prev: CardCycle[]): CardView[] {
   });
 }
 
+export const isSalary = (t: Pick<Transaction, 'title' | 'source'>) => t.source === 'Payroll email' || /\b(salary|gaji|payroll|payslip|thr)\b/i.test(t.title);
+
+/** "Transfer from Rangga" → "Rangga". */
+export const payerName = (title: string) => title.replace(/^transfer from\s+/i, '').trim() || title;
+
+/**
+ * Valid reimbursement links (income → expense) and what each expense got back.
+ * A link only counts while the income is still non-salary income.
+ */
+function reimbursements(all: Transaction[], recat: Record<string, string>, links: Record<string, string>) {
+  const byId = new Map(all.map(t => [t.id, t]));
+  const valid = new Map<string, string>();
+  const back = new Map<string, { amount: number; names: string[] }>();
+  for (const [incomeId, expenseId] of Object.entries(links)) {
+    const inc = byId.get(incomeId);
+    if (!inc || (recat[inc.id] ?? inc.category) !== INCOME_CATEGORY || isSalary(inc)) continue;
+    valid.set(incomeId, expenseId);
+    const r = back.get(expenseId) ?? { amount: 0, names: [] };
+    r.amount += Math.abs(inc.amount);
+    const name = payerName(inc.title);
+    if (!r.names.includes(name)) r.names.push(name);
+    back.set(expenseId, r);
+  }
+  return { valid, back };
+}
+
 export function computeBudget(args: {
   transactions: Transaction[];
   /** Last cycle's transactions, for the comparisons. */
@@ -120,12 +154,17 @@ export function computeBudget(args: {
   prevCycle: Cycle;
   bills: Bill[];
   recat: Record<string, string>;
+  /** Reimbursements: { incomeId: expenseId }. */
+  links: Record<string, string>;
   cycle: Cycle;
   income: number;
   warnAt: number;
 }): Budget {
-  const { transactions, prevTransactions, prevCycle, bills, recat, cycle, income, warnAt } = args;
+  const { transactions, prevTransactions, prevCycle, bills, recat, links, cycle, income, warnAt } = args;
   const ofIncome = (p: number) => (p / 100) * income;
+  const { valid, back } = reimbursements([...transactions, ...prevTransactions], recat, links);
+  /** Your own share of a purchase, after what others paid back. */
+  const netOf = (t: Transaction) => Math.max(0, t.amount - (back.get(t.id)?.amount ?? 0));
 
   const txs: TxView[] = transactions
     .map(t => {
@@ -142,6 +181,11 @@ export function computeBudget(args: {
         isIncome: cat === INCOME_CATEGORY,
         isTransfer: isCcPayment || cat === TRANSFER_CATEGORY,
         isCcPayment,
+        isSalary: isSalary(t),
+        reimbursesId: valid.get(t.id),
+        reimbursed: back.get(t.id)?.amount ?? 0,
+        paidBackBy: back.get(t.id)?.names ?? [],
+        net: netOf(t),
       };
     })
     .sort((a, b) => b.date.getTime() - a.date.getTime() || b.time.localeCompare(a.time));
@@ -149,9 +193,9 @@ export function computeBudget(args: {
   const weekFrac = Math.min(1, (cycle.dayIdx - cycle.weekIdx * 7 + 1) / 7);
   const cats: CatView[] = CATEGORIES.map(c => {
     const mine = txs.filter(t => t.cat === c.name);
-    const cur = [0, 1, 2, 3].map(w => sum(mine.filter(t => t.week === w).map(t => t.amount)));
+    const cur = [0, 1, 2, 3].map(w => sum(mine.filter(t => t.week === w).map(t => t.net)));
     const prevMine = prevTransactions.filter(t => (recat[t.id] ?? t.category) === c.name);
-    const prev = [0, 1, 2, 3].map(w => sum(prevMine.filter(t => weekOf(prevCycle.offsetOf(t.date)) === w).map(t => t.amount)));
+    const prev = [0, 1, 2, 3].map(w => sum(prevMine.filter(t => weekOf(prevCycle.offsetOf(t.date)) === w).map(netOf)));
     const spent = sum(cur);
     const limit = ofIncome(c.limitPct);
     const used = limit ? (spent / limit) * 100 : 0;
@@ -180,7 +224,7 @@ export function computeBudget(args: {
     bills,
     cats,
     income,
-    incomeReceived: sum(txs.filter(t => t.cat === INCOME_CATEGORY).map(t => t.amount)),
+    incomeReceived: sum(txs.filter(t => t.isIncome && !t.reimbursesId).map(t => t.amount)),
     budget,
     varBudget,
     savingsTarget: ofIncome(SAVINGS_TARGET_PCT),

@@ -16,6 +16,8 @@ type Ctx = UserData & {
   dismissError: () => void;
   saveSettings: (s: Settings) => void;
   setOverride: (txId: string, orig: string, cat: string) => void;
+  /** Link an income to the expense it pays back; `null` unlinks. */
+  setLink: (incomeId: string, expenseId: string | null) => void;
   saveTrade: (t: Trade) => void;
   savePrices: (p: Prices) => void;
   saveSnapshot: (s: Snap) => void;
@@ -70,6 +72,16 @@ export function DataProvider({ backend, children, loading, failed }: { backend: 
           return { ...d, recat };
         });
         write(backend.setOverride(txId, next));
+      },
+      setLink: (incomeId, expenseId) => {
+        setData(d => {
+          if (!d) return d;
+          const links = { ...d.links };
+          if (expenseId == null) delete links[incomeId];
+          else links[incomeId] = expenseId;
+          return { ...d, links };
+        });
+        write(backend.setLink(incomeId, expenseId));
       },
       saveTrade: t => {
         setData(d => d && { ...d, journal: d.journal.some(x => x.id === t.id) ? d.journal.map(x => (x.id === t.id ? t : x)) : [t, ...d.journal] });

@@ -38,6 +38,7 @@ export function run<T>(action: string, payload: unknown = {}): Promise<T> {
 const DEV_KEY = 'moneyTracker.dev';
 type Dev = Record<string, unknown> & {
   overrides: Record<string, string>;
+  links?: Record<string, string>;
   trades: Record<string, unknown>[];
   snapshots: { day: string }[];
   /** Sample imported rows for working on the UI locally (set by hand in localStorage). */
@@ -66,7 +67,7 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
   const gmail = { google_email: 'dev@localhost', label_name: (d.label as string) ?? null, last_synced_at: null, last_sync_status: null, last_sync_count: null };
   switch (action) {
     case 'getState':
-      return { email: 'dev@localhost', settings: d.settings ?? null, recat: d.overrides, trades: d.trades, prices: d.prices ?? null, snaps: d.snapshots, txRows: d.txRows ?? [], gmail };
+      return { email: 'dev@localhost', settings: d.settings ?? null, recat: d.overrides, links: d.links ?? {}, trades: d.trades, prices: d.prices ?? null, snaps: d.snapshots, txRows: d.txRows ?? [], gmail };
     case 'getImports':
       return { txRows: d.txRows ?? [], gmail };
     case 'saveSettings':
@@ -76,6 +77,12 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       if (q.category == null) delete d.overrides[q.txId as string];
       else d.overrides[q.txId as string] = q.category as string;
       return save();
+    case 'setLink': {
+      const links = (d.links ??= {});
+      if (q.expenseId == null) delete links[q.incomeId as string];
+      else links[q.incomeId as string] = q.expenseId as string;
+      return save();
+    }
     case 'saveTrade': {
       const t = q.trade as { id: string };
       d.trades = [t, ...d.trades.filter(x => x.id !== t.id)];

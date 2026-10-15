@@ -33,7 +33,7 @@ export default function App() {
     const t = storage.getRaw(KEYS.tab) as Tab | null;
     return t && TABS.some(x => x.key === t) ? t : 'summary';
   });
-  const { recat, setOverride, saveError, dismissError, txRows, gmail, email } = useData();
+  const { recat, links, setOverride, setLink, saveError, dismissError, txRows, gmail, email } = useData();
   const [txFilter, setTxFilter] = useState<ActivityFilter>({ range: 'week', cat: '', q: '' });
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -48,8 +48,8 @@ export default function App() {
   const prevTransactions = useMemo(() => all.filter(t => t.date >= prevCycle.start && t.date < cycle.start), [all, prevCycle, cycle]);
   const bills = useMemo(() => expectedBills(prevTransactions, prevCycle, transactions, cycle, recat), [prevTransactions, prevCycle, transactions, cycle, recat]);
   const budget = useMemo(
-    () => computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, cycle, income: settings.income, warnAt: settings.warnAt }),
-    [transactions, prevTransactions, prevCycle, bills, recat, cycle, settings.income, settings.warnAt],
+    () => computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, cycle, income: settings.income, warnAt: settings.warnAt }),
+    [transactions, prevTransactions, prevCycle, bills, recat, links, cycle, settings.income, settings.warnAt],
   );
   const ready = !!gmail.label_name;
   const syncLabel = !ready ? 'Connect Gmail' : gmail.last_sync_status?.startsWith('error') ? 'Gmail sync failed' : `Synced ${syncedAgo(gmail.last_synced_at)}`;
@@ -203,7 +203,7 @@ export default function App() {
           {tab === 'categories' && (
             <Categories cycle={cycle} budget={budget} open={openCat} setOpen={setOpenCat} onShowTransactions={showTransactions} />
           )}
-          {tab === 'tx' && <Activity cycle={cycle} budget={budget} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} />}
+          {tab === 'tx' && <Activity cycle={cycle} budget={budget} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} />}
           {tab === 'plan' && <SavingsPlan cycle={cycle} budget={budget} onOpenInvest={() => setTab('invest')} />}
           {tab === 'invest' && <Invest cycle={cycle} />}
         </div>
