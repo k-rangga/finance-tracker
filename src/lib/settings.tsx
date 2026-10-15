@@ -1,0 +1,64 @@
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { KEYS, usePersistent } from './storage';
+import { fmtFull, fmtShort, type Currency } from './format';
+
+export type Settings = {
+  income: number;
+  currency: Currency;
+  /** Warn when a variable category reaches this % of its limit (60–95). */
+  warnAt: number;
+  /** Share of income moved to brokers each payday. */
+  investPct: number;
+  idxCap: number;
+  usCap: number;
+  cryptoCap: number;
+  /** Rupiah per US dollar, used to convert US / crypto holdings. */
+  fxRate: number;
+};
+
+export const DEFAULT_INCOME: Record<Currency, number> = { IDR: 30_000_000, USD: 6_500 };
+
+export const DEFAULT_SETTINGS: Settings = {
+  income: DEFAULT_INCOME.IDR,
+  currency: 'IDR',
+  warnAt: 80,
+  investPct: 20,
+  idxCap: 60,
+  usCap: 35,
+  cryptoCap: 15,
+  fxRate: 16_400,
+};
+
+type Ctx = {
+  settings: Settings;
+  update: (patch: Partial<Settings>) => void;
+  /** Money in the display currency → full / short label. */
+  full: (v: number, signed?: boolean) => string;
+  short: (v: number, signed?: boolean) => string;
+  /** % of monthly income → money. */
+  ofIncome: (pct: number) => number;
+};
+
+const SettingsCtx = createContext<Ctx | null>(null);
+
+export function SettingsProvider({ children }: { children: ReactNode }) {
+  const [stored, setStored] = usePersistent<Settings>(KEYS.settings, () => DEFAULT_SETTINGS);
+  const settings = useMemo(() => ({ ...DEFAULT_SETTINGS, ...stored }), [stored]);
+  const value = useMemo<Ctx>(
+    () => ({
+      settings,
+      update: patch => setStored(prev => ({ ...DEFAULT_SETTINGS, ...prev, ...patch })),
+      full: (v, s) => fmtFull(v, settings.currency, s),
+      short: (v, s) => fmtShort(v, settings.currency, s),
+      ofIncome: pct => (pct / 100) * settings.income,
+    }),
+    [settings, setStored],
+  );
+  return <SettingsCtx.Provider value={value}>{children}</SettingsCtx.Provider>;
+}
+
+export function useSettings(): Ctx {
+  const c = useContext(SettingsCtx);
+  if (!c) throw new Error('useSettings outside SettingsProvider');
+  return c;
+}
