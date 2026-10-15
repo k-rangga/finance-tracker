@@ -59,7 +59,7 @@ function syncGmail_() {
   const g = gmailState_();
   if (!g.label) throw new Error('Choose a Gmail label first.');
   try {
-    const token = ScriptApp.getOAuthToken();
+    const token = canFetch_() ? ScriptApp.getOAuthToken() : null;
     const labelId = labelIdByName_(token, g.label);
     const since = g.lastSyncedAt ? new Date(g.lastSyncedAt).getTime() - OVERLAP_DAYS * 864e5 : Date.now() - FIRST_SYNC_DAYS * 864e5;
 
@@ -176,9 +176,27 @@ function reimportGmail_() {
   return syncGmail_();
 }
 
-// ---- Gmail REST API (via the script's own OAuth token) ----
+// ---- Gmail API ----
+// With the script.external_request permission approved, messages are downloaded in parallel through
+// UrlFetchApp (fast). Until then (token = null) the Gmail advanced service fetches them one by one,
+// which only needs the gmail.readonly permission.
 
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me/';
+
+/** True once the owner has approved script.external_request (UrlFetchApp). */
+function canFetch_() {
+  try {
+    return ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL).getAuthorizationStatus() === ScriptApp.AuthorizationStatus.NOT_REQUIRED;
+  } catch (e) {
+    return false;
+  }
+}
+
+/** Run once from the editor to approve the permission that makes imports fast. */
+function authorize() {
+  UrlFetchApp.fetch('https://www.google.com/generate_204', { muteHttpExceptions: true });
+  Logger.log('Fast Gmail import is enabled.');
+}
 
 function gmailGet_(token, path) {
   const r = UrlFetchApp.fetch(GMAIL_API + path, { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
@@ -187,7 +205,8 @@ function gmailGet_(token, path) {
 }
 
 function labelIdByName_(token, name) {
-  const l = (gmailGet_(token, 'labels').labels || []).filter(x => x.name === name)[0];
+  const labels = token ? gmailGet_(token, 'labels').labels : Gmail.Users.Labels.list('me').labels;
+  const l = (labels || []).filter(x => x.name === name)[0];
   if (!l) throw new Error('Gmail label "' + name + '" not found. Choose another label.');
   return l.id;
 }
@@ -196,15 +215,18 @@ function listMessageIds_(token, labelId, afterEpoch) {
   const ids = [];
   let page = '';
   do {
-    const r = gmailGet_(token, 'messages?maxResults=500&labelIds=' + encodeURIComponent(labelId) + '&q=' + encodeURIComponent('after:' + afterEpoch) + (page ? '&pageToken=' + page : ''));
+    const r = token
+      ? gmailGet_(token, 'messages?maxResults=500&labelIds=' + encodeURIComponent(labelId) + '&q=' + encodeURIComponent('after:' + afterEpoch) + (page ? '&pageToken=' + page : ''))
+      : Gmail.Users.Messages.list('me', { labelIds: [labelId], q: 'after:' + afterEpoch, maxResults: 500, pageToken: page || undefined });
     (r.messages || []).forEach(m => ids.push(m.id));
     page = r.nextPageToken || '';
   } while (page && ids.length < 5000);
   return ids;
 }
 
-/** Download messages in parallel; rate-limited ones are retried once. */
+/** Download messages: in parallel when allowed (rate-limited ones retried once), else one by one. */
 function fetchMessages_(token, ids) {
+  if (!token) return ids.map(id => toMessage_(Gmail.Users.Messages.get('me', id, { format: 'full' })));
   const req = id => ({ url: GMAIL_API + 'messages/' + id + '?format=full', headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true });
   const out = [];
   let pending = ids;
@@ -242,8 +264,10 @@ function toMessage_(m) {
   return { id: m.id, internalDate: m.internalDate, subject: header('subject'), from: header('from'), text: text || m.snippet || '' };
 }
 
+/** Body data is a base64url string from the REST API and a byte array from the advanced service. */
 function decode_(data) {
-  return Utilities.newBlob(Utilities.base64DecodeWebSafe(data)).getDataAsString('UTF-8');
+  const bytes = typeof data === 'string' ? Utilities.base64DecodeWebSafe(data) : data;
+  return Utilities.newBlob(bytes).getDataAsString('UTF-8');
 }
 
 function htmlToText_(h) {
