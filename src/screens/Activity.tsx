@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent }
 import s from '../styles/ui.module.css';
 import { IconChip, Pills } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
-import { NewCategoryDialog } from '../components/NewCategoryDialog';
+import { CategoryDialog } from '../components/CategoryDialog';
 import { iconColors, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth } from '../lib/format';
@@ -57,7 +57,8 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink, on
   }
   const out = txs.filter(t => !t.isIncome && !t.isTransfer).reduce((a, t) => a + t.net, 0);
   const paidBack = txs.filter(t => !t.isIncome && !t.isTransfer).reduce((a, t) => a + Math.min(t.reimbursed, t.amount), 0);
-  const moved = txs.filter(t => t.isTransfer && !t.isCcPayment).reduce((a, t) => a + t.amount, 0);
+  const moved = txs.filter(t => t.isTransfer && !t.isCcPayment && !t.isInvestment).reduce((a, t) => a + t.amount, 0);
+  const invested = txs.filter(t => t.isInvestment).reduce((a, t) => a + t.amount, 0);
   const cardBills = txs.filter(t => t.isCcPayment).reduce((a, t) => a + t.amount, 0);
   const bills = budget.bills.filter(b => !cat || b.category === cat);
 
@@ -110,6 +111,7 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink, on
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
         <span aria-live="polite">
           {txs.length} {txs.length === 1 ? 'transaction' : 'transactions'} · {full(out)} spent{paidBack ? ` after ${full(paidBack)} reimbursed` : ''}{cardBills ? ` · ${full(cardBills)} card bills paid` : ''}
+          {invested ? ` · ${full(invested)} invested` : ''}
           {moved ? ` · ${full(moved)} moved between your accounts` : ''}
         </span>
         <span>Change a category to fix a Gmail mis-read · totals update everywhere</span>
@@ -178,13 +180,10 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink, on
         })}
       </section>
       {creating && (
-        <NewCategoryDialog
+        <CategoryDialog
           initialName={creating.name}
           onClose={() => setCreating(null)}
-          onCreated={name => {
-            onRecat(creating.tx.id, creating.tx.category, name);
-            setCreating(null);
-          }}
+          onSaved={name => onRecat(creating.tx.id, creating.tx.category, name)}
         />
       )}
     </div>
@@ -245,7 +244,7 @@ function TxRow({ t, onRecat, onLink, onShare, onNewCategory, expenses, popover, 
 
   return (
     <div className={s.hoverRow} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 24px' }}>
-      <IconChip d={c ? c.icon : t.isCcPayment ? IC.card : t.isTransfer ? IC.transfer : IC.coins} bg={ic.bg} ink={ic.ink} />
+      <IconChip d={c ? c.icon : t.isCcPayment ? IC.card : t.isInvestment ? IC.trend : t.isTransfer ? IC.transfer : IC.coins} bg={ic.bg} ink={ic.ink} />
       <div ref={textCol} style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 5, marginRight: 'auto', minWidth: 0 }}>
         <span style={{ fontSize: 15, fontWeight: 700 }}>{t.title}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: C.textMuted }}>
@@ -438,7 +437,7 @@ function CategoryMenu({ current, onPick, onNew }: { current: string; onPick: (ca
     ...CATEGORIES.filter(c => match(c.name)).map(c => ({ key: c.name, label: c.name, value: c.name, icon: c.icon, tint: c.tint, ink: c.ink, group: 'spend' as const })),
     ...OTHER_CATEGORIES.map(o => ({ o, label: o === 'Transfer' ? 'Transfer (own accounts)' : o }))
       .filter(x => match(x.label))
-      .map(x => ({ key: x.o, label: x.label, value: x.o, icon: x.o === 'Transfer' ? IC.transfer : IC.coins, group: 'other' as const })),
+      .map(x => ({ key: x.o, label: x.label, value: x.o, icon: x.o === 'Transfer' ? IC.transfer : x.o === 'Investment' ? IC.trend : IC.coins, group: 'other' as const })),
   ];
   const exact = items.some(i => i.label.toLowerCase() === needle || i.value?.toLowerCase() === needle);
   items.push({ key: '+new', label: needle && !exact ? `Create “${q.trim()}”` : 'New category…', group: 'new' });

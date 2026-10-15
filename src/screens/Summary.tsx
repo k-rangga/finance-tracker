@@ -37,7 +37,7 @@ export function Summary({ cycle, budget, onOpenCategory }: Props) {
 }
 
 function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
-  const { full, short, ofIncome } = useSettings();
+  const { full, short, ofIncome, settings } = useSettings();
   const [open, setOpen] = useState<string | null>('var');
   const budgetPct = Math.round((b.budget / b.income) * 100);
 
@@ -79,6 +79,13 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
       label: `Savings (${SAVINGS_TARGET_PCT}%)`,
       value: full(savings),
       items: [{ key: 'save', title: 'Transfer to savings', sub: `${dayMonth(cycle.start)} · Payday · Automatic`, value: '- ' + full(savings), ink: C.text, icon: IC.piggy }],
+    },
+    {
+      id: 'invest',
+      label: 'Invested',
+      value: full(b.invested),
+      items: b.txs.filter(t => t.isInvestment).map(txItem),
+      note: `${full(b.invested)} of ${full(ofIncome(settings.investPct))} invested this cycle · Investing pocket, not spending`,
     },
     { id: 'fixed', label: 'Fixed bills paid', value: full(b.fixedSpent), items: b.txs.filter(t => typeOf(t.cat) === 'fixed').map(txItem) },
     { id: 'var', label: 'Variable spending', value: full(b.varSpent), items: b.txs.filter(t => typeOf(t.cat) === 'variable').map(txItem) },

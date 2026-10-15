@@ -1,4 +1,4 @@
-import { CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY, type Category } from '../data/categories';
+import { CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INVESTMENT_CATEGORY, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY, type Category } from '../data/categories';
 import { isCard, type Bill, type CardCycle, type Transaction } from '../data/transactions';
 import { weekOf, type Cycle } from './cycle';
 import { sum } from './format';
@@ -33,8 +33,10 @@ export type TxView = Transaction & {
   week: number;
   edited: boolean;
   isIncome: boolean;
-  /** Any move between your own accounts, card bill payments included. */
+  /** Any move between your own accounts: card bill payments and investments included. */
   isTransfer: boolean;
+  /** Moved to the Investing pocket (brokers): not spending. */
+  isInvestment: boolean;
   isCcPayment: boolean;
   /** Salary is never a reimbursement. */
   isSalary: boolean;
@@ -102,6 +104,8 @@ export type Budget = {
   cardBillsPaid: number;
   /** Money that actually left your accounts: non-card spending + card bills paid. */
   cashOut: number;
+  /** Moved to the Investing pocket this cycle. */
+  invested: number;
 };
 
 /** Budget categories (built-in and yours) count as spending. */
@@ -185,7 +189,8 @@ export function computeBudget(args: {
         week: weekOf(offset),
         edited: cat !== t.category,
         isIncome: cat === INCOME_CATEGORY,
-        isTransfer: isCcPayment || cat === TRANSFER_CATEGORY,
+        isTransfer: isCcPayment || cat === TRANSFER_CATEGORY || cat === INVESTMENT_CATEGORY,
+        isInvestment: cat === INVESTMENT_CATEGORY,
         isCcPayment,
         isSalary: isSalary(t),
         reimbursesId: valid.get(t.id),
@@ -249,6 +254,7 @@ export function computeBudget(args: {
     nonCardSpent,
     cardBillsPaid,
     cashOut: nonCardSpent + cardBillsPaid,
+    invested: sum(txs.filter(t => t.isInvestment).map(t => t.amount)),
   };
 }
 

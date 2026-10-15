@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { fmtFull, fmtShort, type Currency } from './format';
 import { useData } from './data';
-import { setCustomCategories, type CustomCategory } from '../data/categories';
+import { applyCategorySettings, type CustomCategory } from '../data/categories';
 
 export type Settings = {
   income: number;
@@ -17,6 +17,10 @@ export type Settings = {
   fxRate: number;
   /** Categories you added, after the built-in ones. */
   customCategories: CustomCategory[];
+  /** Your monthly limits for built-in categories (% of income), by name. */
+  limitOverrides: Record<string, number>;
+  /** Your colours for built-in categories, by name. */
+  colorOverrides: Record<string, string>;
 };
 
 export const DEFAULT_INCOME: Record<Currency, number> = { IDR: 30_000_000, USD: 6_500 };
@@ -31,6 +35,8 @@ export const DEFAULT_SETTINGS: Settings = {
   cryptoCap: 15,
   fxRate: 16_400,
   customCategories: [],
+  limitOverrides: {},
+  colorOverrides: {},
 };
 
 type Ctx = {
@@ -50,7 +56,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const settings = useMemo(() => {
     const merged = { ...DEFAULT_SETTINGS, ...stored };
     // Before children render, so every screen sees the same category list.
-    setCustomCategories(merged.customCategories);
+    applyCategorySettings(merged.customCategories, merged);
     return merged;
   }, [stored]);
   const value = useMemo<Ctx>(

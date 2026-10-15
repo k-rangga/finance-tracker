@@ -425,6 +425,13 @@ button.chip:hover {
 .btnPrimary:hover {
   background: var(--accent-900);
 }
+.btnDanger {
+  composes: btnPrimary;
+  background: var(--red, #c94a4a);
+}
+.btnDanger:hover {
+  background: #a3302f;
+}
 .btnOutline {
   font-size: 14px;
   font-weight: 700;

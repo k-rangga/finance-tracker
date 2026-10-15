@@ -61,7 +61,7 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
   const emergencyPct = Math.max(0, SAVINGS_TARGET_PCT - investPct - bigPct);
   const buckets = [
     { name: 'Emergency fund', pct: emergencyPct, note: `Target ${full(b.budget * 6)}, six months of spending` },
-    { name: 'Investing', pct: investPct, note: 'Moved to your brokers; tracked in the investment journal', link: true },
+    { name: 'Investing', pct: investPct, note: `${full(b.invested)} of ${full(ofIncome(investPct))} invested this cycle · moved to your brokers`, link: true },
     { name: 'Planned big costs', pct: bigPct, note: 'Travel, devices, annual fees' },
   ].filter(x => x.pct > 0);
 

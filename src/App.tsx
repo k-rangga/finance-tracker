@@ -3,6 +3,7 @@ import s from './styles/ui.module.css';
 import { IC, Icon } from './components/Icon';
 import { Logo } from './components/Logo';
 import { SettingsDialog } from './components/SettingsDialog';
+import { CategoryDialog } from './components/CategoryDialog';
 import { GmailDialog, syncedAgo } from './components/GmailDialog';
 import { KEYS, storage } from './lib/storage';
 import { getCycle } from './lib/cycle';
@@ -37,6 +38,8 @@ export default function App() {
   const [txFilter, setTxFilter] = useState<ActivityFilter>({ range: 'week', cat: '', q: '' });
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** Create (no name) or edit one of your categories; opened from Settings or a Categories row. */
+  const [catDialog, setCatDialog] = useState<{ editing?: string } | null>(null);
   const [gmailOpen, setGmailOpen] = useState(false);
   const { settings } = useSettings();
 
@@ -53,7 +56,7 @@ export default function App() {
   );
   const budget = useMemo(
     () => computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, income: settings.income, warnAt: settings.warnAt }),
-    [transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, settings.income, settings.warnAt, settings.customCategories],
+    [transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, settings.income, settings.warnAt, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
   );
   const ready = !!gmail.label_name;
   const syncLabel = !ready ? 'Connect Gmail' : gmail.last_sync_status?.startsWith('error') ? 'Gmail sync failed' : `Synced ${syncedAgo(gmail.last_synced_at)}`;
@@ -205,7 +208,7 @@ export default function App() {
 
           {tab === 'summary' && <Summary cycle={cycle} budget={budget} onOpenCategory={showCategory} />}
           {tab === 'categories' && (
-            <Categories cycle={cycle} budget={budget} open={openCat} setOpen={setOpenCat} onShowTransactions={showTransactions} />
+            <Categories cycle={cycle} budget={budget} open={openCat} setOpen={setOpenCat} onShowTransactions={showTransactions} onEditCategory={name => setCatDialog({ editing: name })} onNewCategory={() => setCatDialog({})} />
           )}
           {tab === 'tx' && <Activity cycle={cycle} budget={budget} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} />}
           {tab === 'plan' && <SavingsPlan cycle={cycle} budget={budget} onOpenInvest={() => setTab('invest')} />}
@@ -214,7 +217,18 @@ export default function App() {
       </main>
 
       {gmailOpen && <GmailDialog onClose={() => setGmailOpen(false)} />}
-      {settingsOpen && <SettingsDialog email={email} onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <SettingsDialog
+          email={email}
+          onClose={() => setSettingsOpen(false)}
+          onEditCategory={name => {
+            // Settings keeps its own copy of every setting, so close it rather than stacking dialogs.
+            setSettingsOpen(false);
+            setCatDialog({ editing: name });
+          }}
+        />
+      )}
+      {catDialog && <CategoryDialog editing={catDialog.editing} onClose={() => setCatDialog(null)} />}
     </div>
   );
 }

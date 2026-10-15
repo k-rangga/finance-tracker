@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import s from '../styles/ui.module.css';
-import { Modal, Options } from './ui';
+import { IconChip, Modal, Options } from './ui';
+import { toCategory } from '../data/categories';
 import { DEFAULT_INCOME, useSettings, type Settings } from '../lib/settings';
 import type { Currency } from '../lib/format';
 
 type NumKey = 'income' | 'investPct' | 'idxCap' | 'usCap' | 'cryptoCap' | 'fxRate';
 
-export function SettingsDialog({ onClose, email }: { onClose: () => void; email: string | null }) {
-  const { settings, update } = useSettings();
+export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: () => void; email: string | null; onEditCategory: (name: string) => void }) {
+  const { settings, update, full } = useSettings();
   const [d, setD] = useState<Settings>(settings);
   const [txt, setTxt] = useState<Record<NumKey, string>>(() => ({
     income: String(settings.income),
@@ -31,7 +32,9 @@ export function SettingsDialog({ onClose, email }: { onClose: () => void; email:
     if (!(next.income > 0)) return setErr('Enter your monthly income.');
     if (!(next.fxRate > 0)) return setErr('Enter the USD exchange rate.');
     if ([next.investPct, next.idxCap, next.usCap, next.cryptoCap].some(v => !(v >= 0 && v <= 100))) return setErr('Percentages must be between 0 and 100.');
-    update(next);
+    // Categories are edited in their own dialog; don't write back this dialog's (possibly stale) copies.
+    const { customCategories: _c, limitOverrides: _l, colorOverrides: _o, ...rest } = next;
+    update(rest);
     onClose();
   };
 
@@ -89,6 +92,32 @@ export function SettingsDialog({ onClose, email }: { onClose: () => void; email:
         </div>
       </div>
       {num('fxRate', 'USD exchange rate', 'Rp per $1')}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span className={s.label}>Your categories</span>
+        {settings.customCategories.length === 0 ? (
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>None yet. Add one from a transaction's category menu.</span>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {settings.customCategories.map(cc => {
+              const c = toCategory(cc);
+              return (
+                <div key={c.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderTop: '1px solid var(--divider)' }}>
+                  <IconChip d={c.icon} bg={c.tint} ink={c.ink} size={32} iconSize={15} />
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
+                    <span style={{ fontSize: 14, fontWeight: 700 }}>{c.name}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      {c.type === 'fixed' ? 'Fixed bill' : 'Variable'} · {c.limitPct}% of income ({full((c.limitPct / 100) * settings.income)})
+                    </span>
+                  </span>
+                  <button type="button" className={s.linkBtn} onClick={() => onEditCategory(c.name)}>
+                    Edit
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
       {err && <span className={s.error}>{err}</span>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button type="button" className={s.btnPrimary} onClick={save}>

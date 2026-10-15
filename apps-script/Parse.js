@@ -17,6 +17,8 @@
 const TRANSFER = 'Transfer';
 /** Paying a credit card bill: a transfer to the card, never spending. */
 const CC_PAYMENT = 'CC Payment';
+/** Money moved to a broker: the Investing pocket, never spending. Must match src/data/categories.ts. */
+const INVESTMENT = 'Investment';
 const CARD_BANK = /(bca|mandiri|bni|bri|cimb|permata|ocbc|danamon|uob|hsbc|citi(?:bank)?|jenius|mega)\b/i;
 const CC_PAYMENT_WORDS = /\b(credit card payment|pembayaran kartu kredit|bayar kartu kredit|payment to credit card|kartu kredit)\b/i;
 /** Grab booking/order code, e.g. A-9SNARFAGWUHIAV (the card alert shows it as "Grab* A-…"). */
@@ -61,12 +63,13 @@ function parseReceipt(e) {
   const category = p.category || categoryOf_(p.kind, hay);
   // Headers and title only: bank email footers often mention credit cards.
   const acc = accounts_({ kind: p.kind || 'spend', category: category, source: source, account: p.account, to_account: p.to_account }, subject + '\n' + from + '\n' + (p.title || ''));
+  const title = clip_(p.title || titleFrom_(subject, from), 60);
   return {
     kind: p.kind || 'spend',
     amount: p.amount,
     currency: p.currency || 'IDR',
-    title: clip_(p.title || titleFrom_(subject, from), 60),
-    category: acc.category,
+    title: title,
+    category: investmentCategory_({ kind: p.kind, category: acc.category, title: title }),
     source: source,
     ref: p.ref || '',
     account: acc.account,
@@ -172,8 +175,18 @@ function parseBcaJournal_(subject, text) {
   return Object.assign(base, { title: to || type, category: categoryOfName_(to) });
 }
 
-/** Investment and e-wallet providers: paying into them moves your own money. */
+/** Brokers and investment apps: money paid in goes to the Investing pocket. */
+const BROKERS = /\b(pluang|bibit|ajaib|stockbit|ipot|indo ?premier|bareksa|tokocrypto|pintu|indodax|reku|mirae|sinarmas sekuritas|motion trade)\b/i;
+/** Investment and e-wallet providers: paying into them moves your own money (e-wallet top-ups stay a Transfer). */
 const INVESTING = /\b(pluang|bibit|ajaib|stockbit|ipot|indo ?premier|bareksa|tokocrypto|pintu|indodax|reku|mirae|sinarmas sekuritas|motion trade|gopay|ovo|dana|shopeepay|linkaja|flip)\b/i;
+
+/**
+ * A transfer to a broker is an investment. Used on new imports and on rows stored before the
+ * Investment category existed (see transactionsSince_). Anything else keeps its category.
+ */
+function investmentCategory_(r) {
+  return r.kind === 'transfer' && r.category === TRANSFER && BROKERS.test(String(r.title || '')) ? INVESTMENT : r.category;
+}
 
 /** "KLIRING KOMODITI INDONESIA PT / KKI-PLUANG" → "Pluang"; otherwise the company name in title case. */
 function vaTitle_(company) {

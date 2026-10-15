@@ -125,7 +125,9 @@ function transactionsSince_(since) {
     .map(r => {
       // Rows imported before accounts were stored get them from their sender, subject and title.
       const acc = accounts_(r, [r.sender, r.subject, r.title].join('\n'));
-      return { id: r.id, occurred_at: r.occurred_at, title: r.title, category: acc.category, amount: r.amount, currency: r.currency, source: r.source, account: acc.account, to_account: acc.to_account || null };
+      // Broker transfers stored before the Investment category existed move to it too.
+      const category = investmentCategory_({ kind: r.kind, category: acc.category, title: r.title });
+      return { id: r.id, occurred_at: r.occurred_at, title: r.title, category: category, amount: r.amount, currency: r.currency, source: r.source, account: acc.account, to_account: acc.to_account || null };
     });
 }
 

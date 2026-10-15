@@ -1,6 +1,6 @@
 import type { Cycle } from '../lib/cycle';
 import type { Currency } from '../lib/format';
-import { CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, TRANSFER_CATEGORY } from './categories';
+import { CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INVESTMENT_CATEGORY, TRANSFER_CATEGORY } from './categories';
 
 export type Transaction = {
   id: string;
@@ -52,7 +52,7 @@ export function toTransaction(r: TxRow, display: Currency, fxRate: number): Tran
     amount,
     source: r.source,
     account: r.account || 'Bank',
-    type: r.category === CC_PAYMENT_CATEGORY || r.category === TRANSFER_CATEGORY ? 'transfer' : r.category === INCOME_CATEGORY ? 'income' : 'expense',
+    type: [CC_PAYMENT_CATEGORY, TRANSFER_CATEGORY, INVESTMENT_CATEGORY].includes(r.category) ? 'transfer' : r.category === INCOME_CATEGORY ? 'income' : 'expense',
     toAccount: r.to_account || undefined,
   };
 }

@@ -102,9 +102,27 @@ const cases = [
     { amount: 10000, title: 'Grab tip', category: 'Dining', ref: 'grab:A-9U5HT82GWLW5AV:10000' },
   ],
   [
-    'BCA Virtual Account to own Pluang → Transfer',
+    'BCA Virtual Account to own Pluang → Investment',
     parse('FW: Internet Transaction Journal', ME, fwd('BCA <bca@bca.co.id>', 'Internet Transaction Journal', 'Hello BUDI SANTOSO,\n\nTransfer Type : Transfer to BCA Virtual Account\nBCA Virtual Account No. : 1526\nName : BUDI SANTOSO\nCompany/Product Name : KLIRING KOMODITI INDONESIA PT / KKI-PLUANG\nPay Amount : IDR 3,000,000.00\nTotal Payment : IDR 3,000,000.00\nReference No. : 95271TVA')),
-    { kind: 'transfer', amount: 3000000, title: 'Pluang', category: 'Transfer' },
+    { kind: 'transfer', amount: 3000000, title: 'Pluang', category: 'Investment' },
+  ],
+  [
+    'BCA Virtual Account GoPay top-up in own name → stays Transfer',
+    parse('FW: Internet Transaction Journal', ME, fwd('BCA <bca@bca.co.id>', 'Internet Transaction Journal', 'Hello BUDI SANTOSO,\n\nTransfer Type : Transfer to BCA Virtual Account\nBCA Virtual Account No. : 7001\nName : BUDI SANTOSO\nCompany/Product Name : GOPAY\nTotal Payment : IDR 200,000.00\nReference No. : 95271GPY')),
+    { kind: 'transfer', amount: 200000, title: 'Gopay', category: 'Transfer' },
+  ],
+  [
+    'Older stored row: transfer to Bibit saved as Transfer → Investment',
+    { category: vm.runInContext('investmentCategory_', ctx)({ kind: 'transfer', category: 'Transfer', title: 'Bibit' }) },
+    { category: 'Investment' },
+  ],
+  [
+    'Older stored row: transfer to own account stays Transfer; Bibit spend is left alone',
+    {
+      own: vm.runInContext('investmentCategory_', ctx)({ kind: 'transfer', category: 'Transfer', title: 'BUDI SANTOSO' }),
+      spend: vm.runInContext('investmentCategory_', ctx)({ kind: 'spend', category: 'Buffer', title: 'Bibit' }),
+    },
+    { own: 'Transfer', spend: 'Buffer' },
   ],
   [
     'BCA QRIS Transfer (Type of Transaction) to a person',

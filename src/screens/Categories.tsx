@@ -17,9 +17,12 @@ type Props = {
   open: string | null;
   setOpen: (n: string | null) => void;
   onShowTransactions: (cat: string) => void;
+  /** Open the edit dialog for a category (built-in: limit and colour only). */
+  onEditCategory: (name: string) => void;
+  onNewCategory: () => void;
 };
 
-export function Categories({ cycle, budget, open, setOpen, onShowTransactions }: Props) {
+export function Categories({ cycle, budget, open, setOpen, onShowTransactions, onEditCategory, onNewCategory }: Props) {
   const { settings, full, short } = useSettings();
   const [mode, setMode] = useState<Mode>('cycle');
   const [group, setGroup] = useState<Group>('all');
@@ -67,7 +70,10 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions }:
             setOpen(null);
           }}
         />
-        <select className={s.select} style={{ width: 'auto', marginLeft: 'auto', borderRadius: 999, fontSize: 14, padding: '10px 44px 10px 18px' }} value={group} onChange={e => setGroup(e.target.value as Group)} aria-label="Filter categories">
+        <button type="button" className={s.btnOutline} onClick={onNewCategory} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Icon d={IC.plus} size={16} /> New category
+        </button>
+        <select className={s.select} style={{ width: 'auto', borderRadius: 999, fontSize: 14, padding: '10px 44px 10px 18px' }} value={group} onChange={e => setGroup(e.target.value as Group)} aria-label="Filter categories">
           <option value="all">All categories</option>
           <option value="fixed">Fixed bills</option>
           <option value="variable">Variable</option>
@@ -159,9 +165,14 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions }:
                           <span key={i}>W{i}</span>
                         ))}
                       </div>
-                      <button type="button" className={s.linkBtn} style={{ alignSelf: 'flex-start' }} onClick={() => onShowTransactions(c.name)}>
-                        See {c.name.toLowerCase()} transactions <Icon d={IC.arrowRight} size={14} />
-                      </button>
+                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                        <button type="button" className={s.linkBtn} onClick={() => onShowTransactions(c.name)}>
+                          See {c.name.toLowerCase()} transactions <Icon d={IC.arrowRight} size={14} />
+                        </button>
+                        <button type="button" className={s.linkBtn} onClick={() => onEditCategory(c.name)}>
+                          {c.custom ? 'Edit category' : 'Edit limit or colour'}
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

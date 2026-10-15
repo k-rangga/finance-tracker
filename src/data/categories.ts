@@ -16,6 +16,8 @@ export type Category = {
   icon: string;
   /** Created by you (saved in settings), not built in. */
   custom?: boolean;
+  /** Built-in only: the limit before any change you made in settings. */
+  defaultLimitPct?: number;
 };
 
 /** A category you created, as saved in settings. `icon` is a key of `IC`. */
@@ -28,8 +30,10 @@ export const INCOME_CATEGORY = 'Income';
 export const TRANSFER_CATEGORY = 'Transfer';
 /** Paying a credit card bill from the bank: a transfer to the card, never spending (the purchases already were). */
 export const CC_PAYMENT_CATEGORY = 'CC Payment';
+/** Money moved to your brokers: the Investing pocket. Like a transfer, never spending. */
+export const INVESTMENT_CATEGORY = 'Investment';
 /** Categories a transaction can be moved to besides the budget ones. */
-export const OTHER_CATEGORIES = [TRANSFER_CATEGORY, INCOME_CATEGORY];
+export const OTHER_CATEGORIES = [TRANSFER_CATEGORY, INVESTMENT_CATEGORY, INCOME_CATEGORY];
 export const SAVINGS_TARGET_PCT = 60;
 
 /** One hue per category, in order; a new category takes the first hue no category uses yet. */
@@ -72,20 +76,37 @@ const BUILT_IN: Category[] = [
   { name: 'Buffer', type: 'variable', limitPct: 2, ...HUES[8], icon: IC.wallet },
 ];
 
-/** Built-in categories followed by yours. Reassigned by `setCustomCategories`; imports see the new list. */
+/**
+ * Built-in categories (with your limit and colour changes) followed by yours.
+ * Reassigned by `applyCategorySettings`; imports see the new list.
+ */
 export let CATEGORIES: Category[] = BUILT_IN;
+
+/**
+ * Built-in categories are the ones Gmail import assigns automatically (Parse.js CATEGORY_RULES, Buffer as the
+ * fallback), so their name and icon can't change and they can't be deleted. Their limit and colour can.
+ */
+export const isBuiltIn = (name: string) => BUILT_IN.some(c => c.name === name);
+export const builtInCategory = (name: string) => BUILT_IN.find(c => c.name === name);
 
 export function toCategory(c: CustomCategory): Category {
   const hue = HUES.find(h => h.color === c.color) ?? HUES[8];
   return { name: c.name, type: c.type, limitPct: c.limitPct, ...hue, icon: IC[c.icon as keyof typeof IC] ?? IC.wallet, custom: true };
 }
 
+/** Your changes to built-in categories, as saved in settings. */
+export type BuiltInOverrides = { limitOverrides?: Record<string, number>; colorOverrides?: Record<string, string> };
+
 /** Called whenever settings load or change (see SettingsProvider). */
-export function setCustomCategories(list: CustomCategory[] = []) {
-  CATEGORIES = [...BUILT_IN, ...list.map(toCategory)];
+export function applyCategorySettings(custom: CustomCategory[] = [], { limitOverrides = {}, colorOverrides = {} }: BuiltInOverrides = {}) {
+  const builtIn = BUILT_IN.map(c => {
+    const hue = HUES.find(h => h.color === colorOverrides[c.name]);
+    return { ...c, ...(hue ?? {}), limitPct: limitOverrides[c.name] ?? c.limitPct, defaultLimitPct: c.limitPct };
+  });
+  CATEGORIES = [...builtIn, ...custom.map(toCategory)];
 }
 
 /** Names a new category can't take. */
-export const isReservedName = (n: string) => [...CATEGORIES.map(c => c.name), TRANSFER_CATEGORY, INCOME_CATEGORY, CC_PAYMENT_CATEGORY].some(x => x.toLowerCase() === n.trim().toLowerCase());
+export const isReservedName = (n: string) => [...CATEGORIES.map(c => c.name), ...OTHER_CATEGORIES, CC_PAYMENT_CATEGORY].some(x => x.toLowerCase() === n.trim().toLowerCase());
 
 export const categoryByName = (n: string) => CATEGORIES.find(c => c.name === n);
