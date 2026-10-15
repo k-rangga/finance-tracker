@@ -18,12 +18,16 @@ export function syncedAgo(iso: string | null): string {
 }
 
 const resultText = (r: SyncResult) =>
-  `Read ${r.scanned} ${r.scanned === 1 ? 'email' : 'emails'}, imported ${r.imported} new ${r.imported === 1 ? 'receipt' : 'receipts'}` +
+  r.busy
+    ? 'An import is already running in the background. Check back in a few minutes.'
+    : `Read ${r.scanned} ${r.scanned === 1 ? 'email' : 'emails'}, imported ${r.imported} new ${r.imported === 1 ? 'receipt' : 'receipts'}` +
   (r.duplicates ? ` · ${r.duplicates} ${r.duplicates === 1 ? 'duplicate' : 'duplicates'} merged` : '') +
   (r.reversed ? ` · ${r.reversed} cancelled ${r.reversed === 1 ? 'charge' : 'charges'} removed` : '') +
   (r.skipped ? ` · ${r.skipped} not imported (no amount, duplicates or reversals)` : '') +
   '.' +
-  (r.more ? ` ${r.remaining} more to read: press Sync now to continue (it also continues at the daily sync).` : '');
+  (r.more
+    ? ` ${r.remaining != null ? r.remaining + ' more' : 'More'} to read${r.paused ? ' (Gmail asked to slow down)' : ''}: it continues on its own in about 2 minutes, until done.`
+    : '');
 
 export function GmailDialog({ onClose }: { onClose: () => void }) {
   const { gmail, refreshImports } = useData();
@@ -74,7 +78,7 @@ export function GmailDialog({ onClose }: { onClose: () => void }) {
           )}
         </span>
         {lastError && <span style={{ fontSize: 13, fontWeight: 700, color: C.redInk }}>Last sync failed: {lastError}</span>}
-        {partial && <span style={{ fontSize: 13, fontWeight: 700, color: C.amberInk }}>Import not finished yet. Press Sync now to continue.</span>}
+        {partial && <span style={{ fontSize: 13, fontWeight: 700, color: C.amberInk }}>Import still running in the background. It continues every couple of minutes until done.</span>}
       </div>
       <label className={s.field}>
         Label with your receipts

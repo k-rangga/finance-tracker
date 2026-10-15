@@ -45,19 +45,34 @@ function dailySync() {
   if (gmailState_().label) syncGmail_();
 }
 
-const FETCH_BATCH = 25; // parallel Gmail API requests per round
+const FETCH_BATCH = 25; // Gmail API requests per round (parallel when allowed)
 const TIME_BUDGET_MS = 270 * 1000; // stop well before Apps Script's 6-minute limit
+// messages.get costs 5 quota units; Gmail caps units per user per minute. ~200 messages a minute
+// stays well under it, and a "quota exceeded" answer pauses the run instead of failing it.
+const MS_PER_MESSAGE = 300;
+const CONTINUE_AFTER_MS = 2 * 60 * 1000;
+const RUN_FLAG = 'gmailSyncRunning';
+
+const isQuota_ = e => /quota|rate ?limit|user-rate|too many requests|429/i.test(String(e && e.message ? e.message : e));
 
 /**
- * Import receipts under the chosen label since the last sync. Returns { imported, skipped, scanned, more }.
- * Lists message ids once, skips ids already in the sheet, then downloads the rest in parallel
- * through the Gmail API. If time runs out it saves what it has and reports `more: true`;
- * the next run continues because finished ids are skipped.
+ * Import receipts under the chosen label since the last sync.
+ * Returns { imported, skipped, duplicates, reversed, scanned, more, remaining, paused, busy }.
+ * Lists message ids once, skips ids already imported or seen, then downloads the rest at a steady pace.
+ * Whatever was read is always saved. If time runs out or Gmail asks to slow down, the rest is picked up
+ * by a one-off trigger a couple of minutes later (repeating until done).
  */
 function syncGmail_() {
   const started = Date.now();
   const g = gmailState_();
   if (!g.label) throw new Error('Choose a Gmail label first.');
+
+  // One sync at a time (a background continuation may be running).
+  const running = Number(PropertiesService.getScriptProperties().getProperty(RUN_FLAG) || 0);
+  if (running && Date.now() - running < 6 * 60 * 1000) return { busy: true, imported: 0, skipped: 0, scanned: 0, more: true };
+  PropertiesService.getScriptProperties().setProperty(RUN_FLAG, String(started));
+
+  let parsed = [];
   try {
     const token = canFetch_() ? ScriptApp.getOAuthToken() : null;
     const labelId = labelIdByName_(token, g.label);
@@ -69,23 +84,59 @@ function syncGmail_() {
     readColumn_('skipped', 'id').forEach(id => (have[id] = true));
     const todo = ids.filter(id => !have[id]);
 
-    const parsed = [];
     let done = 0;
+    let paused = false;
     while (done < todo.length && Date.now() - started < TIME_BUDGET_MS) {
+      const t0 = Date.now();
       const batch = todo.slice(done, done + FETCH_BATCH);
-      fetchMessages_(token, batch).forEach(m => parsed.push({ m: m, p: parseReceipt({ subject: m.subject, from: m.from, text: m.text.slice(0, 20000) }) }));
+      let msgs;
+      try {
+        msgs = fetchMessages_(token, batch);
+      } catch (e) {
+        if (!isQuota_(e)) throw e;
+        paused = true; // Gmail asked us to slow down: keep what we have and continue later.
+        break;
+      }
+      msgs.forEach(m => parsed.push({ m: m, p: parseReceipt({ subject: m.subject, from: m.from, text: m.text.slice(0, 20000) }) }));
       done += batch.length;
+      const wait = batch.length * MS_PER_MESSAGE - (Date.now() - t0);
+      if (wait > 0 && done < todo.length) Utilities.sleep(wait);
     }
+
     const r = storeParsed_(parsed);
+    parsed = [];
     const more = done < todo.length;
     // Only move the sync window forward once everything in it has been read.
     setProps_('gmail', { label: g.label, lastSyncedAt: more ? g.lastSyncedAt || null : new Date().toISOString(), lastStatus: more ? 'partial' : 'ok', lastCount: ids.length });
-    return { imported: r.imported, skipped: r.skipped, duplicates: r.duplicates, reversed: r.reversed, scanned: done, more: more, remaining: todo.length - done };
+    if (more) scheduleContinue_();
+    return { imported: r.imported, skipped: r.skipped, duplicates: r.duplicates, reversed: r.reversed, scanned: done, more: more, remaining: todo.length - done, paused: paused };
   } catch (e) {
+    // Never lose emails already read in this run.
+    if (parsed.length) storeParsed_(parsed);
     const msg = String(e && e.message ? e.message : e);
+    if (isQuota_(e)) {
+      setProps_('gmail', Object.assign({}, g, { lastStatus: 'partial' }));
+      scheduleContinue_();
+      return { imported: 0, skipped: 0, scanned: 0, more: true, paused: true };
+    }
     setProps_('gmail', Object.assign({}, g, { lastStatus: 'error: ' + msg.slice(0, 200) }));
     throw new Error(msg);
+  } finally {
+    PropertiesService.getScriptProperties().deleteProperty(RUN_FLAG);
   }
+}
+
+/** One-off trigger target: carry on an unfinished import. */
+function continueSync() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'continueSync')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+  if (gmailState_().label) syncGmail_();
+}
+
+function scheduleContinue_() {
+  const pending = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'continueSync');
+  if (!pending) ScriptApp.newTrigger('continueSync').timeBased().after(CONTINUE_AFTER_MS).create();
 }
 
 /** Receipts from the merchant beat card or bank alerts for the same purchase. */
