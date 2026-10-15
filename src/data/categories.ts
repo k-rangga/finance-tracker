@@ -14,7 +14,12 @@ export type Category = {
   /** Icon and dropdown text on `tint` (≥ 4.5:1). */
   ink: string;
   icon: string;
+  /** Created by you (saved in settings), not built in. */
+  custom?: boolean;
 };
+
+/** A category you created, as saved in settings. `icon` is a key of `IC`. */
+export type CustomCategory = { name: string; type: CategoryType; limitPct: number; icon: string; color: string };
 
 export type Hue = Pick<Category, 'color' | 'tint' | 'ink'>;
 
@@ -38,11 +43,24 @@ export const HUES: Hue[] = [
   { color: '#1f97b8', tint: '#e2f3f8', ink: '#0f6680' }, // cyan
   { color: '#c4507e', tint: '#fbe9f0', ink: '#8f2f56' }, // pink
   { color: '#7d8a87', tint: '#eef1f0', ink: '#46524f' }, // grey
+  // Extra hues for categories you add (the first nine are taken by the built-in ones).
+  { color: '#5560d0', tint: '#ebedfb', ink: '#3a43a0' }, // indigo
+  { color: '#8a9a1f', tint: '#f2f5df', ink: '#566210' }, // olive
+  { color: '#a0703c', tint: '#f6ede3', ink: '#6e4a22' }, // brown
+  { color: '#b04fb8', tint: '#f7e9f8', ink: '#7d2f85' }, // magenta
+  { color: '#5a7389', tint: '#e9eef2', ink: '#3b4f61' }, // slate
+  { color: '#c9a227', tint: '#fbf5dd', ink: '#725b0c' }, // gold
 ];
 
 export const nextHue = (cats: Hue[]): Hue => HUES.find(h => !cats.some(c => c.color === h.color)) ?? HUES[cats.length % HUES.length];
 
-export const CATEGORIES: Category[] = [
+/** Icons you can pick for a new category (keys of `IC`). */
+export const CATEGORY_ICONS = [
+  'home', 'zap', 'shield', 'repeat', 'basket', 'utensils', 'coffee', 'nav', 'car', 'plane', 'bag', 'shirt', 'gift', 'heart', 'pill',
+  'dumbbell', 'book', 'graduation', 'film', 'music', 'gamepad', 'phone', 'wrench', 'card', 'coins', 'wallet', 'piggy', 'calendar',
+] as const;
+
+const BUILT_IN: Category[] = [
   { name: 'Housing', type: 'fixed', limitPct: 14, ...HUES[0], icon: IC.home },
   { name: 'Utilities', type: 'fixed', limitPct: 3, ...HUES[1], icon: IC.zap },
   { name: 'Insurance', type: 'fixed', limitPct: 2, ...HUES[2], icon: IC.shield },
@@ -53,5 +71,21 @@ export const CATEGORIES: Category[] = [
   { name: 'Shopping', type: 'variable', limitPct: 3, ...HUES[7], icon: IC.bag },
   { name: 'Buffer', type: 'variable', limitPct: 2, ...HUES[8], icon: IC.wallet },
 ];
+
+/** Built-in categories followed by yours. Reassigned by `setCustomCategories`; imports see the new list. */
+export let CATEGORIES: Category[] = BUILT_IN;
+
+export function toCategory(c: CustomCategory): Category {
+  const hue = HUES.find(h => h.color === c.color) ?? HUES[8];
+  return { name: c.name, type: c.type, limitPct: c.limitPct, ...hue, icon: IC[c.icon as keyof typeof IC] ?? IC.wallet, custom: true };
+}
+
+/** Called whenever settings load or change (see SettingsProvider). */
+export function setCustomCategories(list: CustomCategory[] = []) {
+  CATEGORIES = [...BUILT_IN, ...list.map(toCategory)];
+}
+
+/** Names a new category can't take. */
+export const isReservedName = (n: string) => [...CATEGORIES.map(c => c.name), TRANSFER_CATEGORY, INCOME_CATEGORY, CC_PAYMENT_CATEGORY].some(x => x.toLowerCase() === n.trim().toLowerCase());
 
 export const categoryByName = (n: string) => CATEGORIES.find(c => c.name === n);

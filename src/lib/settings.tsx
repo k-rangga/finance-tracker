@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { fmtFull, fmtShort, type Currency } from './format';
 import { useData } from './data';
+import { setCustomCategories, type CustomCategory } from '../data/categories';
 
 export type Settings = {
   income: number;
@@ -14,6 +15,8 @@ export type Settings = {
   cryptoCap: number;
   /** Rupiah per US dollar, used to convert US / crypto holdings. */
   fxRate: number;
+  /** Categories you added, after the built-in ones. */
+  customCategories: CustomCategory[];
 };
 
 export const DEFAULT_INCOME: Record<Currency, number> = { IDR: 30_000_000, USD: 6_500 };
@@ -27,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   usCap: 35,
   cryptoCap: 15,
   fxRate: 16_400,
+  customCategories: [],
 };
 
 type Ctx = {
@@ -43,7 +47,12 @@ const SettingsCtx = createContext<Ctx | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { settings: stored, saveSettings } = useData();
-  const settings = useMemo(() => ({ ...DEFAULT_SETTINGS, ...stored }), [stored]);
+  const settings = useMemo(() => {
+    const merged = { ...DEFAULT_SETTINGS, ...stored };
+    // Before children render, so every screen sees the same category list.
+    setCustomCategories(merged.customCategories);
+    return merged;
+  }, [stored]);
   const value = useMemo<Ctx>(
     () => ({
       settings,

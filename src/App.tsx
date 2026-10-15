@@ -46,10 +46,14 @@ export default function App() {
   const all = useMemo(() => txRows.map(r => toTransaction(r, settings.currency, settings.fxRate)), [txRows, settings.currency, settings.fxRate]);
   const transactions = useMemo(() => inCycle(all, cycle), [all, cycle]);
   const prevTransactions = useMemo(() => all.filter(t => t.date >= prevCycle.start && t.date < cycle.start), [all, prevCycle, cycle]);
-  const bills = useMemo(() => expectedBills(prevTransactions, prevCycle, transactions, cycle, recat), [prevTransactions, prevCycle, transactions, cycle, recat]);
+  const bills = useMemo(
+    () => expectedBills(prevTransactions, prevCycle, transactions, cycle, recat),
+    // Custom categories change which categories are fixed bills.
+    [prevTransactions, prevCycle, transactions, cycle, recat, settings.customCategories],
+  );
   const budget = useMemo(
     () => computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, income: settings.income, warnAt: settings.warnAt }),
-    [transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, settings.income, settings.warnAt],
+    [transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, settings.income, settings.warnAt, settings.customCategories],
   );
   const ready = !!gmail.label_name;
   const syncLabel = !ready ? 'Connect Gmail' : gmail.last_sync_status?.startsWith('error') ? 'Gmail sync failed' : `Synced ${syncedAgo(gmail.last_synced_at)}`;

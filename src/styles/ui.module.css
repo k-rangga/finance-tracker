@@ -685,24 +685,31 @@ textarea.input {
   }
 }
 
-/* Category pill on a transaction row; colours come from the category. */
-.catSelect {
-  appearance: none;
-  -webkit-appearance: none;
+/* Category pill on a transaction row; colours come from the category. Opens the category menu. */
+.catPill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
   font: inherit;
   font-size: 12px;
   font-weight: 700;
   padding: 4px 28px 4px 10px;
+  border: 1.5px solid;
   border-radius: 999px;
   min-height: 28px;
-  max-width: 100%;
-  min-width: 0;
-  text-overflow: ellipsis;
   cursor: pointer;
+  text-align: left;
 }
-.catSelect:focus-visible {
+.catPill:focus-visible {
   outline: 2px solid #14a08a;
   outline-offset: 2px;
+}
+.catPillText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---------- Reimbursements ---------- */
@@ -855,4 +862,57 @@ textarea.input {
 }
 .splitBtn:hover {
   background: #cdeee6;
+}
+
+/* ---------- Category menu & new category ---------- */
+.menuGroup {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5c6a67;
+  padding: 10px 10px 4px;
+}
+.menuIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+.pickRowActive {
+  background: #ecf1f0;
+}
+.iconGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 6px;
+}
+.iconOpt {
+  display: grid;
+  place-items: center;
+  height: 40px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.iconOpt:hover {
+  background: #f5f9f8;
+}
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.swatch {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
 }

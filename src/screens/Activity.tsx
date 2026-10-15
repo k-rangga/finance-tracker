@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import s from '../styles/ui.module.css';
 import { IconChip, Pills } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
+import { NewCategoryDialog } from '../components/NewCategoryDialog';
 import { iconColors, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth } from '../lib/format';
@@ -24,12 +25,14 @@ type Props = {
   onShare: (txId: string, ratio: number | null) => void;
 };
 
-type Popover = 'link' | 'share';
+type Popover = 'link' | 'share' | 'cat';
 
 export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink, onShare }: Props) {
   const { full } = useSettings();
   /** The row with an open popover: an income's "paid back for" picker or an expense's "my share" editor. */
   const [open, setOpen] = useState<{ id: string; kind: Popover } | null>(null);
+  /** "New category" dialog, opened from a row's category menu; the new category is applied to that row. */
+  const [creating, setCreating] = useState<{ name: string; tx: TxView } | null>(null);
   const expenses = budget.txs.filter(t => !t.isIncome && !t.isTransfer);
   const { range, cat, q } = filter;
   const wStart = cycle.weekIdx * 7;
@@ -135,6 +138,10 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink, on
                 onLink={onLink}
                 onShare={onShare}
                 expenses={expenses}
+                onNewCategory={name => {
+                  setOpen(null);
+                  setCreating({ name, tx: t });
+                }}
                 popover={open?.id === t.id ? open.kind : null}
                 setPopover={kind => setOpen(kind ? { id: t.id, kind } : null)}
               />
@@ -170,6 +177,16 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink, on
           );
         })}
       </section>
+      {creating && (
+        <NewCategoryDialog
+          initialName={creating.name}
+          onClose={() => setCreating(null)}
+          onCreated={name => {
+            onRecat(creating.tx.id, creating.tx.category, name);
+            setCreating(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -179,13 +196,15 @@ type RowProps = {
   onRecat: Props['onRecat'];
   onLink: Props['onLink'];
   onShare: Props['onShare'];
+  /** Open the "New category" dialog, prefilled with what was typed in the category search. */
+  onNewCategory: (name: string) => void;
   /** This cycle's expenses, newest first: what an income can pay back. */
   expenses: TxView[];
   popover: Popover | null;
   setPopover: (kind: Popover | null) => void;
 };
 
-function TxRow({ t, onRecat, onLink, onShare, expenses, popover, setPopover }: RowProps) {
+function TxRow({ t, onRecat, onLink, onShare, onNewCategory, expenses, popover, setPopover }: RowProps) {
   const { full } = useSettings();
   const c = categoryByName(t.cat);
   const ic = iconColors(t.cat);
@@ -244,7 +263,7 @@ function TxRow({ t, onRecat, onLink, onShare, expenses, popover, setPopover }: R
               </button>
             </span>
           ) : (
-            <CategorySelect t={t} onRecat={onRecat} />
+            <CategoryButton t={t} open={popover === 'cat'} onToggle={() => setPopover(popover === 'cat' ? null : 'cat')} />
           )}
           {canLink && !t.reimbursesId && (
             <button type="button" className={s.textBtnSm} aria-expanded={picking} onClick={() => setPicking(!picking)}>
@@ -267,6 +286,16 @@ function TxRow({ t, onRecat, onLink, onShare, expenses, popover, setPopover }: R
               onLink(t.id, id);
               setPicking(false);
             }}
+          />
+        )}
+        {popover === 'cat' && (
+          <CategoryMenu
+            current={t.cat}
+            onPick={cat => {
+              if (cat !== t.cat) onRecat(t.id, t.category, cat);
+              setPopover(null);
+            }}
+            onNew={onNewCategory}
           />
         )}
         {popover === 'share' && (
@@ -374,34 +403,111 @@ function ShareEditor({ t, onSave }: { t: TxView; onSave: (ratio: number | null) 
   );
 }
 
-/** Pill select coloured as the chosen category (tint background, ink text, colour outline). */
-function CategorySelect({ t, onRecat }: { t: TxView; onRecat: Props['onRecat'] }) {
+/** Category pill on a row: tint background, ink text, colour outline. Opens the searchable menu. */
+function CategoryButton({ t, open, onToggle }: { t: TxView; open: boolean; onToggle: () => void }) {
   const c = categoryByName(t.cat);
   const ic = iconColors(t.cat);
   return (
-    <span style={{ position: 'relative', display: 'inline-flex', maxWidth: '100%', minWidth: 0, color: ic.ink }}>
-      <select
-        className={s.catSelect}
-        value={t.cat}
-        onChange={e => onRecat(t.id, t.category, e.target.value)}
-        aria-label={`Category for ${t.title}`}
-        title="Change category"
-        style={{ color: ic.ink, backgroundColor: ic.bg, border: `1.5px solid ${c?.color ?? C.accent500}` }}
-      >
-        {CATEGORIES.map(o => (
-          <option key={o.name} value={o.name} style={{ color: o.ink, backgroundColor: o.tint }}>
-            ● {o.name}
-          </option>
-        ))}
-        <optgroup label="Not spending">
-          {OTHER_CATEGORIES.map(o => (
-            <option key={o} value={o}>
-              {o === 'Transfer' ? 'Transfer (own accounts)' : o}
-            </option>
-          ))}
-        </optgroup>
-      </select>
-      <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-    </span>
+    <button
+      type="button"
+      className={s.catPill}
+      aria-haspopup="listbox"
+      aria-expanded={open}
+      aria-label={`Category for ${t.title}: ${t.cat}`}
+      title="Change category"
+      onClick={onToggle}
+      style={{ color: ic.ink, background: ic.bg, borderColor: c?.color ?? C.accent500 }}
+    >
+      <span className={s.catPillText}>{c ? '● ' : ''}{t.cat}</span>
+      <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: `translateY(-50%)${open ? ' rotate(180deg)' : ''}`, pointerEvents: 'none' }} />
+    </button>
   );
 }
+
+type MenuItem = { key: string; label: string; value?: string; icon?: string; tint?: string; ink?: string; group: 'spend' | 'other' | 'new' };
+
+/** Searchable category list: budget categories, then "Not spending", then "New category". Arrow keys + Enter work. */
+function CategoryMenu({ current, onPick, onNew }: { current: string; onPick: (cat: string) => void; onNew: (name: string) => void }) {
+  const [q, setQ] = useState('');
+  // Start on the current category, so Enter right away keeps it.
+  const [active, setActive] = useState(() => Math.max(0, CATEGORIES.findIndex(c => c.name === current)));
+  const listRef = useRef<HTMLDivElement>(null);
+  const needle = q.trim().toLowerCase();
+  const match = (label: string) => !needle || label.toLowerCase().includes(needle);
+  const items: MenuItem[] = [
+    ...CATEGORIES.filter(c => match(c.name)).map(c => ({ key: c.name, label: c.name, value: c.name, icon: c.icon, tint: c.tint, ink: c.ink, group: 'spend' as const })),
+    ...OTHER_CATEGORIES.map(o => ({ o, label: o === 'Transfer' ? 'Transfer (own accounts)' : o }))
+      .filter(x => match(x.label))
+      .map(x => ({ key: x.o, label: x.label, value: x.o, icon: x.o === 'Transfer' ? IC.transfer : IC.coins, group: 'other' as const })),
+  ];
+  const exact = items.some(i => i.label.toLowerCase() === needle || i.value?.toLowerCase() === needle);
+  items.push({ key: '+new', label: needle && !exact ? `Create “${q.trim()}”` : 'New category…', group: 'new' });
+  const at = Math.min(active, items.length - 1);
+
+  const choose = (i: MenuItem) => (i.group === 'new' ? onNew(exact ? '' : q.trim()) : i.value && onPick(i.value));
+  const onKey = (e: ReactKeyboardEvent) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const next = (at + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+      setActive(next);
+      listRef.current?.querySelectorAll('[role=option]')[next]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      choose(items[at]);
+    }
+  };
+
+  return (
+    <div className={s.picker} style={{ width: 'min(300px, 100vw - 48px)' }}>
+      <label className={s.pickSearch}>
+        <Icon d={IC.search} size={15} color={C.textMuted} />
+        <input
+          autoFocus
+          value={q}
+          onChange={e => {
+            setQ(e.target.value);
+            setActive(0);
+          }}
+          onKeyDown={onKey}
+          placeholder="Search or create a category"
+          aria-label="Search categories"
+          role="combobox"
+          aria-expanded="true"
+          aria-controls="cat-menu"
+          aria-activedescendant={'cat-opt-' + at}
+        />
+      </label>
+      <div ref={listRef} id="cat-menu" role="listbox" aria-label="Categories" className={s.pickList} style={{ maxHeight: 320 }}>
+        {items.map((i, n) => (
+          <div key={i.key}>
+            {i.group === 'other' && items[n - 1]?.group !== 'other' && <div className={s.menuGroup}>Not spending</div>}
+            {i.group === 'new' && n > 0 && <div style={{ borderTop: `1px solid ${C.divider}`, margin: '6px 0' }} />}
+            {i.group === 'new' && n === 0 && <div style={{ padding: '6px 10px', fontSize: 13, color: C.textMuted }}>No categories match.</div>}
+            <div
+              id={'cat-opt-' + n}
+              role="option"
+              aria-selected={i.value === current}
+              className={s.pickRow + (n === at ? ' ' + s.pickRowActive : '') + (i.value === current ? ' ' + s.pickRowOn : '')}
+              onMouseEnter={() => setActive(n)}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => choose(i)}
+            >
+              {i.group === 'new' ? (
+                <span className={s.menuIcon} style={{ background: C.accentTint, color: C.accent800 }}>
+                  <Icon d={IC.plus} size={14} />
+                </span>
+              ) : (
+                <span className={s.menuIcon} style={{ background: i.tint ?? C.divider, color: i.ink ?? C.textSoft }}>
+                  <Icon d={i.icon ?? IC.coins} size={14} />
+                </span>
+              )}
+              <span style={{ marginRight: 'auto', fontSize: 14, fontWeight: i.group === 'new' ? 700 : 600, color: i.group === 'new' ? C.accent600 : C.text }}>{i.label}</span>
+              {i.value === current && <Icon d="M20 6 9 17l-5-5" size={16} color={C.accent600} />}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+

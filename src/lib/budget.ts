@@ -104,7 +104,8 @@ export type Budget = {
   cashOut: number;
 };
 
-const SPENDING = new Set(CATEGORIES.map(c => c.name));
+/** Budget categories (built-in and yours) count as spending. */
+const SPENDING = { has: (name: string) => !!categoryByName(name) };
 
 /** Per card: what was spent, what last cycle's bill was, and how much of it is paid. */
 export function cardViews(txs: TxView[], prev: CardCycle[]): CardView[] {
