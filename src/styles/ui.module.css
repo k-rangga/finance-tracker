@@ -830,3 +830,29 @@ textarea.input {
     left: -52px;
   }
 }
+
+/* ---------- My share ---------- */
+.btnPrimarySm {
+  composes: btnPrimary;
+  font-size: 13px;
+  padding: 8px 16px;
+  min-height: 34px;
+}
+.btnPrimarySm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.splitBtn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0b5c50;
+  background: #e3f6f2;
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.splitBtn:hover {
+  background: #cdeee6;
+}

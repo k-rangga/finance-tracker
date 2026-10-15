@@ -43,6 +43,8 @@ export type TxView = Transaction & {
   /** Expenses only: how much was paid back, by whom, and what's left as your own spending. */
   reimbursed: number;
   paidBackBy: string[];
+  /** Expenses only: the part you said is yours, when you paid for others too (no transfer to link). */
+  share?: number;
   net: number;
 };
 
@@ -156,15 +158,18 @@ export function computeBudget(args: {
   recat: Record<string, string>;
   /** Reimbursements: { incomeId: expenseId }. */
   links: Record<string, string>;
+  /** Your share of an expense as a fraction of its amount: { txId: 0–1 }. */
+  shares: Record<string, number>;
   cycle: Cycle;
   income: number;
   warnAt: number;
 }): Budget {
-  const { transactions, prevTransactions, prevCycle, bills, recat, links, cycle, income, warnAt } = args;
+  const { transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, income, warnAt } = args;
   const ofIncome = (p: number) => (p / 100) * income;
   const { valid, back } = reimbursements([...transactions, ...prevTransactions], recat, links);
-  /** Your own share of a purchase, after what others paid back. */
-  const netOf = (t: Transaction) => Math.max(0, t.amount - (back.get(t.id)?.amount ?? 0));
+  const shareOf = (t: Transaction) => (shares[t.id] == null ? undefined : Math.round(shares[t.id] * t.amount * 100) / 100);
+  /** What counts as your spending: your share if you set one, less what others paid back. */
+  const netOf = (t: Transaction) => Math.max(0, Math.min(shareOf(t) ?? t.amount, t.amount - (back.get(t.id)?.amount ?? 0)));
 
   const txs: TxView[] = transactions
     .map(t => {
@@ -185,6 +190,7 @@ export function computeBudget(args: {
         reimbursesId: valid.get(t.id),
         reimbursed: back.get(t.id)?.amount ?? 0,
         paidBackBy: back.get(t.id)?.names ?? [],
+        share: shareOf(t),
         net: netOf(t),
       };
     })

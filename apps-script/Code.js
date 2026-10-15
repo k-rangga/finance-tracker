@@ -32,6 +32,7 @@ const ACTIONS = {
     settings: props_('settings', null),
     recat: overrides_(),
     links: links_(),
+    shares: shares_(),
     trades: readTable_('trades'),
     prices: props_('prices', null),
     snaps: readTable_('snapshots'),
@@ -52,6 +53,11 @@ const ACTIONS = {
   setLink: p => {
     if (p.expenseId == null) deleteRow_('links', 'income_id', p.incomeId);
     else upsertRow_('links', 'income_id', { income_id: p.incomeId, expense_id: p.expenseId, updated_at: new Date().toISOString() });
+    return true;
+  },
+  setShare: p => {
+    if (p.ratio == null) deleteRow_('shares', 'tx_id', p.txId);
+    else upsertRow_('shares', 'tx_id', { tx_id: p.txId, ratio: p.ratio, updated_at: new Date().toISOString() });
     return true;
   },
   saveTrade: p => {
@@ -98,6 +104,15 @@ function links_() {
   const out = {};
   readTable_('links').forEach(r => {
     out[r.income_id] = r.expense_id;
+  });
+  return out;
+}
+
+/** { txId: ratio } */
+function shares_() {
+  const out = {};
+  readTable_('shares').forEach(r => {
+    out[r.tx_id] = Number(r.ratio);
   });
   return out;
 }

@@ -20,6 +20,8 @@ export type UserData = {
   recat: Record<string, string>;
   /** Reimbursements: { incomeId: expenseId }. */
   links: Record<string, string>;
+  /** Your share of an expense as a fraction of its amount: { txId: 0–1 }. */
+  shares: Record<string, number>;
   journal: Trade[];
   prices: Prices;
   snaps: Snap[];
@@ -37,6 +39,8 @@ export type Backend = {
   setOverride(txId: string, category: string | null): Promise<void>;
   /** `expenseId: null` removes the link. */
   setLink(incomeId: string, expenseId: string | null): Promise<void>;
+  /** `ratio: null` counts the full amount again. */
+  setShare(txId: string, ratio: number | null): Promise<void>;
   saveTrade(t: Trade): Promise<void>;
   savePrices(p: Prices): Promise<void>;
   saveSnapshot(s: Snap): Promise<void>;
@@ -127,6 +131,7 @@ type State = {
   settings: Settings | null;
   recat: Record<string, string>;
   links?: Record<string, string>;
+  shares?: Record<string, number>;
   trades: TradeRow[];
   prices: Prices | null;
   snaps: { day: string; value: number; contributed: number }[];
@@ -143,6 +148,7 @@ export const backend: Backend = {
       settings: { ...DEFAULT_SETTINGS, ...(s.settings ?? {}) },
       recat: s.recat,
       links: s.links ?? {},
+      shares: s.shares ?? {},
       journal: s.trades.map(toTrade).sort((a, b) => b.d.localeCompare(a.d)),
       prices: s.prices ?? defaultPrices(),
       snaps: s.snaps.map(r => ({ d: r.day, v: r.value, c: r.contributed })).sort((a, b) => a.d.localeCompare(b.d)),
@@ -154,6 +160,7 @@ export const backend: Backend = {
   saveSettings: async settings => void (await run('saveSettings', { settings })),
   setOverride: async (txId, category) => void (await run('setOverride', { txId, category })),
   setLink: async (incomeId, expenseId) => void (await run('setLink', { incomeId, expenseId })),
+  setShare: async (txId, ratio) => void (await run('setShare', { txId, ratio })),
   saveTrade: async t => void (await run('saveTrade', { trade: toRow(t) })),
   savePrices: async prices => void (await run('savePrices', { prices })),
   saveSnapshot: async s => void (await run('saveSnapshot', { snap: { day: s.d, value: s.v, contributed: s.c } })),

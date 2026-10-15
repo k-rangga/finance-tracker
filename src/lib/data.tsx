@@ -18,6 +18,8 @@ type Ctx = UserData & {
   setOverride: (txId: string, orig: string, cat: string) => void;
   /** Link an income to the expense it pays back; `null` unlinks. */
   setLink: (incomeId: string, expenseId: string | null) => void;
+  /** Your share of an expense as a fraction (0–1); `null` counts the full amount. */
+  setShare: (txId: string, ratio: number | null) => void;
   saveTrade: (t: Trade) => void;
   savePrices: (p: Prices) => void;
   saveSnapshot: (s: Snap) => void;
@@ -82,6 +84,16 @@ export function DataProvider({ backend, children, loading, failed }: { backend: 
           return { ...d, links };
         });
         write(backend.setLink(incomeId, expenseId));
+      },
+      setShare: (txId, ratio) => {
+        setData(d => {
+          if (!d) return d;
+          const shares = { ...d.shares };
+          if (ratio == null) delete shares[txId];
+          else shares[txId] = ratio;
+          return { ...d, shares };
+        });
+        write(backend.setShare(txId, ratio));
       },
       saveTrade: t => {
         setData(d => d && { ...d, journal: d.journal.some(x => x.id === t.id) ? d.journal.map(x => (x.id === t.id ? t : x)) : [t, ...d.journal] });

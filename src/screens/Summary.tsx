@@ -11,7 +11,19 @@ import { categoryByName, SAVINGS_TARGET_PCT } from '../data/categories';
 
 type Props = { cycle: Cycle; budget: Budget; onOpenCategory: (name: string) => void };
 
-type Item = { key: string; title: string; sub: string; value: string; ink: string; icon: string; cat?: string };
+type Item = {
+  key: string;
+  title: string;
+  sub: string;
+  value: string;
+  ink: string;
+  icon: string;
+  cat?: string;
+  /** Transactions only: grouped under a day header. */
+  date?: Date;
+  /** Gross amount, struck through under the net when part of it was paid back or isn't yours. */
+  struck?: string;
+};
 
 export function Summary({ cycle, budget, onOpenCategory }: Props) {
   return (
@@ -34,11 +46,17 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
     return {
       key: t.id,
       title: t.title,
-      sub: `${dayMonth(t.date)} · ${t.time} · ${t.cat} · ${t.source}` + (t.reimbursed ? ` · ${full(t.reimbursed)} paid back by ${t.paidBackBy.join(', ')}` : ''),
+      sub:
+        `${t.time} · ${t.cat} · ${t.source}` +
+        (t.reimbursed ? ` · ${full(t.reimbursed)} reimbursed` : '') +
+        (t.share != null ? ` · your share of ${full(t.amount)}` : ''),
       value: (t.isIncome ? '+ ' : '- ') + full(t.isIncome ? t.amount : t.net),
-      ink: t.isIncome ? C.accent800 : C.redInk,
+      // The section already says it's spending: only incomes get a colour.
+      ink: t.isIncome ? C.accent800 : C.text,
       icon: c ? c.icon : IC.coins,
       cat: t.cat,
+      date: t.date,
+      struck: !t.isIncome && t.net !== t.amount ? full(t.amount) : undefined,
     };
   };
   const typeOf = (n: string) => categoryByName(n)?.type;
@@ -47,7 +65,7 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
     title: bill.title,
     sub: `Due ${dayLabel(bill.date)} · in ${cycle.offsetOf(bill.date) - cycle.dayIdx} days · ${bill.category} · ${bill.source}`,
     value: '- ' + full(bill.amount),
-    ink: C.redInk,
+    ink: C.text,
     icon: IC.calendar,
     cat: bill.category,
   }));
@@ -60,7 +78,7 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
       id: 'save',
       label: `Savings (${SAVINGS_TARGET_PCT}%)`,
       value: full(savings),
-      items: [{ key: 'save', title: 'Transfer to savings', sub: `${dayMonth(cycle.start)} · Payday · Automatic`, value: '- ' + full(savings), ink: C.redInk, icon: IC.piggy }],
+      items: [{ key: 'save', title: 'Transfer to savings', sub: `${dayMonth(cycle.start)} · Payday · Automatic`, value: '- ' + full(savings), ink: C.text, icon: IC.piggy }],
     },
     { id: 'fixed', label: 'Fixed bills paid', value: full(b.fixedSpent), items: b.txs.filter(t => typeOf(t.cat) === 'fixed').map(txItem) },
     { id: 'var', label: 'Variable spending', value: full(b.varSpent), items: b.txs.filter(t => typeOf(t.cat) === 'variable').map(txItem) },
@@ -154,20 +172,17 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
                 <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ opacity: has ? 1 : 0, transform: isOpen ? 'rotate(180deg)' : 'none' }} />
               </button>
               {isOpen && (
-                <div className="fade-in" style={{ margin: '0 20px 16px', background: C.bg, borderRadius: 16, padding: '6px 0', maxHeight: 360, overflowY: 'auto' }}>
-                  {r.items.map(i => {
-                    const ic = iconColors(i.cat);
-                    return (
-                      <div key={i.key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px' }}>
-                        <IconChip d={i.icon} bg={ic.bg} ink={ic.ink} size={34} iconSize={16} />
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
-                          <span style={{ fontSize: 14, fontWeight: 600 }}>{i.title}</span>
-                          <span style={{ fontSize: 12, color: C.textMuted }}>{i.sub}</span>
-                        </div>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: i.ink, whiteSpace: 'nowrap' }}>{i.value}</span>
-                      </div>
-                    );
-                  })}
+                <div className="fade-in" style={{ padding: '0 var(--pad) 8px' }}>
+                  {groupByDay(r.items).map(g => (
+                    <div key={g.label || 'items'}>
+                      {g.label && (
+                        <h3 style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.textMuted, padding: '14px 0 6px' }}>{g.label}</h3>
+                      )}
+                      {g.items.map(i => (
+                        <CycleItem key={i.key} i={i} />
+                      ))}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -175,6 +190,35 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
         })}
       </div>
     </Card>
+  );
+}
+
+/** Consecutive items on the same day share a header (items are already newest first); undated items get none. */
+function groupByDay(items: Item[]) {
+  const groups: { label: string; items: Item[] }[] = [];
+  for (const i of items) {
+    const label = i.date ? dayMonth(i.date) : '';
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(i);
+    else groups.push({ label, items: [i] });
+  }
+  return groups;
+}
+
+function CycleItem({ i }: { i: Item }) {
+  const ic = iconColors(i.cat);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: `1px solid ${C.divider}` }}>
+      <IconChip d={i.icon} bg={ic.bg} ink={ic.ink} size={34} iconSize={16} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{i.title}</span>
+        <span style={{ fontSize: 12, color: C.textMuted }}>{i.sub}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flex: 'none' }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: i.ink, whiteSpace: 'nowrap' }}>{i.value}</span>
+        {i.struck && <span style={{ fontSize: 12, color: C.textMuted, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>{i.struck}</span>}
+      </div>
+    </div>
   );
 }
 

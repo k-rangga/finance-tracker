@@ -20,12 +20,16 @@ type Props = {
   onRecat: (id: string, orig: string, cat: string) => void;
   /** Link an income to the expense it pays back; `null` unlinks. */
   onLink: (incomeId: string, expenseId: string | null) => void;
+  /** Your share of an expense as a fraction (0–1); `null` counts the full amount. */
+  onShare: (txId: string, ratio: number | null) => void;
 };
 
-export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink }: Props) {
+type Popover = 'link' | 'share';
+
+export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink, onShare }: Props) {
   const { full } = useSettings();
-  /** Income row whose "paid back for" picker is open. */
-  const [picking, setPicking] = useState<string | null>(null);
+  /** The row with an open popover: an income's "paid back for" picker or an expense's "my share" editor. */
+  const [open, setOpen] = useState<{ id: string; kind: Popover } | null>(null);
   const expenses = budget.txs.filter(t => !t.isIncome && !t.isTransfer);
   const { range, cat, q } = filter;
   const wStart = cycle.weekIdx * 7;
@@ -129,9 +133,10 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink }: 
                 t={t}
                 onRecat={onRecat}
                 onLink={onLink}
+                onShare={onShare}
                 expenses={expenses}
-                picking={picking === t.id}
-                setPicking={open => setPicking(open ? t.id : null)}
+                popover={open?.id === t.id ? open.kind : null}
+                setPopover={kind => setOpen(kind ? { id: t.id, kind } : null)}
               />
             ))}
           </div>
@@ -173,34 +178,40 @@ type RowProps = {
   t: TxView;
   onRecat: Props['onRecat'];
   onLink: Props['onLink'];
+  onShare: Props['onShare'];
   /** This cycle's expenses, newest first: what an income can pay back. */
   expenses: TxView[];
-  picking: boolean;
-  setPicking: (open: boolean) => void;
+  popover: Popover | null;
+  setPopover: (kind: Popover | null) => void;
 };
 
-function TxRow({ t, onRecat, onLink, expenses, picking, setPicking }: RowProps) {
+function TxRow({ t, onRecat, onLink, onShare, expenses, popover, setPopover }: RowProps) {
   const { full } = useSettings();
   const c = categoryByName(t.cat);
   const ic = iconColors(t.cat);
   const textCol = useRef<HTMLDivElement>(null);
   const linked = t.reimbursesId ? expenses.find(e => e.id === t.reimbursesId) : undefined;
   const canLink = t.isIncome && !t.isSalary;
+  const isExpense = !t.isIncome && !t.isTransfer;
+  const picking = popover === 'link';
+  const setPicking = (on: boolean) => setPopover(on ? 'link' : null);
+  const toggleShare = () => setPopover(popover === 'share' ? null : 'share');
 
-  // Close the picker on Escape or a click outside this row's text column (which holds the toggle and the popover).
+  // Close a popover on Escape or a click outside this row's text column (which holds the toggles and the popover).
   useEffect(() => {
-    if (!picking) return;
-    const onDown = (e: MouseEvent) => !textCol.current?.contains(e.target as Node) && setPicking(false);
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setPicking(false);
+    if (!popover) return;
+    const onDown = (e: MouseEvent) => !textCol.current?.contains(e.target as Node) && setPopover(null);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setPopover(null);
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [picking, setPicking]);
+  }, [popover, setPopover]);
 
   const paidBy = t.paidBackBy.join(', ');
+  const shareNote = t.share != null ? `your share of ${full(t.amount)}` : '';
   const amount = t.isIncome
     ? { text: '+ ' + full(t.amount), ink: t.reimbursesId ? C.textMuted : C.accent800 }
     : t.isTransfer
@@ -209,7 +220,9 @@ function TxRow({ t, onRecat, onLink, expenses, picking, setPicking }: RowProps) 
         ? { text: full(0), ink: C.textMuted, note: 'paid back by ' + paidBy }
         : t.reimbursed
           ? { text: '- ' + full(t.net), ink: C.redInk, note: `${full(t.reimbursed)} paid back by ${paidBy}` }
-          : { text: '- ' + full(t.amount), ink: C.redInk };
+          : t.share != null
+            ? { text: t.net === 0 ? full(0) : '- ' + full(t.net), ink: t.net === 0 ? C.textMuted : C.redInk, note: shareNote }
+            : { text: '- ' + full(t.amount), ink: C.redInk };
 
   return (
     <div className={s.hoverRow} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 24px' }}>
@@ -238,6 +251,11 @@ function TxRow({ t, onRecat, onLink, expenses, picking, setPicking }: RowProps) 
               Paid back for…
             </button>
           )}
+          {isExpense && (
+            <button type="button" className={s.textBtnSm} aria-expanded={popover === 'share'} onClick={toggleShare}>
+              {t.share != null ? 'Edit my share' : 'My share…'}
+            </button>
+          )}
           <span>{t.type === 'expense' ? `${t.account} · ${t.source}` : t.source}</span>
           {t.edited && <span style={{ fontWeight: 700, color: C.accent600 }}>✎ Recategorised from {t.category}</span>}
         </div>
@@ -248,6 +266,15 @@ function TxRow({ t, onRecat, onLink, expenses, picking, setPicking }: RowProps) 
             onPick={id => {
               onLink(t.id, id);
               setPicking(false);
+            }}
+          />
+        )}
+        {popover === 'share' && (
+          <ShareEditor
+            t={t}
+            onSave={ratio => {
+              onShare(t.id, ratio);
+              setPopover(null);
             }}
           />
         )}
@@ -292,6 +319,58 @@ function Picker({ income, expenses, onPick }: { income: TxView; expenses: TxView
         ))}
       </div>
     </div>
+  );
+}
+
+/** Set the part of an expense that's yours, for a shared payment nobody has transferred back yet. */
+function ShareEditor({ t, onSave }: { t: TxView; onSave: (ratio: number | null) => void }) {
+  const { full, settings } = useSettings();
+  const fmt = (v: number) => (settings.currency === 'IDR' ? Math.round(v).toLocaleString('id-ID') : String(Math.round(v * 100) / 100));
+  const [text, setText] = useState(fmt(t.share ?? t.amount));
+  const value = settings.currency === 'IDR' ? Number(text.replace(/\D/g, '')) : Number(text.replace(/[^\d.]/g, ''));
+  const valid = text.trim() !== '' && Number.isFinite(value) && value >= 0 && value <= t.amount;
+  const save = () => valid && onSave(value >= t.amount ? null : value / t.amount);
+  return (
+    <form
+      className={s.picker}
+      role="dialog"
+      aria-label={`Your share of ${t.title}`}
+      onSubmit={e => {
+        e.preventDefault();
+        save();
+      }}
+      style={{ padding: 12, gap: 10 }}
+    >
+      <span style={{ fontSize: 13, color: C.textMuted }}>
+        You paid {full(t.amount)}. How much of it was yours? Only your share counts as spending.
+      </span>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {[
+          ['Half', 1 / 2],
+          ['A third', 1 / 3],
+          ['A quarter', 1 / 4],
+        ].map(([label, f]) => (
+          <button key={label} type="button" className={s.splitBtn} onClick={() => setText(fmt(t.amount * (f as number)))}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <label className={s.pickSearch}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: C.textMuted }}>My share</span>
+        <input autoFocus inputMode="decimal" value={text} onChange={e => setText(e.target.value)} aria-label="My share" aria-invalid={!valid} />
+      </label>
+      {!valid && <span style={{ fontSize: 12, fontWeight: 700, color: C.redInk }}>Enter an amount from 0 to {full(t.amount)}.</span>}
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+        {t.share != null && (
+          <button type="button" className={s.textBtnSm} onClick={() => onSave(null)} style={{ marginRight: 'auto' }}>
+            Count the full amount
+          </button>
+        )}
+        <button type="submit" className={s.btnPrimarySm} disabled={!valid}>
+          Save
+        </button>
+      </div>
+    </form>
   );
 }
 

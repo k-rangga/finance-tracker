@@ -10,6 +10,8 @@ const TABLES = {
   overrides: ['tx_id', 'category', 'updated_at'],
   /** Reimbursements: an incoming transfer that pays you back for (part of) an expense. */
   links: ['income_id', 'expense_id', 'updated_at'],
+  /** Your share of an expense you paid for others too, as a fraction of its amount (0–1). */
+  shares: ['tx_id', 'ratio', 'updated_at'],
   trades: [
     'id', 'market', 'ticker', 'name', 'buy_date', 'price', 'quantity', 'fee', 'style', 'conviction', 'target', 'stop',
     'catalyst', 'catalyst_date', 'thesis', 'tags', 'leverage', 'direction',
