@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { run } from './gas';
 import { DEFAULT_SETTINGS, type Settings } from './settings';
 import { addDays, startOfToday, toISO } from './format';
 import type { Prices, Snap, Trade } from '../screens/invest/model';
@@ -7,18 +7,15 @@ import type { TxRow } from '../data/transactions';
 export type GmailConnection = {
   google_email: string | null;
   label_name: string | null;
-  /** Label names the Apps Script last reported. */
-  labels: string[];
-  /** Last time the Apps Script checked in; null until setup has run. */
-  script_seen_at: string | null;
-  sync_requested: boolean;
   last_synced_at: string | null;
   last_sync_status: string | null;
   last_sync_count: number | null;
 };
 
-/** Everything the app stores per user. */
+/** Everything the app stores (in the Apps Script's spreadsheet and script properties). */
 export type UserData = {
+  /** The Google account the web app runs as. */
+  email: string | null;
   settings: Settings;
   recat: Record<string, string>;
   journal: Trade[];
@@ -26,7 +23,7 @@ export type UserData = {
   snaps: Snap[];
   /** Imported Gmail receipts from the start of the previous pay cycle. */
   txRows: TxRow[];
-  gmail: GmailConnection | null;
+  gmail: GmailConnection;
 };
 
 export type Backend = {
@@ -43,7 +40,7 @@ export type Backend = {
 
 const defaultPrices = (): Prices => ({ map: {}, at: toISO(addDays(startOfToday(), -4)) });
 
-// ---------------------------------------------------------------- Supabase
+// ---------------------------------------------------------------- Apps Script
 
 type TradeRow = {
   id: string;
@@ -121,87 +118,36 @@ const toRow = (t: Trade): TradeRow => ({
   lesson: t.ex?.ls ?? null,
 });
 
-const settingsRow = (s: Settings, pricesOn?: string) => ({
-  income: s.income,
-  currency: s.currency,
-  warn_at: s.warnAt,
-  invest_pct: s.investPct,
-  idx_cap: s.idxCap,
-  us_cap: s.usCap,
-  crypto_cap: s.cryptoCap,
-  fx_rate: s.fxRate,
-  ...(pricesOn ? { prices_updated_on: pricesOn } : {}),
-  updated_at: new Date().toISOString(),
-});
+type State = {
+  email: string | null;
+  settings: Settings | null;
+  recat: Record<string, string>;
+  trades: TradeRow[];
+  prices: Prices | null;
+  snaps: { day: string; value: number; contributed: number }[];
+  txRows: TxRow[];
+  gmail: GmailConnection;
+};
 
-function check<T>(r: { data: T; error: { message: string } | null }): T {
-  if (r.error) throw new Error(r.error.message);
-  return r.data;
-}
-
-export function supabaseBackend(db: SupabaseClient): Backend {
-  const loadImports = async (since: Date) => {
-    const [tx, g] = await Promise.all([
-      db.from('transactions').select('id, occurred_at, title, category, amount, currency, source').gte('occurred_at', since.toISOString()).order('occurred_at', { ascending: false }),
-      db.from('gmail_connections').select('google_email, label_name, labels, script_seen_at, sync_requested, last_synced_at, last_sync_status, last_sync_count').maybeSingle(),
-    ]);
-    return { txRows: check(tx) as TxRow[], gmail: check(g) as GmailConnection | null };
-  };
-  return {
-    loadImports,
-    async load(since) {
-      const [s, o, t, p, n, imports] = await Promise.all([
-        db.from('user_settings').select('*').maybeSingle(),
-        db.from('transaction_overrides').select('tx_id, category'),
-        db.from('trades').select('*').order('buy_date', { ascending: false }),
-        db.from('prices').select('ticker, price'),
-        db.from('portfolio_snapshots').select('day, value, contributed').order('day'),
-        loadImports(since),
-      ]);
-      const srow = check(s) as Record<string, unknown> | null;
-      if (!srow) {
-        // New account: start empty with default settings.
-        check(await db.from('user_settings').upsert(settingsRow(DEFAULT_SETTINGS)));
-        return { settings: DEFAULT_SETTINGS, recat: {}, journal: [], prices: defaultPrices(), snaps: [], ...imports };
-      }
-      return {
-        ...imports,
-        settings: {
-          income: srow.income as number,
-          currency: srow.currency as Settings['currency'],
-          warnAt: srow.warn_at as number,
-          investPct: srow.invest_pct as number,
-          idxCap: srow.idx_cap as number,
-          usCap: srow.us_cap as number,
-          cryptoCap: srow.crypto_cap as number,
-          fxRate: srow.fx_rate as number,
-        },
-        recat: Object.fromEntries((check(o) as { tx_id: string; category: string }[]).map(r => [r.tx_id, r.category])),
-        journal: (check(t) as TradeRow[]).map(toTrade),
-        prices: {
-          map: Object.fromEntries((check(p) as { ticker: string; price: number }[]).map(r => [r.ticker, r.price])),
-          at: (srow.prices_updated_on as string | null) ?? defaultPrices().at,
-        },
-        snaps: (check(n) as { day: string; value: number; contributed: number }[]).map(r => ({ d: r.day, v: r.value, c: r.contributed })),
-      };
-    },
-    async saveSettings(s) {
-      check(await db.from('user_settings').upsert(settingsRow(s)));
-    },
-    async setOverride(txId, category) {
-      if (category == null) check(await db.from('transaction_overrides').delete().eq('tx_id', txId));
-      else check(await db.from('transaction_overrides').upsert({ tx_id: txId, category, updated_at: new Date().toISOString() }));
-    },
-    async saveTrade(t) {
-      check(await db.from('trades').upsert(toRow(t)));
-    },
-    async savePrices(p) {
-      const rows = Object.entries(p.map).map(([ticker, price]) => ({ ticker, price }));
-      if (rows.length) check(await db.from('prices').upsert(rows));
-      check(await db.from('user_settings').update({ prices_updated_on: p.at }).not('user_id', 'is', null));
-    },
-    async saveSnapshot(s) {
-      check(await db.from('portfolio_snapshots').upsert({ day: s.d, value: s.v, contributed: s.c }));
-    },
-  };
-}
+/** Server calls go to `api()` in apps-script/Code.js. */
+export const backend: Backend = {
+  async load(since) {
+    const s = await run<State>('getState', { since: since.toISOString() });
+    return {
+      email: s.email,
+      settings: { ...DEFAULT_SETTINGS, ...(s.settings ?? {}) },
+      recat: s.recat,
+      journal: s.trades.map(toTrade).sort((a, b) => b.d.localeCompare(a.d)),
+      prices: s.prices ?? defaultPrices(),
+      snaps: s.snaps.map(r => ({ d: r.day, v: r.value, c: r.contributed })).sort((a, b) => a.d.localeCompare(b.d)),
+      txRows: s.txRows,
+      gmail: s.gmail,
+    };
+  },
+  loadImports: since => run('getImports', { since: since.toISOString() }),
+  saveSettings: async settings => void (await run('saveSettings', { settings })),
+  setOverride: async (txId, category) => void (await run('setOverride', { txId, category })),
+  saveTrade: async t => void (await run('saveTrade', { trade: toRow(t) })),
+  savePrices: async prices => void (await run('savePrices', { prices })),
+  saveSnapshot: async s => void (await run('saveSnapshot', { snap: { day: s.d, value: s.v, contributed: s.c } })),
+};

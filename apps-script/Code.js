@@ -1,120 +1,111 @@
 /**
- * Personal Spending Tracker — Gmail receipt sync.
+ * Personal Spending Tracker — Apps Script web app.
  *
- * Runs as you and reads (never changes) the Gmail label you choose in the app,
- * then sends those emails to the app, which turns them into transactions.
- *
- * One-time setup:
- *   1. In the app, open Gmail sync and click "Create connection key".
- *   2. Here: Project Settings (gear) → Script Properties → add INGEST_KEY = that key.
- *   3. Run `setup` once and approve the permissions.
- * After that it syncs every morning, and within 10 minutes of a "Sync now" or label change in the app.
+ * Index.html is the React app built by `npm run build` (one self-contained file).
+ * The page calls `api(action, payload)` through google.script.run.
+ * Data lives in a spreadsheet in the owner's Drive (created on first run; see Sheets.js).
+ * Gmail receipts are read with GmailApp (see Gmail.js) and parsed by Parse.js.
  */
 
-const APP_URL = 'https://finance-tracker-gold.vercel.app';
-const FIRST_SYNC_DAYS = 62; // first import covers this pay cycle and the previous one
-const MAX_THREADS = 500;
-const BATCH = 40;
+const TZ = 'Asia/Jakarta';
+const APP_TITLE = 'Personal Spending Tracker';
 
-/** Run once: checks the key, installs the triggers and does a first check-in. */
+function doGet() {
+  ensureSetup_();
+  return HtmlService.createHtmlOutputFromFile('Index')
+    .setTitle(APP_TITLE)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+}
+
+/** Single entry point for the page. Errors reach the page as rejected promises. */
+function api(action, payload) {
+  const fn = ACTIONS[action];
+  if (!fn) throw new Error('Unknown action: ' + action);
+  return fn(payload || {});
+}
+
+const ACTIONS = {
+  /** Everything the app needs on load. `since` = start of the previous pay cycle (ISO). */
+  getState: p => ({
+    email: Session.getEffectiveUser().getEmail(),
+    settings: props_('settings', null),
+    recat: overrides_(),
+    trades: readTable_('trades'),
+    prices: props_('prices', null),
+    snaps: readTable_('snapshots'),
+    txRows: transactionsSince_(p.since),
+    gmail: gmailStatus_(),
+  }),
+  getImports: p => ({ txRows: transactionsSince_(p.since), gmail: gmailStatus_() }),
+
+  saveSettings: p => {
+    setProps_('settings', p.settings);
+    return true;
+  },
+  setOverride: p => {
+    if (p.category == null) deleteRow_('overrides', 'tx_id', p.txId);
+    else upsertRow_('overrides', 'tx_id', { tx_id: p.txId, category: p.category, updated_at: new Date().toISOString() });
+    return true;
+  },
+  saveTrade: p => {
+    upsertRow_('trades', 'id', Object.assign({}, p.trade, { created_at: p.trade.created_at || new Date().toISOString() }));
+    return true;
+  },
+  savePrices: p => {
+    setProps_('prices', p.prices);
+    return true;
+  },
+  saveSnapshot: p => {
+    upsertRow_('snapshots', 'day', p.snap);
+    return true;
+  },
+
+  listLabels: () => listLabels_(),
+  chooseLabel: p => chooseLabel_(p.name),
+  syncNow: () => syncGmail_(),
+  disconnectGmail: () => disconnectGmail_(),
+};
+
+/** First run: spreadsheet, tabs and the daily Gmail trigger. Also runnable from the editor. */
 function setup() {
-  key_();
-  ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger('dailySync').timeBased().everyDays(1).atHour(6).create();
-  ScriptApp.newTrigger('poll').timeBased().everyMinutes(10).create();
-  const cfg = checkIn_();
-  if (cfg.label) sync_(cfg);
-  Logger.log(cfg.label ? 'Linked and synced label "' + cfg.label + '".' : 'Linked. Now choose a label in the app; it imports within 10 minutes.');
+  ensureSetup_();
+  Logger.log('Data spreadsheet: ' + ss_().getUrl());
 }
 
-/** Daily trigger. */
-function dailySync() {
-  const cfg = checkIn_();
-  if (cfg.label) sync_(cfg);
+function ensureSetup_() {
+  ss_();
+  ensureDailyTrigger_();
 }
 
-/** Every 10 minutes: refresh the label list and handle "Sync now" / label changes from the app. */
-function poll() {
-  const cfg = checkIn_();
-  if (cfg.label && cfg.syncRequested) sync_(cfg);
+function overrides_() {
+  const out = {};
+  readTable_('overrides').forEach(r => {
+    out[r.tx_id] = r.category;
+  });
+  return out;
 }
 
-/** Run by hand to sync immediately. */
-function syncNow() {
-  const cfg = checkIn_();
-  if (!cfg.label) throw new Error('Choose a label in the app first.');
-  sync_(cfg);
+function transactionsSince_(since) {
+  const from = since ? new Date(since).getTime() : 0;
+  return readTable_('transactions')
+    .filter(r => new Date(r.occurred_at).getTime() >= from)
+    .sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : -1))
+    .map(r => ({ id: r.id, occurred_at: r.occurred_at, title: r.title, category: r.category, amount: r.amount, currency: r.currency, source: r.source }));
 }
 
-function checkIn_() {
-  const labels = GmailApp.getUserLabels()
-    .map(l => l.getName())
-    .sort();
-  return api_('poll', { email: Session.getActiveUser().getEmail(), labels: labels });
-}
+// ---- script properties (small JSON values) ----
 
-function sync_(cfg) {
+function props_(key, fallback) {
+  const v = PropertiesService.getScriptProperties().getProperty(key);
+  if (v == null) return fallback;
   try {
-    const label = GmailApp.getUserLabelByName(cfg.label);
-    if (!label) throw new Error('Gmail label "' + cfg.label + '" not found. Choose another label in the app.');
-    const since = cfg.since ? new Date(cfg.since) : new Date(Date.now() - FIRST_SYNC_DAYS * 864e5);
-
-    const messages = [];
-    // Threads come newest first; stop once a whole page is older than `since`.
-    for (let start = 0; start < MAX_THREADS; start += 100) {
-      const threads = label.getThreads(start, 100);
-      if (!threads.length) break;
-      threads.forEach(t => {
-        if (t.getLastMessageDate() < since) return;
-        t.getMessages().forEach(m => {
-          if (m.getDate() < since) return;
-          messages.push({
-            id: m.getId(),
-            date: m.getDate().toISOString(),
-            subject: m.getSubject(),
-            from: m.getFrom(),
-            body: (m.getPlainBody() || '').slice(0, 20000),
-          });
-        });
-      });
-      if (threads[threads.length - 1].getLastMessageDate() < since) break;
-    }
-
-    let imported = 0;
-    for (let i = 0; i < messages.length || i === 0; i += BATCH) {
-      const last = i + BATCH >= messages.length;
-      const r = api_('messages', { messages: messages.slice(i, i + BATCH), done: last, scanned: messages.length });
-      imported += r.imported || 0;
-      if (last) break;
-    }
-    Logger.log('Scanned ' + messages.length + ' emails, imported ' + imported + ' receipts.');
+    return JSON.parse(v);
   } catch (e) {
-    try {
-      api_('messages', { error: String(e && e.message ? e.message : e) });
-    } catch (ignored) {}
-    throw e;
+    return fallback;
   }
 }
 
-function api_(path, body) {
-  const r = UrlFetchApp.fetch(APP_URL + '/api/ingest/' + path, {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { Authorization: 'Bearer ' + key_() },
-    payload: JSON.stringify(body),
-    muteHttpExceptions: true,
-  });
-  const text = r.getContentText();
-  let json = {};
-  try {
-    json = JSON.parse(text || '{}');
-  } catch (e) {}
-  if (r.getResponseCode() >= 300) throw new Error(json.error || 'App returned ' + r.getResponseCode());
-  return json;
-}
-
-function key_() {
-  const k = PropertiesService.getScriptProperties().getProperty('INGEST_KEY');
-  if (!k) throw new Error('Add the INGEST_KEY script property (Project Settings → Script Properties) with the key from the app, then run setup again.');
-  return k.trim();
+function setProps_(key, value) {
+  PropertiesService.getScriptProperties().setProperty(key, JSON.stringify(value));
 }

@@ -1,17 +1,14 @@
-import { StrictMode, useMemo } from 'react';
+import { StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles/global.css';
 import s from './styles/ui.module.css';
 import App from './App';
 import { SettingsProvider } from './lib/settings';
 import { DataProvider } from './lib/data';
-import { supabaseBackend } from './lib/backend';
-import { supabase } from './lib/supabase';
-import { signOut, useUser } from './lib/auth';
-import { Login } from './screens/Login';
+import { backend } from './lib/backend';
 import { Logo } from './components/Logo';
 
-function Centered({ children }: { children: React.ReactNode }) {
+function Centered({ children }: { children: ReactNode }) {
   return (
     <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, textAlign: 'center', maxWidth: 360 }}>
@@ -22,23 +19,10 @@ function Centered({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Root() {
-  const user = useUser();
-  const backend = useMemo(() => supabase && supabaseBackend(supabase), []);
-
-  if (!backend)
-    return (
-      <Centered>
-        <h1 style={{ fontSize: 22 }}>Database not configured</h1>
-        <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>Set the Supabase environment variables (run vercel env pull) and reload.</span>
-      </Centered>
-    );
-  if (user === undefined) return <Centered><span className={s.label}>Loading…</span></Centered>;
-  if (!user) return <Login />;
-
-  return (
+// Google signs you in before Apps Script serves the page, so there is no login screen.
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
     <DataProvider
-      key={user.id}
       backend={backend}
       loading={
         <Centered>
@@ -49,26 +33,15 @@ function Root() {
         <Centered>
           <h1 style={{ fontSize: 22 }}>Couldn't load your data</h1>
           <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>{msg}</span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className={s.btnPrimary} onClick={retry}>
-              Try again
-            </button>
-            <button type="button" className={s.btnGhost} onClick={() => void signOut()}>
-              Log out
-            </button>
-          </div>
+          <button type="button" className={s.btnPrimary} onClick={retry}>
+            Try again
+          </button>
         </Centered>
       )}
     >
       <SettingsProvider>
-        <App email={user.email} />
+        <App />
       </SettingsProvider>
     </DataProvider>
-  );
-}
-
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <Root />
   </StrictMode>,
 );

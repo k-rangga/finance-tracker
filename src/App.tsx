@@ -9,7 +9,6 @@ import { getCycle } from './lib/cycle';
 import { computeBudget } from './lib/budget';
 import { addDays, dayLabel, dayMonth, startOfToday } from './lib/format';
 import { useSettings } from './lib/settings';
-import { signOut } from './lib/auth';
 import { useData } from './lib/data';
 import { expectedBills, inCycle, toTransaction } from './data/transactions';
 import { Summary } from './screens/Summary';
@@ -28,13 +27,13 @@ const TABS: { key: Tab; label: string; short: string; icon: string }[] = [
   { key: 'invest', label: 'Investment journal', short: 'Invest', icon: IC.trend },
 ];
 
-export default function App({ email }: { email: string | null }) {
+export default function App() {
   const [collapsed, setCollapsed] = useState(() => storage.getRaw(KEYS.nav) === 'mini');
   const [tab, setTabState] = useState<Tab>(() => {
     const t = storage.getRaw(KEYS.tab) as Tab | null;
     return t && TABS.some(x => x.key === t) ? t : 'summary';
   });
-  const { recat, setOverride, saveError, dismissError, txRows, gmail } = useData();
+  const { recat, setOverride, saveError, dismissError, txRows, gmail, email } = useData();
   const [txFilter, setTxFilter] = useState<ActivityFilter>({ range: 'week', cat: '', q: '' });
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -52,17 +51,9 @@ export default function App({ email }: { email: string | null }) {
     () => computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, cycle, income: settings.income, warnAt: settings.warnAt }),
     [transactions, prevTransactions, prevCycle, bills, recat, cycle, settings.income, settings.warnAt],
   );
-  const ready = !!gmail?.script_seen_at && !!gmail.label_name;
-  const syncLabel = !gmail?.script_seen_at
-    ? 'Connect Gmail'
-    : !gmail.label_name
-      ? 'Choose Gmail label'
-      : gmail.last_sync_status?.startsWith('error')
-        ? 'Gmail sync failed'
-        : gmail.last_synced_at
-          ? `Synced ${syncedAgo(gmail.last_synced_at)}`
-          : 'Gmail sync pending';
-  const syncWarn = !ready || !!gmail?.last_sync_status?.startsWith('error');
+  const ready = !!gmail.label_name;
+  const syncLabel = !ready ? 'Connect Gmail' : gmail.last_sync_status?.startsWith('error') ? 'Gmail sync failed' : `Synced ${syncedAgo(gmail.last_synced_at)}`;
+  const syncWarn = !ready || !!gmail.last_sync_status?.startsWith('error');
 
   const setTab = useCallback((t: Tab) => {
     storage.setRaw(KEYS.tab, t);
@@ -73,7 +64,6 @@ export default function App({ email }: { email: string | null }) {
     storage.setRaw(KEYS.nav, mini ? 'mini' : 'full');
     setCollapsed(mini);
   };
-  const logout = () => void signOut();
   const showTransactions = useCallback(
     (cat: string) => {
       setTxFilter({ range: 'cycle', cat, q: '' });
@@ -117,10 +107,6 @@ export default function App({ email }: { email: string | null }) {
             <Icon d={IC.settings} size={18} />
             <span>Settings</span>
           </button>
-          <button type="button" className={s.navItem} onClick={logout}>
-            <Icon d={IC.logout} size={18} />
-            <span>Log out</span>
-          </button>
         </div>
       </aside>
 
@@ -147,9 +133,6 @@ export default function App({ email }: { email: string | null }) {
           </button>
           <button type="button" className={s.railBtn} onClick={() => setSettingsOpen(true)} title="Settings" aria-label="Settings">
             <Icon d={IC.settings} size={20} />
-          </button>
-          <button type="button" className={s.railBtn} onClick={logout} title="Log out" aria-label="Log out">
-            <Icon d={IC.logout} size={20} />
           </button>
         </div>
       </aside>
@@ -192,9 +175,6 @@ export default function App({ email }: { email: string | null }) {
             <button type="button" className={`${s.chip} ${s.mobileOnly}`} onClick={() => setSettingsOpen(true)} aria-label="Settings" title="Settings">
               <Icon d={IC.settings} size={14} />
             </button>
-            <button type="button" className={`${s.chip} ${s.mobileOnly}`} onClick={logout}>
-              Log out
-            </button>
           </header>
 
           {saveError && (
@@ -209,16 +189,12 @@ export default function App({ email }: { email: string | null }) {
           {(!ready || txRows.length === 0) && tab !== 'invest' && (
             <div className={s.note} style={{ background: 'var(--accent-tint)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ marginRight: 'auto' }}>
-                {!gmail?.script_seen_at
-                  ? 'Connect Gmail to import your receipts. Spending, categories and the savings plan fill in from them.'
-                  : !gmail.label_name
-                    ? 'Choose the Gmail label that holds your receipts to start importing.'
-                    : gmail.last_synced_at
-                      ? 'No receipts found in that label yet. Check the label, or press Sync now.'
-                      : 'Import scheduled. Receipts arrive within 10 minutes.'}
+                {!ready
+                  ? 'Choose the Gmail label that holds your receipts. Spending, categories and the savings plan fill in from them.'
+                  : 'No receipts in this pay cycle yet. Check the label, or press Sync now.'}
               </span>
               <button type="button" className={s.btnPrimary} onClick={() => setGmailOpen(true)}>
-                {!gmail?.script_seen_at ? 'Connect Gmail' : !gmail.label_name ? 'Choose label' : 'Open Gmail sync'}
+                {!ready ? 'Connect Gmail' : 'Open Gmail sync'}
               </button>
             </div>
           )}

@@ -1,12 +1,10 @@
-import { useState } from 'react';
+import logoUrl from '../assets/logo-cat.svg';
 
-/** Circular cat logo. Uses assets/logo-cat.png when present, else the bundled SVG placeholder. */
+/** Circular cat logo, inlined into the single-file build. Replace src/assets/logo-cat.svg to change it. */
 export function Logo({ size }: { size: number }) {
-  const [src, setSrc] = useState('/assets/logo-cat.png');
   return (
     <img
-      src={src}
-      onError={() => setSrc('/assets/logo-cat.svg')}
+      src={logoUrl}
       alt="Personal Spending Tracker"
       width={size}
       height={size}

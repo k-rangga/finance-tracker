@@ -1,14 +1,10 @@
 /**
  * Turn a receipt email into a transaction: amount, currency, category and source.
  * Heuristic and Indonesia-first (Rp / IDR formats, local merchants and banks).
- * Category names must match src/data/categories.ts.
+ * Category names must match src/data/categories.ts. Used by Gmail.js.
  */
 
-export type Parsed = { amount: number; currency: 'IDR' | 'USD'; title: string; category: string; source: string };
-
-type Email = { subject: string; from: string; text: string };
-
-const CATEGORY_RULES: [string, RegExp][] = [
+const CATEGORY_RULES = [
   ['Income', /\b(gaji|salary|payroll|payslip|slip gaji|thr)\b/i],
   ['Housing', /\b(sewa|rent|kost?|apartemen|apartment|ipl|mortgage|kpr)\b/i],
   ['Insurance', /\b(asuransi|insurance|premi|prudential|allianz|axa|manulife|bpjs)\b/i],
@@ -20,7 +16,7 @@ const CATEGORY_RULES: [string, RegExp][] = [
   ['Shopping', /\b(tokopedia|shopee|lazada|blibli|zalora|bukalapak|amazon|uniqlo|ikea|ace hardware|pesanan|order)\b/i],
 ];
 
-const SOURCE_RULES: [string, RegExp][] = [
+const SOURCE_RULES = [
   ['Payroll email', /\b(gaji|salary|payroll|payslip)\b/i],
   ['Ride app email', /\b(gojek|goride|gocar|grab|bluebird|maxim)\b/i],
   ['E-wallet email', /\b(gopay|ovo|dana|shopeepay|linkaja)\b/i],
@@ -35,7 +31,7 @@ const SOURCE_RULES: [string, RegExp][] = [
 const TOTAL_WORDS = /(grand total|total bayar|total pembayaran|total tagihan|total payment|total amount|amount paid|jumlah (?:bayar|pembayaran|tagihan|transfer)?|nominal|total|tagihan|amount|charged|dibayar|paid)\s*[:\-]?\s*$/i;
 
 /** Parse "1.250.000", "1,250,000.00", "135.000,00", "36000" into a number. */
-export function parseNumber(raw: string, idr: boolean): number {
+function parseNumber_(raw, idr) {
   let s = raw.replace(/\s/g, '');
   const m = s.match(/^(.*?)([.,])(\d{1,2})$/);
   let dec = '';
@@ -50,18 +46,16 @@ export function parseNumber(raw: string, idr: boolean): number {
   return idr ? Math.round(v) : v;
 }
 
-type Hit = { amount: number; currency: 'IDR' | 'USD'; index: number; keyed: boolean };
-
-export function findAmounts(text: string): Hit[] {
-  const hits: Hit[] = [];
+function findAmounts_(text) {
+  const hits = [];
   const re = /(Rp\.?|IDR|USD|US\$|\$)\s?(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)/gi;
   for (const m of text.matchAll(re)) {
     const sym = m[1].toUpperCase();
     const idr = sym.startsWith('RP') || sym === 'IDR';
-    const amount = parseNumber(m[2], idr);
+    const amount = parseNumber_(m[2], idr);
     if (!(amount > 0)) continue;
-    const before = text.slice(Math.max(0, m.index! - 40), m.index!);
-    hits.push({ amount, currency: idr ? 'IDR' : 'USD', index: m.index!, keyed: TOTAL_WORDS.test(before) });
+    const before = text.slice(Math.max(0, m.index - 40), m.index);
+    hits.push({ amount, currency: idr ? 'IDR' : 'USD', index: m.index, keyed: TOTAL_WORDS.test(before) });
   }
   return hits;
 }
@@ -69,7 +63,7 @@ export function findAmounts(text: string): Hit[] {
 const GENERIC_SENDER = /\b(no-?reply|noreply|notifications?|info|support|hr|payroll|bank|bca|mandiri|bni|bri|cimb|permata|jenius|jago)\b/i;
 
 /** The sender's display name is usually the merchant; banks and generic senders fall back to the subject. */
-function cleanTitle(subject: string, from: string): string {
+function cleanTitle_(subject, from) {
   const sender = from.replace(/<.*>/, '').replace(/"/g, '').trim();
   if (sender && !sender.includes('@') && !GENERIC_SENDER.test(sender)) return sender.length > 60 ? sender.slice(0, 57) + '…' : sender;
   const s = subject
@@ -81,14 +75,14 @@ function cleanTitle(subject: string, from: string): string {
   return t.length > 60 ? t.slice(0, 57).trimEnd() + '…' : t;
 }
 
-export function parseReceipt(e: Email): Parsed | null {
+function parseReceipt(e) {
   const hay = `${e.subject}\n${e.from}\n${e.text}`;
-  const hits = findAmounts(`${e.subject}\n${e.text}`);
+  const hits = findAmounts_(`${e.subject}\n${e.text}`);
   if (!hits.length) return null;
   // Prefer an amount labelled "total"/"jumlah"/"nominal"; the last labelled one is usually the grand total.
   const keyed = hits.filter(h => h.keyed);
   const pick = keyed.length ? keyed[keyed.length - 1] : hits[0];
   const category = CATEGORY_RULES.find(([, re]) => re.test(hay))?.[0] ?? 'Buffer';
   const source = SOURCE_RULES.find(([, re]) => re.test(hay))?.[0] ?? 'Email receipt';
-  return { amount: pick.amount, currency: pick.currency, title: cleanTitle(e.subject, e.from), category, source };
+  return { amount: pick.amount, currency: pick.currency, title: cleanTitle_(e.subject, e.from), category, source };
 }
