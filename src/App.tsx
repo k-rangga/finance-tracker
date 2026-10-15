@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import s from './styles/ui.module.css';
 import { IC, Icon } from './components/Icon';
 import { Logo } from './components/Logo';
 import { SettingsDialog } from './components/SettingsDialog';
 import { GmailDialog, syncedAgo } from './components/GmailDialog';
-import { CALLBACK_MESSAGES } from './lib/gmail';
 import { KEYS, storage } from './lib/storage';
 import { getCycle } from './lib/cycle';
 import { computeBudget } from './lib/budget';
@@ -39,14 +38,7 @@ export default function App({ email }: { email: string | null }) {
   const [txFilter, setTxFilter] = useState<ActivityFilter>({ range: 'week', cat: '', q: '' });
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Opened automatically when Google redirects back with ?gmail=…
-  const [gmailOpen, setGmailOpen] = useState<{ notice?: string } | null>(() => {
-    const q = new URLSearchParams(window.location.search).get('gmail');
-    return q ? { notice: CALLBACK_MESSAGES[q] ?? CALLBACK_MESSAGES.error } : null;
-  });
-  useEffect(() => {
-    if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
-  }, []);
+  const [gmailOpen, setGmailOpen] = useState(false);
   const { settings } = useSettings();
 
   const today = useMemo(startOfToday, []);
@@ -60,8 +52,17 @@ export default function App({ email }: { email: string | null }) {
     () => computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, cycle, income: settings.income, warnAt: settings.warnAt }),
     [transactions, prevTransactions, prevCycle, bills, recat, cycle, settings.income, settings.warnAt],
   );
-  const syncLabel = !gmail ? 'Connect Gmail' : !gmail.label_id ? 'Choose Gmail label' : gmail.last_sync_status?.startsWith('error') ? 'Gmail sync failed' : `Synced ${syncedAgo(gmail.last_synced_at)}`;
-  const syncWarn = !gmail?.label_id || !!gmail.last_sync_status?.startsWith('error');
+  const ready = !!gmail?.script_seen_at && !!gmail.label_name;
+  const syncLabel = !gmail?.script_seen_at
+    ? 'Connect Gmail'
+    : !gmail.label_name
+      ? 'Choose Gmail label'
+      : gmail.last_sync_status?.startsWith('error')
+        ? 'Gmail sync failed'
+        : gmail.last_synced_at
+          ? `Synced ${syncedAgo(gmail.last_synced_at)}`
+          : 'Gmail sync pending';
+  const syncWarn = !ready || !!gmail?.last_sync_status?.startsWith('error');
 
   const setTab = useCallback((t: Tab) => {
     storage.setRaw(KEYS.tab, t);
@@ -181,7 +182,7 @@ export default function App({ email }: { email: string | null }) {
             <button
               type="button"
               className={s.chip}
-              onClick={() => setGmailOpen({})}
+              onClick={() => setGmailOpen(true)}
               style={syncWarn ? { borderColor: 'var(--amber)', color: 'var(--amber-ink)', fontWeight: 700 } : undefined}
               title="Gmail sync settings"
             >
@@ -205,17 +206,19 @@ export default function App({ email }: { email: string | null }) {
             </div>
           )}
 
-          {(!gmail?.label_id || txRows.length === 0) && tab !== 'invest' && (
+          {(!ready || txRows.length === 0) && tab !== 'invest' && (
             <div className={s.note} style={{ background: 'var(--accent-tint)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ marginRight: 'auto' }}>
-                {!gmail
+                {!gmail?.script_seen_at
                   ? 'Connect Gmail to import your receipts. Spending, categories and the savings plan fill in from them.'
-                  : !gmail.label_id
+                  : !gmail.label_name
                     ? 'Choose the Gmail label that holds your receipts to start importing.'
-                    : 'No receipts imported yet. Check the label, or press Sync now.'}
+                    : gmail.last_synced_at
+                      ? 'No receipts found in that label yet. Check the label, or press Sync now.'
+                      : 'Import scheduled. Receipts arrive within 10 minutes.'}
               </span>
-              <button type="button" className={s.btnPrimary} onClick={() => setGmailOpen({})}>
-                {!gmail ? 'Connect Gmail' : !gmail.label_id ? 'Choose label' : 'Open Gmail sync'}
+              <button type="button" className={s.btnPrimary} onClick={() => setGmailOpen(true)}>
+                {!gmail?.script_seen_at ? 'Connect Gmail' : !gmail.label_name ? 'Choose label' : 'Open Gmail sync'}
               </button>
             </div>
           )}
@@ -230,7 +233,7 @@ export default function App({ email }: { email: string | null }) {
         </div>
       </main>
 
-      {gmailOpen && <GmailDialog notice={gmailOpen.notice} onClose={() => setGmailOpen(null)} />}
+      {gmailOpen && <GmailDialog onClose={() => setGmailOpen(false)} />}
       {settingsOpen && <SettingsDialog email={email} onClose={() => setSettingsOpen(false)} />}
     </div>
   );

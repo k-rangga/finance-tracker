@@ -16,12 +16,14 @@ vercel dev        # app + /api functions (plain `npm run dev` serves the app onl
 - **Transactions** come only from Gmail: receipts under the label you choose are parsed (`api/_lib/parse.ts`) into amount, category and source. Re-categorising stores an override; the original parse is kept.
 - **Investment journal, prices, settings** are entered by you. New accounts start empty.
 
-## Gmail sync
+## Gmail sync (Apps Script)
 
-- `api/gmail/*` — connect (Google OAuth, `gmail.readonly`, offline), list labels, choose label, sync now, disconnect. Refresh tokens live in `gmail_tokens`, readable only with the service role.
-- `api/cron/gmail-sync` — Vercel Cron, daily at 23:00 UTC (06:00 WIB), syncs every user with a label. Protected by `CRON_SECRET`.
-- Server env: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (from the Supabase integration), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `CRON_SECRET`.
-- Google Cloud: enable the Gmail API, add the `gmail.readonly` scope, create a Web OAuth client with redirect URI `https://<your-domain>/api/gmail/callback`. Keep the app's publishing status **In production** — in Testing, Google expires Gmail refresh tokens after 7 days and the daily sync stops.
+Gmail is read by your own Google Apps Script (`apps-script/`), so no Google Cloud OAuth app or verification is needed.
+
+- `apps-script/Code.js` — reads one Gmail label read-only and posts the emails to `/api/ingest/*`, authenticated with a per-user **connection key** (`INGEST_KEY` script property; only its SHA-256 is stored). Triggers: daily at 06:00 (Asia/Jakarta) plus a 10-minute check for "Sync now" and label changes made in the app. The script also reports your label list so you choose the label in the app.
+- `api/ingest/poll`, `api/ingest/messages` — called by the script; receipts are parsed server-side (`api/_lib/parse.ts`).
+- `api/gmail/key|label|sync|disconnect` — called by the app.
+- Deploy the script: `cd apps-script && clasp push` (`.clasp.json` holds the script ID and is git-ignored). Then in the app: Gmail sync → Create connection key → add it as `INGEST_KEY` in Project Settings → Script Properties → run `setup` once.
 
 - **Logo:** drop the real cat logo at `public/assets/logo-cat.png`; until then a placeholder SVG is used.
 - **Settings** (sidebar → Settings): income, currency, warning threshold, invest %, market caps, USD rate.

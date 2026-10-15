@@ -6,8 +6,12 @@ import type { TxRow } from '../data/transactions';
 
 export type GmailConnection = {
   google_email: string | null;
-  label_id: string | null;
   label_name: string | null;
+  /** Label names the Apps Script last reported. */
+  labels: string[];
+  /** Last time the Apps Script checked in; null until setup has run. */
+  script_seen_at: string | null;
+  sync_requested: boolean;
   last_synced_at: string | null;
   last_sync_status: string | null;
   last_sync_count: number | null;
@@ -139,7 +143,7 @@ export function supabaseBackend(db: SupabaseClient): Backend {
   const loadImports = async (since: Date) => {
     const [tx, g] = await Promise.all([
       db.from('transactions').select('id, occurred_at, title, category, amount, currency, source').gte('occurred_at', since.toISOString()).order('occurred_at', { ascending: false }),
-      db.from('gmail_connections').select('google_email, label_id, label_name, last_synced_at, last_sync_status, last_sync_count').maybeSingle(),
+      db.from('gmail_connections').select('google_email, label_name, labels, script_seen_at, sync_requested, last_synced_at, last_sync_status, last_sync_count').maybeSingle(),
     ]);
     return { txRows: check(tx) as TxRow[], gmail: check(g) as GmailConnection | null };
   };
