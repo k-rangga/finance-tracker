@@ -79,6 +79,7 @@ const ACTIONS = {
   listLabels: () => listLabels_(),
   chooseLabel: p => chooseLabel_(p.name),
   syncNow: () => syncGmail_(),
+  syncRange: () => syncRange_(),
   reimportGmail: () => reimportGmail_(),
   disconnectGmail: () => disconnectGmail_(),
 };
@@ -91,7 +92,7 @@ function setup() {
 
 function ensureSetup_() {
   ss_();
-  ensureDailyTrigger_();
+  ensureSyncTrigger_();
 }
 
 function overrides_() {

@@ -2,7 +2,7 @@ import { useMemo, useState, type MouseEvent } from 'react';
 import s from '../styles/ui.module.css';
 import { Badge, Bar, Card, CardHead, Dot, IconChip } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
-import { changeBadge, iconColors, type Budget, type TxView } from '../lib/budget';
+import { changeBadge, dayAmount, dayTotalLabel, iconColors, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth, pc, sum } from '../lib/format';
 import { useSettings } from '../lib/settings';
@@ -21,6 +21,8 @@ type Item = {
   cat?: string;
   /** Transactions only: grouped under a day header. */
   date?: Date;
+  /** Transactions only: what it adds to its day's total (see dayAmount). */
+  dayAmount?: number;
   /** Gross amount, struck through under the net when part of it was paid back or isn't yours. */
   struck?: string;
 };
@@ -56,6 +58,8 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
       icon: c ? c.icon : IC.coins,
       cat: t.cat,
       date: t.date,
+      // The Invested list totals what it shows (money moved out), though it isn't spending.
+      dayAmount: t.isInvestment ? -t.amount : dayAmount(t),
       struck: !t.isIncome && t.net !== t.amount ? full(t.amount) : undefined,
     };
   };
@@ -183,7 +187,12 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
                   {groupByDay(r.items).map(g => (
                     <div key={g.label || 'items'}>
                       {g.label && (
-                        <h3 style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.textMuted, padding: '14px 0 6px' }}>{g.label}</h3>
+                        <h3
+                          style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.textMuted, padding: '14px 0 6px' }}
+                        >
+                          <span>{g.label}</span>
+                          <span style={{ letterSpacing: 0, textTransform: 'none' }}>{dayTotalLabel(sum(g.items.map(i => i.dayAmount ?? 0)), full)}</span>
+                        </h3>
                       )}
                       {g.items.map(i => (
                         <CycleItem key={i.key} i={i} />

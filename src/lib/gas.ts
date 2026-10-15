@@ -110,6 +110,7 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       save();
       return { imported: 0, skipped: 0, scanned: 0 };
     case 'syncNow':
+    case 'syncRange':
       return { imported: 0, skipped: 0, scanned: 0 };
     case 'disconnectGmail':
       delete d.label;

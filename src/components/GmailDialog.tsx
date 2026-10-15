@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import s from '../styles/ui.module.css';
 import { Modal } from './ui';
 import { useData } from '../lib/data';
-import { chooseLabel, disconnectGmail, listLabels, reimportGmail, syncNow, type SyncResult } from '../lib/gmail';
+import { chooseLabel, disconnectGmail, listLabels, reimportGmail, syncNow, syncRange, type SyncResult } from '../lib/gmail';
 import { C } from '../lib/tokens';
 import { needsAuthorization, SCRIPT_EDITOR_URL } from '../lib/gas';
 
@@ -63,8 +63,8 @@ export function GmailDialog({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="Gmail sync" onClose={onClose}>
       <p style={{ fontSize: 14, lineHeight: 1.5, color: C.textMuted }}>
-        Receipts are read (never changed) from one Gmail label in <strong>{gmail.google_email ?? 'your account'}</strong>. It syncs every morning at 06:00 and whenever you press
-        Sync now.
+        Receipts are read (never changed) from one Gmail label in <strong>{gmail.google_email ?? 'your account'}</strong>. It syncs automatically about every 2 hours from 06:00
+        to 00:00 (Jakarta time), and whenever you press Sync now.
       </p>
       <div className={s.note} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 14 }}>
         <span>
@@ -122,6 +122,23 @@ export function GmailDialog({ onClose }: { onClose: () => void }) {
             }
           >
             {busy === 'sync' ? 'Syncing… (up to 5 min)' : 'Sync now'}
+          </button>
+        )}
+        {gmail.label_name && !changed && (
+          <button
+            type="button"
+            className={s.btnOutline}
+            disabled={!!busy}
+            title="Read the label's last 2 months again and add any receipts that are missing. Nothing is cleared."
+            onClick={() =>
+              run('range', async () => {
+                const r = await syncRange();
+                await refreshImports();
+                return 'Checked the last 2 months. ' + resultText(r);
+              })
+            }
+          >
+            {busy === 'range' ? 'Syncing 2 months… (up to 5 min)' : 'Sync last 2 months'}
           </button>
         )}
         {gmail.label_name && !changed && (

@@ -3,7 +3,7 @@ import s from '../styles/ui.module.css';
 import { IconChip, Pills } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
 import { CategoryDialog } from '../components/CategoryDialog';
-import { iconColors, type Budget, type TxView } from '../lib/budget';
+import { dayAmount, dayTotalLabel, iconColors, inDayTotal, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth } from '../lib/format';
 import { useSettings } from '../lib/settings';
@@ -131,7 +131,10 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink, on
         )}
         {groups.map(g => (
           <div key={g.label} style={{ display: 'flex', flexDirection: 'column' }}>
-            <h2 style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, letterSpacing: 0, padding: '16px 24px 6px' }}>{g.label}</h2>
+            <h2 style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, fontWeight: 700, color: C.textMuted, letterSpacing: 0, padding: '16px 24px 6px' }}>
+              <span>{g.label}</span>
+              {g.items.some(inDayTotal) && <span>{dayTotalLabel(g.items.reduce((a, t) => a + dayAmount(t), 0), full)}</span>}
+            </h2>
             {g.items.map(t => (
               <TxRow
                 key={t.id}

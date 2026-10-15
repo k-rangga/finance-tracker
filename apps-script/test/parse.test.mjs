@@ -170,6 +170,14 @@ for (const [name, got, want] of cases) {
   }
 }
 
+// Automatic sync hours (Asia/Jakarta): 00, 06, 08 … 22; the hourly trigger does nothing at other hours.
+{
+  const isSyncHour = vm.runInContext('isSyncHour_', ctx);
+  const on = [...Array(24).keys()].filter(isSyncHour);
+  assert.deepEqual(on, [0, 6, 8, 10, 12, 14, 16, 18, 20, 22]);
+  console.log('ok   automatic sync runs at 00, 06, 08, 10, 12, 14, 16, 18, 20, 22');
+}
+
 // De-duplication: card alert then Grab receipt for the same booking, a repeat forward, and a reversal.
 const msg = (id, t, subject, from, body) => ({ m: { id, internalDate: String(Date.parse(t)), subject, from, text: body }, p: parse(subject, from, body) });
 const card = b => fwd('KartuKreditBCA@klikbca.com', 'Credit Card Transaction Notification', `Kartu Kredit BCA\nMerchant / ATM : Grab* ${b}\nSejumlah : IDR 16.000`);

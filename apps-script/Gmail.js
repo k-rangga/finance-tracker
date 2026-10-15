@@ -1,11 +1,14 @@
 /**
  * Gmail receipt import. Reads (never changes) one label chosen in the app.
- * Status lives in the `gmail` script property: { label, lastSyncedAt, lastStatus, lastCount }.
+ * Status lives in the `gmail` script property: { label, lastSyncedAt, lastStatus, lastCount, rangeSince }.
+ * `rangeSince` is set while a "Sync last 2 months" scan is still being read, so continuations keep its window.
  */
 
 const FIRST_SYNC_DAYS = 62; // first import covers this pay cycle and the previous one
+const RANGE_SYNC_DAYS = 62; // "Sync last 2 months"
 const OVERLAP_DAYS = 2;
-const SYNC_HOUR = 6;
+/** Automatic sync hours, Asia/Jakarta (TZ). The trigger fires hourly; other hours do nothing. */
+const SYNC_HOURS = [0, 6, 8, 10, 12, 14, 16, 18, 20, 22];
 
 function gmailState_() {
   return props_('gmail', {});
@@ -40,9 +43,33 @@ function disconnectGmail_() {
   return true;
 }
 
-/** Daily trigger target. */
+/** True for an hour (0–23, Jakarta time) when the automatic sync runs. */
+function isSyncHour_(hour) {
+  return SYNC_HOURS.indexOf(hour) >= 0;
+}
+
+/**
+ * Hourly trigger target. Apps Script can't pin a trigger to exact hours, so this runs every hour
+ * and only syncs at SYNC_HOURS, unless an import is already running or waiting to continue.
+ */
+function scheduledSync() {
+  if (!gmailState_().label) return;
+  if (!isSyncHour_(Number(Utilities.formatDate(new Date(), TZ, 'H')))) return;
+  const running = Number(PropertiesService.getScriptProperties().getProperty(RUN_FLAG) || 0);
+  if (running && Date.now() - running < 6 * 60 * 1000) return;
+  if (ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'continueSync')) return;
+  syncGmail_();
+}
+
+/** Old daily trigger target: swap in the hourly trigger, then run as one. */
 function dailySync() {
-  if (gmailState_().label) syncGmail_();
+  ensureSyncTrigger_();
+  scheduledSync();
+}
+
+/** Re-read the label's last 2 months; only receipts not imported yet are added (nothing is cleared). */
+function syncRange_() {
+  return syncGmail_({ since: Date.now() - RANGE_SYNC_DAYS * 864e5 });
 }
 
 const FETCH_BATCH = 25; // Gmail API requests per round (parallel when allowed)
@@ -56,13 +83,13 @@ const RUN_FLAG = 'gmailSyncRunning';
 const isQuota_ = e => /quota|rate ?limit|user-rate|too many requests|429/i.test(String(e && e.message ? e.message : e));
 
 /**
- * Import receipts under the chosen label since the last sync.
+ * Import receipts under the chosen label since the last sync, or since `opts.since` (ms) when given.
  * Returns { imported, skipped, duplicates, reversed, scanned, more, remaining, paused, busy }.
  * Lists message ids once, skips ids already imported or seen, then downloads the rest at a steady pace.
  * Whatever was read is always saved. If time runs out or Gmail asks to slow down, the rest is picked up
  * by a one-off trigger a couple of minutes later (repeating until done).
  */
-function syncGmail_() {
+function syncGmail_(opts) {
   const started = Date.now();
   const g = gmailState_();
   if (!g.label) throw new Error('Choose a Gmail label first.');
@@ -76,7 +103,9 @@ function syncGmail_() {
   try {
     const token = canFetch_() ? ScriptApp.getOAuthToken() : null;
     const labelId = labelIdByName_(token, g.label);
-    const since = g.lastSyncedAt ? new Date(g.lastSyncedAt).getTime() - OVERLAP_DAYS * 864e5 : Date.now() - FIRST_SYNC_DAYS * 864e5;
+    // An explicit window, or an unfinished one (continueSync), wins over "since the last sync".
+    const range = (opts && opts.since) || (g.rangeSince ? new Date(g.rangeSince).getTime() : 0);
+    const since = range || (g.lastSyncedAt ? new Date(g.lastSyncedAt).getTime() - OVERLAP_DAYS * 864e5 : Date.now() - FIRST_SYNC_DAYS * 864e5);
 
     const ids = listMessageIds_(token, labelId, Math.floor(since / 1000));
     const have = {};
@@ -107,7 +136,14 @@ function syncGmail_() {
     parsed = [];
     const more = done < todo.length;
     // Only move the sync window forward once everything in it has been read.
-    setProps_('gmail', { label: g.label, lastSyncedAt: more ? g.lastSyncedAt || null : new Date().toISOString(), lastStatus: more ? 'partial' : 'ok', lastCount: ids.length });
+    setProps_('gmail', {
+      label: g.label,
+      lastSyncedAt: more ? g.lastSyncedAt || null : new Date().toISOString(),
+      lastStatus: more ? 'partial' : 'ok',
+      lastCount: ids.length,
+      // Keep an unfinished window so the continuation reads the rest of it.
+      rangeSince: more && range ? new Date(range).toISOString() : undefined,
+    });
     if (more) scheduleContinue_();
     return { imported: r.imported, skipped: r.skipped, duplicates: r.duplicates, reversed: r.reversed, scanned: done, more: more, remaining: todo.length - done, paused: paused };
   } catch (e) {
@@ -115,7 +151,7 @@ function syncGmail_() {
     if (parsed.length) storeParsed_(parsed);
     const msg = String(e && e.message ? e.message : e);
     if (isQuota_(e)) {
-      setProps_('gmail', Object.assign({}, g, { lastStatus: 'partial' }));
+      setProps_('gmail', Object.assign({}, g, { lastStatus: 'partial' }, opts && opts.since ? { rangeSince: new Date(opts.since).toISOString() } : {}));
       scheduleContinue_();
       return { imported: 0, skipped: 0, scanned: 0, more: true, paused: true };
     }
@@ -334,7 +370,11 @@ function htmlToText_(h) {
     .replace(/[ \t]+/g, ' ');
 }
 
-function ensureDailyTrigger_() {
-  const has = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'dailySync');
-  if (!has) ScriptApp.newTrigger('dailySync').timeBased().everyDays(1).atHour(SYNC_HOUR).create();
+/** One hourly `scheduledSync` trigger (idempotent; runs on every page load). Replaces the old daily trigger. */
+function ensureSyncTrigger_() {
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.filter(t => t.getHandlerFunction() === 'dailySync').forEach(t => ScriptApp.deleteTrigger(t));
+  const hourly = triggers.filter(t => t.getHandlerFunction() === 'scheduledSync');
+  hourly.slice(1).forEach(t => ScriptApp.deleteTrigger(t));
+  if (!hourly.length) ScriptApp.newTrigger('scheduledSync').timeBased().everyHours(1).create();
 }

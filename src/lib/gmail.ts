@@ -8,6 +8,8 @@ export const listLabels = () => run<string[]>('listLabels');
 /** Saves the label and imports its last 62 days. */
 export const chooseLabel = (name: string) => run<SyncResult>('chooseLabel', { name });
 export const syncNow = () => run<SyncResult>('syncNow');
+/** Re-reads the label's last 2 months; adds only receipts that aren't imported yet (nothing is cleared). */
+export const syncRange = () => run<SyncResult>('syncRange');
 /** Clears imported transactions and reads the label again with the current rules (category fixes are kept). */
 export const reimportGmail = () => run<SyncResult>('reimportGmail');
 export const disconnectGmail = () => run<true>('disconnectGmail');

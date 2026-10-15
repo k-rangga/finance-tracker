@@ -258,6 +258,17 @@ export function computeBudget(args: {
   };
 }
 
+/**
+ * What a transaction adds to a day's total: incomes count in, expenses count out at their net (after
+ * reimbursements and your share). Transfers, card payments, investments and paid-back incomes count 0.
+ */
+export const dayAmount = (t: TxView) => (t.isIncome ? (t.reimbursesId ? 0 : t.amount) : t.isTransfer ? 0 : -t.net);
+/** Whether a transaction is part of a day's total at all (a day of only transfers gets no total). */
+export const inDayTotal = (t: TxView) => !t.isTransfer && !(t.isIncome && t.reimbursesId);
+
+/** A day total as rows show it: spending as "Rp X", a day with more income than spending as "+ Rp X". */
+export const dayTotalLabel = (total: number, full: (v: number) => string) => (total > 0 ? '+ ' + full(total) : full(-total));
+
 /** Change-vs-last badge: ↓ good (mint), ↑ bad (red). */
 export function changeBadge(cur: number, last: number) {
   const ch = last ? ((cur - last) / last) * 100 : 0;
