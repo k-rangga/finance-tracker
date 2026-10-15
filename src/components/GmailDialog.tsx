@@ -4,6 +4,7 @@ import { Modal } from './ui';
 import { useData } from '../lib/data';
 import { chooseLabel, disconnectGmail, listLabels, reimportGmail, syncNow, type SyncResult } from '../lib/gmail';
 import { C } from '../lib/tokens';
+import { needsAuthorization, SCRIPT_EDITOR_URL } from '../lib/gas';
 
 export function syncedAgo(iso: string | null): string {
   if (!iso) return 'never';
@@ -160,11 +161,23 @@ export function GmailDialog({ onClose }: { onClose: () => void }) {
           {msg}
         </span>
       )}
-      {err && (
-        <span className={s.error} role="alert">
-          {err}
-        </span>
-      )}
+      {err &&
+        (needsAuthorization(err) ? (
+          <div role="alert" className={s.note} style={{ background: C.amberTint, color: C.amberInk, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <strong>The script needs a new permission.</strong>
+            <span>
+              Open{' '}
+              <a href={SCRIPT_EDITOR_URL} target="_blank" rel="noreferrer">
+                the script editor
+              </a>
+              , choose <strong>setup</strong> and press <strong>Run</strong>, then approve (Advanced → Go to project → Allow). Come back and try again.
+            </span>
+          </div>
+        ) : (
+          <span className={s.error} role="alert">
+            {err}
+          </span>
+        ))}
     </Modal>
   );
 }

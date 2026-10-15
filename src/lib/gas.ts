@@ -17,6 +17,12 @@ declare global {
 
 export const inAppsScript = () => !!window.google?.script?.run;
 
+/** Editor URL of the Apps Script project (where new permissions are approved by running `setup`). */
+export const SCRIPT_EDITOR_URL = 'https://script.google.com/d/1cc9XbesHR8YwZagOgEeqrwIli9SIn4jXUwPu0ak-uSFWZ8pAaoTZFZ0m/edit';
+
+/** Google's "You do not have permission to call …" means a newly added scope hasn't been approved yet. */
+export const needsAuthorization = (msg: string) => /do not have permission to call|authorization is required|required permissions/i.test(msg);
+
 export function run<T>(action: string, payload: unknown = {}): Promise<T> {
   const gs = window.google?.script?.run;
   if (!gs) return devApi(action, payload) as Promise<T>;
