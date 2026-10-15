@@ -22,6 +22,13 @@ export function clientId(): string {
   return id;
 }
 
+function clientSecret(): string {
+  const s = env('GOOGLE_CLIENT_SECRET');
+  if (s.endsWith('.apps.googleusercontent.com'))
+    throw new HttpError(500, 'GOOGLE_CLIENT_SECRET looks like the client ID, not the secret. Save the Client secret (starts with GOCSPX-) from Google Cloud.');
+  return s;
+}
+
 export function consentUrl(req: Request, state: string): string {
   const u = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   u.search = new URLSearchParams({
@@ -42,7 +49,7 @@ async function tokenRequest(body: Record<string, string>): Promise<TokenResponse
   const r = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: clientId(), client_secret: env('GOOGLE_CLIENT_SECRET'), ...body }),
+    body: new URLSearchParams({ client_id: clientId(), client_secret: clientSecret(), ...body }),
   });
   const j = (await r.json()) as TokenResponse;
   if (!r.ok || j.error) {
