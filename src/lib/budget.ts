@@ -1,5 +1,5 @@
-import { CATEGORIES, INCOME_CATEGORY, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY, type Category } from '../data/categories';
-import type { Bill, Transaction } from '../data/transactions';
+import { CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY, type Category } from '../data/categories';
+import { isCard, type Bill, type CardCycle, type Transaction } from '../data/transactions';
 import { weekOf, type Cycle } from './cycle';
 import { sum } from './format';
 import { C } from './tokens';
@@ -17,12 +17,13 @@ export type Status = {
   rank: number;
 };
 
-export function categoryStatus(used: number, type: Category['type'], warnAt: number): Status {
+/** Red (over) and amber (near) override the category's own colour on bars. */
+export function categoryStatus(used: number, c: Pick<Category, 'type' | 'color'>, warnAt: number): Status {
   if (used >= 100.5) return { key: 'over', label: 'Over limit', bg: C.red, ink: '#ffffff', bar: C.red, rowBg: '#fff8f7', rank: 0 };
-  if (type === 'fixed')
-    return { key: 'ok', label: used >= 99 ? 'Bill paid' : 'On plan', bg: C.accentTint, ink: C.accent800, bar: '#3d9a88', rowBg: 'transparent', rank: 2 };
+  if (c.type === 'fixed')
+    return { key: 'ok', label: used >= 99 ? 'Bill paid' : 'On plan', bg: C.accentTint, ink: C.accent800, bar: c.color, rowBg: 'transparent', rank: 2 };
   if (used >= warnAt) return { key: 'near', label: 'Near limit', bg: C.amberTint, ink: C.amberInk, bar: C.amber, rowBg: '#fffcf5', rank: 1 };
-  return { key: 'ok', label: 'On track', bg: C.accentTint, ink: C.accent800, bar: C.mint[5], rowBg: 'transparent', rank: 2 };
+  return { key: 'ok', label: 'On track', bg: C.accentTint, ink: C.accent800, bar: c.color, rowBg: 'transparent', rank: 2 };
 }
 
 export type TxView = Transaction & {
@@ -32,7 +33,23 @@ export type TxView = Transaction & {
   week: number;
   edited: boolean;
   isIncome: boolean;
+  /** Any move between your own accounts, card bill payments included. */
   isTransfer: boolean;
+  isCcPayment: boolean;
+};
+
+export type CardView = {
+  account: string;
+  /** Purchases on the card this cycle. */
+  spent: number;
+  /** Last cycle's purchases: the bill due this cycle. */
+  lastBill: number;
+  /** Bill payments to the card this cycle. */
+  paid: number;
+  paidOn: Date | null;
+  carriedOver: number;
+  owed: number;
+  paidInFull: boolean;
 };
 
 export type CatView = Category & {
@@ -69,7 +86,32 @@ export type Budget = {
   paceToday: number;
   safeDay: number;
   weekTotal: (w: number) => number;
+  cards: CardView[];
+  /** Spending not on a credit card (bank, cash, e-wallet). */
+  nonCardSpent: number;
+  cardBillsPaid: number;
+  /** Money that actually left your accounts: non-card spending + card bills paid. */
+  cashOut: number;
 };
+
+const SPENDING = new Set(CATEGORIES.map(c => c.name));
+
+/** Per card: what was spent, what last cycle's bill was, and how much of it is paid. */
+export function cardViews(txs: TxView[], prev: CardCycle[]): CardView[] {
+  const names = new Set([
+    ...prev.map(p => p.account),
+    ...txs.filter(t => isCard(t.account) && SPENDING.has(t.cat)).map(t => t.account),
+    ...txs.flatMap(t => (t.isCcPayment && t.toAccount ? [t.toAccount] : [])),
+  ]);
+  return [...names].sort().map(account => {
+    const spent = sum(txs.filter(t => t.account === account && SPENDING.has(t.cat)).map(t => t.amount));
+    const payments = txs.filter(t => t.isCcPayment && t.toAccount === account);
+    const paid = sum(payments.map(t => t.amount));
+    const lastBill = prev.find(p => p.account === account)?.prevCycleSpend ?? 0;
+    const carriedOver = Math.max(0, lastBill - paid);
+    return { account, spent, lastBill, paid, paidOn: payments[0]?.date ?? null, carriedOver, owed: carriedOver + spent, paidInFull: carriedOver < 1 };
+  });
+}
 
 export function computeBudget(args: {
   transactions: Transaction[];
@@ -87,9 +129,20 @@ export function computeBudget(args: {
 
   const txs: TxView[] = transactions
     .map(t => {
-      const cat = recat[t.id] ?? t.category;
+      // Card bill payments can't be re-categorised: they'd count the card's purchases twice.
+      const isCcPayment = t.category === CC_PAYMENT_CATEGORY;
+      const cat = isCcPayment ? t.category : (recat[t.id] ?? t.category);
       const offset = cycle.offsetOf(t.date);
-      return { ...t, cat, offset, week: weekOf(offset), edited: cat !== t.category, isIncome: cat === INCOME_CATEGORY, isTransfer: cat === TRANSFER_CATEGORY };
+      return {
+        ...t,
+        cat,
+        offset,
+        week: weekOf(offset),
+        edited: cat !== t.category,
+        isIncome: cat === INCOME_CATEGORY,
+        isTransfer: isCcPayment || cat === TRANSFER_CATEGORY,
+        isCcPayment,
+      };
     })
     .sort((a, b) => b.date.getTime() - a.date.getTime() || b.time.localeCompare(a.time));
 
@@ -103,7 +156,7 @@ export function computeBudget(args: {
     const limit = ofIncome(c.limitPct);
     const used = limit ? (spent / limit) * 100 : 0;
     const lastSameDays = sum(prev.slice(0, cycle.weekIdx)) + prev[cycle.weekIdx] * weekFrac;
-    return { ...c, limit, cur, prev, spent, lastSameDays, remaining: limit - spent, used, status: categoryStatus(used, c.type, warnAt) };
+    return { ...c, limit, cur, prev, spent, lastSameDays, remaining: limit - spent, used, status: categoryStatus(used, c, warnAt) };
   });
 
   const fixedSpent = sum(cats.filter(c => c.type === 'fixed').map(c => c.spent));
@@ -114,6 +167,13 @@ export function computeBudget(args: {
   const fixedDue = sum(bills.map(b => b.amount));
   const velDay = varSpent / cycle.dayN;
   const projTotal = spent + velDay * cycle.daysLeft + fixedDue;
+
+  const prevCards = new Map<string, number>();
+  for (const t of prevTransactions)
+    if (isCard(t.account) && SPENDING.has(recat[t.id] ?? t.category)) prevCards.set(t.account, (prevCards.get(t.account) ?? 0) + t.amount);
+  const cards = cardViews(txs, [...prevCards].map(([account, prevCycleSpend]) => ({ account, prevCycleSpend })));
+  const nonCardSpent = sum(txs.filter(t => SPENDING.has(t.cat) && !isCard(t.account)).map(t => t.amount));
+  const cardBillsPaid = sum(txs.filter(t => t.isCcPayment).map(t => t.amount));
 
   return {
     txs,
@@ -134,6 +194,10 @@ export function computeBudget(args: {
     paceToday: fixedSpent + (varBudget * cycle.dayN) / cycle.cycleDays,
     safeDay: Math.max(0, (budget - spent - fixedDue) / Math.max(1, cycle.daysLeft)),
     weekTotal: w => sum(cats.map(c => c.cur[w])),
+    cards,
+    nonCardSpent,
+    cardBillsPaid,
+    cashOut: nonCardSpent + cardBillsPaid,
   };
 }
 
@@ -145,5 +209,8 @@ export function changeBadge(cur: number, last: number) {
   return ch < 0 ? { label: '↓ ' + r + '%', bg: C.accentTint, ink: C.accent800 } : { label: '↑ ' + r + '%', bg: C.redTint, ink: C.redInk };
 }
 
-/** Icon chip colours for a category type. */
-export const iconColors = (type?: string) => ({ bg: C.accentTint, ink: type === 'variable' ? C.accent600 : C.accent800 });
+/** Icon chip colours for a category; anything else (income, savings, transfers) uses the accent. */
+export function iconColors(category?: string) {
+  const c = category ? categoryByName(category) : undefined;
+  return c ? { bg: c.tint, ink: c.ink } : { bg: C.accentTint, ink: C.accent800 };
+}

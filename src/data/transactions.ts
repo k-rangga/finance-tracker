@@ -1,6 +1,6 @@
 import type { Cycle } from '../lib/cycle';
 import type { Currency } from '../lib/format';
-import { categoryByName } from './categories';
+import { CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, TRANSFER_CATEGORY } from './categories';
 
 export type Transaction = {
   id: string;
@@ -12,7 +12,17 @@ export type Transaction = {
   /** Positive number in the display currency. Income uses category `Income`. */
   amount: number;
   source: string;
+  /** Where the money came from: 'Bank' | 'Cash' | 'E-wallet' | 'CC BCA' | 'CC Mandiri'… */
+  account: string;
+  type: 'expense' | 'income' | 'transfer';
+  /** Transfers only, e.g. 'CC BCA' for a card bill payment. */
+  toAccount?: string;
 };
+
+/** Last cycle's spend on one credit card (the bill paid this cycle). */
+export type CardCycle = { account: string; prevCycleSpend: number };
+
+export const isCard = (account: string) => account.startsWith('CC ');
 
 export type Bill = { date: Date; title: string; category: string; amount: number; source: string };
 
@@ -25,6 +35,9 @@ export type TxRow = {
   amount: number;
   currency: Currency;
   source: string;
+  /** Older imports have no account; the server fills in a best guess. */
+  account?: string | null;
+  to_account?: string | null;
 };
 
 export function toTransaction(r: TxRow, display: Currency, fxRate: number): Transaction {
@@ -38,6 +51,9 @@ export function toTransaction(r: TxRow, display: Currency, fxRate: number): Tran
     category: r.category,
     amount,
     source: r.source,
+    account: r.account || 'Bank',
+    type: r.category === CC_PAYMENT_CATEGORY || r.category === TRANSFER_CATEGORY ? 'transfer' : r.category === INCOME_CATEGORY ? 'income' : 'expense',
+    toAccount: r.to_account || undefined,
   };
 }
 

@@ -40,6 +40,8 @@ type Dev = Record<string, unknown> & {
   overrides: Record<string, string>;
   trades: Record<string, unknown>[];
   snapshots: { day: string }[];
+  /** Sample imported rows for working on the UI locally (set by hand in localStorage). */
+  txRows?: unknown[];
 };
 
 function devLoad(): Dev {
@@ -64,9 +66,9 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
   const gmail = { google_email: 'dev@localhost', label_name: (d.label as string) ?? null, last_synced_at: null, last_sync_status: null, last_sync_count: null };
   switch (action) {
     case 'getState':
-      return { email: 'dev@localhost', settings: d.settings ?? null, recat: d.overrides, trades: d.trades, prices: d.prices ?? null, snaps: d.snapshots, txRows: [], gmail };
+      return { email: 'dev@localhost', settings: d.settings ?? null, recat: d.overrides, trades: d.trades, prices: d.prices ?? null, snaps: d.snapshots, txRows: d.txRows ?? [], gmail };
     case 'getImports':
-      return { txRows: [], gmail };
+      return { txRows: d.txRows ?? [], gmail };
     case 'saveSettings':
       d.settings = q.settings;
       return save();

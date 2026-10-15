@@ -184,6 +184,8 @@ function storeParsed_(parsed) {
         imported_at: now,
         ref: p.ref,
         kind: p.kind,
+        account: p.account,
+        to_account: p.to_account,
       };
       const prev = p.ref && byRef[p.ref];
       if (prev) {

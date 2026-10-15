@@ -2,8 +2,10 @@
  * Turn a receipt email into a transaction. Used by Gmail.js; tested by test/parse.test.mjs.
  *
  * parseReceipt({ subject, from, text }) → null (not a transaction) or
- *   { kind, amount, currency, title, category, source, ref }
+ *   { kind, amount, currency, title, category, source, ref, account, to_account }
  * kind: 'spend' | 'income' | 'transfer' | 'reversal'
+ * account: where the money came from — 'Bank' | 'E-wallet' | 'CC BCA' | 'CC Mandiri' …
+ * to_account: transfers to a credit card only (a bill payment, category 'CC Payment').
  * ref:  a reference shared by emails about the same purchase (e.g. a Grab booking id that also
  *       appears in the card alert), used to drop duplicates and match reversals. May be ''.
  *
@@ -13,6 +15,10 @@
  */
 
 const TRANSFER = 'Transfer';
+/** Paying a credit card bill: a transfer to the card, never spending. */
+const CC_PAYMENT = 'CC Payment';
+const CARD_BANK = /(bca|mandiri|bni|bri|cimb|permata|ocbc|danamon|uob|hsbc|citi(?:bank)?|jenius|mega)\b/i;
+const CC_PAYMENT_WORDS = /\b(credit card payment|pembayaran kartu kredit|bayar kartu kredit|payment to credit card|kartu kredit)\b/i;
 /** Grab booking/order code, e.g. A-9SNARFAGWUHIAV (the card alert shows it as "Grab* A-…"). */
 const GRAB_CODE = /\bA-[A-Z0-9]{10,}\b/;
 const INCOME = 'Income';
@@ -51,15 +57,44 @@ function parseReceipt(e) {
   const specific = parseBcaJournal_(subject, text) || parseBcaCard_(subject, text) || parseBlu_(subject, text) || parseGrab_(subject, from, text);
   const p = specific || parseGeneric_(subject, from, text);
   if (!p || !(p.amount > 0)) return null;
+  const source = p.source || sourceOf_(hay);
+  const category = p.category || categoryOf_(p.kind, hay);
+  // Headers and title only: bank email footers often mention credit cards.
+  const acc = accounts_({ kind: p.kind || 'spend', category: category, source: source, account: p.account, to_account: p.to_account }, subject + '\n' + from + '\n' + (p.title || ''));
   return {
     kind: p.kind || 'spend',
     amount: p.amount,
     currency: p.currency || 'IDR',
     title: clip_(p.title || titleFrom_(subject, from), 60),
-    category: p.category || categoryOf_(p.kind, hay),
-    source: p.source || sourceOf_(hay),
+    category: acc.category,
+    source: source,
     ref: p.ref || '',
+    account: acc.account,
+    to_account: acc.to_account,
   };
+}
+
+// ---------------------------------------------------------------- accounts
+
+/** 'CC BCA' from the issuer named in the email (BCA when none is). */
+function cardAccount_(hay) {
+  const m = String(hay || '').match(CARD_BANK);
+  const bank = m ? m[1] : 'BCA';
+  return 'CC ' + (bank.length <= 4 ? bank.toUpperCase() : bank.charAt(0).toUpperCase() + bank.slice(1).toLowerCase());
+}
+
+/**
+ * Account, destination and category for a transaction. Card receipts are spending on the card;
+ * a transfer that pays a credit card is a 'CC Payment' from the bank to that card.
+ * Also used for rows imported before accounts were stored (see transactionsSince_).
+ */
+function accounts_(r, hay) {
+  if (r.account) return { account: r.account, to_account: r.to_account || '', category: r.category };
+  if (r.kind === 'transfer' && (r.category === CC_PAYMENT || CC_PAYMENT_WORDS.test(hay)))
+    return { account: 'Bank', to_account: cardAccount_(hay), category: CC_PAYMENT };
+  if (r.source === 'Card receipt') return { account: cardAccount_(hay), to_account: '', category: r.category };
+  if (r.source === 'E-wallet email') return { account: 'E-wallet', to_account: '', category: r.category };
+  return { account: 'Bank', to_account: '', category: r.category };
 }
 
 // ---------------------------------------------------------------- forwarded mail
@@ -132,7 +167,8 @@ function parseBcaJournal_(subject, text) {
     const self = isSelf_(to, [holder_(text)]);
     return Object.assign(base, { kind: self ? 'transfer' : 'spend', title: to || type, category: self ? TRANSFER : categoryOfName_(to) });
   }
-  if (/credit card|kartu kredit/i.test(type + to)) return Object.assign(base, { kind: 'transfer', title: 'Credit card payment' });
+  if (/credit card|kartu kredit/i.test(type + to))
+    return Object.assign(base, { kind: 'transfer', title: 'Credit card payment', category: CC_PAYMENT, account: 'Bank', to_account: cardAccount_(to || 'BCA') });
   return Object.assign(base, { title: to || type, category: categoryOfName_(to) });
 }
 
@@ -161,6 +197,7 @@ function parseBcaCard_(subject, text) {
     title: merchantName_(merchant),
     category: /^grab\b/i.test(merchant) ? 'Transport' : categoryOfName_(merchant),
     source: 'Card receipt',
+    account: 'CC BCA',
     ref: booking ? 'grab:' + booking[0] + ':' + amt.amount : 'card:' + letters_(merchant) + ':' + amt.amount + ':' + (f['pada tanggal'] || '').slice(0, 16),
   };
 }
@@ -239,6 +276,8 @@ function parseGeneric_(subject, from, text) {
   const keyed = hits.filter(h => h.keyed);
   const pick = keyed.length ? keyed[keyed.length - 1] : hits[0];
   const hay = subject + '\n' + from + '\n' + text;
+  if (/\b(credit card payment|pembayaran kartu kredit|bayar kartu kredit|payment to credit card)\b/i.test(hay))
+    return { kind: 'transfer', amount: pick.amount, currency: pick.currency, title: 'Credit card payment', category: CC_PAYMENT, source: 'Bank email', account: 'Bank', to_account: cardAccount_(subject + ' ' + from) };
   const kind = /\b(gaji|salary|payroll|payslip|slip gaji|thr)\b/i.test(hay) ? 'income' : 'spend';
   return { kind: kind, amount: pick.amount, currency: pick.currency, title: titleFrom_(subject, from) };
 }

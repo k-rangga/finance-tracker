@@ -36,7 +36,7 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions }:
     const last = isCycle ? c.lastSameDays : wi > 0 ? c.cur[wi - 1] : c.prev[3];
     const lim = isCycle ? c.limit : c.limit / 4;
     const used = lim ? (cur / lim) * 100 : 0;
-    const st = isCycle ? c.status : categoryStatus(used, c.type, settings.warnAt);
+    const st = isCycle ? c.status : categoryStatus(used, c, settings.warnAt);
     return { c, cur, last, lim, used, st, scale: Math.max(lim, cur, last) * 1.08 };
   };
 
@@ -87,7 +87,7 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions }:
           <div className={s.cardFlush}>
             {rows.map(({ c, cur, last, lim, st, scale }) => {
               const isOpen = open === c.name;
-              const ic = iconColors(c.type);
+              const ic = iconColors(c.name);
               const ch = changeBadge(cur, last);
               const wmax = Math.max(...c.cur, ...c.prev, 0.01);
               return (

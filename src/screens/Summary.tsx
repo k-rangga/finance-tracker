@@ -11,12 +11,13 @@ import { categoryByName, SAVINGS_TARGET_PCT } from '../data/categories';
 
 type Props = { cycle: Cycle; budget: Budget; onOpenCategory: (name: string) => void };
 
-type Item = { key: string; title: string; sub: string; value: string; ink: string; icon: string; type?: string };
+type Item = { key: string; title: string; sub: string; value: string; ink: string; icon: string; cat?: string };
 
 export function Summary({ cycle, budget, onOpenCategory }: Props) {
   return (
     <div className={s.stack}>
       <ThisCycle cycle={cycle} budget={budget} />
+      {budget.cards.length > 0 && <CreditCards budget={budget} />}
       <WhereItWent cycle={cycle} budget={budget} onOpenCategory={onOpenCategory} />
       <WeeklyPace cycle={cycle} budget={budget} />
     </div>
@@ -37,7 +38,7 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
       value: (t.isIncome ? '+ ' : '- ') + full(t.amount),
       ink: t.isIncome ? C.accent800 : C.redInk,
       icon: c ? c.icon : IC.coins,
-      type: c?.type,
+      cat: t.cat,
     };
   };
   const typeOf = (n: string) => categoryByName(n)?.type;
@@ -48,7 +49,7 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
     value: '- ' + full(bill.amount),
     ink: C.redInk,
     icon: IC.calendar,
-    type: typeOf(bill.category),
+    cat: bill.category,
   }));
   const savings = ofIncome(SAVINGS_TARGET_PCT);
   const count = (n: number) => (n ? n + (n === 1 ? ' transaction' : ' transactions') : '');
@@ -59,7 +60,7 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
       id: 'save',
       label: `Savings (${SAVINGS_TARGET_PCT}%)`,
       value: full(savings),
-      items: [{ key: 'save', title: 'Transfer to savings', sub: `${dayMonth(cycle.start)} · Payday · Automatic`, value: '- ' + full(savings), ink: C.redInk, icon: IC.piggy, type: 'fixed' }],
+      items: [{ key: 'save', title: 'Transfer to savings', sub: `${dayMonth(cycle.start)} · Payday · Automatic`, value: '- ' + full(savings), ink: C.redInk, icon: IC.piggy }],
     },
     { id: 'fixed', label: 'Fixed bills paid', value: full(b.fixedSpent), items: b.txs.filter(t => typeOf(t.cat) === 'fixed').map(txItem) },
     { id: 'var', label: 'Variable spending', value: full(b.varSpent), items: b.txs.filter(t => typeOf(t.cat) === 'variable').map(txItem) },
@@ -155,7 +156,7 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
               {isOpen && (
                 <div className="fade-in" style={{ margin: '0 20px 16px', background: C.bg, borderRadius: 16, padding: '6px 0', maxHeight: 360, overflowY: 'auto' }}>
                   {r.items.map(i => {
-                    const ic = iconColors(i.type);
+                    const ic = iconColors(i.cat);
                     return (
                       <div key={i.key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px' }}>
                         <IconChip d={i.icon} bg={ic.bg} ink={ic.ink} size={34} iconSize={16} />
@@ -172,6 +173,56 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
             </div>
           );
         })}
+      </div>
+    </Card>
+  );
+}
+
+function CreditCards({ budget: b }: { budget: Budget }) {
+  const { full } = useSettings();
+  return (
+    <Card>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <h2 className={s.h2}>Credit cards</h2>
+        <span className={s.caption}>Card purchases count as spending when you buy. Bill payments are transfers.</span>
+      </div>
+      <div className={s.bleed}>
+        {b.cards.map(c => (
+          <div key={c.account} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px var(--pad)', borderBottom: `1.5px solid ${C.divider}`, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: '1 1 260px', minWidth: 0 }}>
+              <IconChip d={IC.card} bg={C.accentTint} ink={C.accent800} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+                <span style={{ fontSize: 15, fontWeight: 700 }}>{c.account.replace(/^CC /, '')} card</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: C.textMuted }}>
+                  <span>Spent this cycle {full(c.spent)}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>Last bill {full(c.lastBill)}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>
+                    Paid {full(c.paid)}
+                    {c.paidOn ? ' on ' + dayMonth(c.paidOn) : ''}
+                  </span>
+                  <Badge bg={c.paidInFull ? C.accentTint : C.amberTint} ink={c.paidInFull ? C.accent800 : C.amberInk} style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px' }}>
+                    {c.paidInFull ? 'Paid in full' : full(c.carriedOver) + ' carried over'}
+                  </Badge>
+                </span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, marginLeft: 'auto', flex: 'none' }}>
+              <span style={{ fontSize: 15, fontWeight: 700 }}>{full(c.owed)}</span>
+              <span style={{ fontSize: 12, color: C.textMuted }}>owed</span>
+            </div>
+          </div>
+        ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px var(--pad)', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginRight: 'auto', minWidth: 0 }}>
+            <span style={{ fontSize: 15, fontWeight: 700 }}>Cash out this cycle</span>
+            <span style={{ fontSize: 12, color: C.textMuted }}>
+              {full(b.nonCardSpent)} bank &amp; e-wallet spending + {full(b.cardBillsPaid)} card bills paid
+            </span>
+          </div>
+          <span style={{ fontSize: 15, fontWeight: 700 }}>{full(b.cashOut)}</span>
+        </div>
       </div>
     </Card>
   );
@@ -283,7 +334,7 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
       </div>
       <div className={s.bleed} style={{ marginTop: 4 }}>
         {ranked.map(c => {
-          const ic = iconColors(c.type);
+          const ic = iconColors(c.name);
           const ch = changeBadge(c.spent, c.lastSameDays);
           return (
             <button

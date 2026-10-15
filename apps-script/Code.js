@@ -92,7 +92,11 @@ function transactionsSince_(since) {
   return readTable_('transactions')
     .filter(r => new Date(r.occurred_at).getTime() >= from)
     .sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : -1))
-    .map(r => ({ id: r.id, occurred_at: r.occurred_at, title: r.title, category: r.category, amount: r.amount, currency: r.currency, source: r.source }));
+    .map(r => {
+      // Rows imported before accounts were stored get them from their sender, subject and title.
+      const acc = accounts_(r, [r.sender, r.subject, r.title].join('\n'));
+      return { id: r.id, occurred_at: r.occurred_at, title: r.title, category: acc.category, amount: r.amount, currency: r.currency, source: r.source, account: acc.account, to_account: acc.to_account || null };
+    });
 }
 
 // ---- script properties (small JSON values) ----

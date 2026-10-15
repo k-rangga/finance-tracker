@@ -6,7 +6,7 @@ import type { Cycle } from '../lib/cycle';
 import { dayLabel } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
-import { CATEGORIES, categoryByName, OTHER_CATEGORIES } from '../data/categories';
+import { CATEGORIES, categoryByName, CC_PAYMENT_CATEGORY, OTHER_CATEGORIES } from '../data/categories';
 
 export type Range = 'today' | 'week' | 'last' | 'cycle';
 export type ActivityFilter = { range: Range; cat: string; q: string };
@@ -18,9 +18,6 @@ type Props = {
   setFilter: (f: ActivityFilter) => void;
   onRecat: (id: string, orig: string, cat: string) => void;
 };
-
-const chevron = (hex: string) =>
-  `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23${hex}' stroke-width='2.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`;
 
 export function Activity({ cycle, budget, filter, setFilter, onRecat }: Props) {
   const { full } = useSettings();
@@ -35,7 +32,7 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat }: Props) {
   const [lo, hi] = bounds[range];
   const needle = q.trim().toLowerCase();
   const txs = budget.txs.filter(
-    t => t.offset >= lo && t.offset <= hi && (!cat || t.cat === cat) && (!needle || `${t.title} ${t.source} ${t.cat}`.toLowerCase().includes(needle)),
+    t => t.offset >= lo && t.offset <= hi && (!cat || t.cat === cat) && (!needle || `${t.title} ${t.account} ${t.source} ${t.cat}`.toLowerCase().includes(needle)),
   );
 
   const groups: { label: string; items: TxView[] }[] = [];
@@ -46,7 +43,8 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat }: Props) {
     g.items.push(t);
   }
   const out = txs.filter(t => !t.isIncome && !t.isTransfer).reduce((a, t) => a + t.amount, 0);
-  const moved = txs.filter(t => t.isTransfer).reduce((a, t) => a + t.amount, 0);
+  const moved = txs.filter(t => t.isTransfer && !t.isCcPayment).reduce((a, t) => a + t.amount, 0);
+  const cardBills = txs.filter(t => t.isCcPayment).reduce((a, t) => a + t.amount, 0);
   const bills = budget.bills.filter(b => !cat || b.category === cat);
 
   return (
@@ -88,7 +86,7 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat }: Props) {
               {c.name}
             </option>
           ))}
-          {OTHER_CATEGORIES.map(c => (
+          {[...OTHER_CATEGORIES, CC_PAYMENT_CATEGORY].map(c => (
             <option key={c} value={c}>
               {c}
             </option>
@@ -97,7 +95,8 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat }: Props) {
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
         <span aria-live="polite">
-          {txs.length} {txs.length === 1 ? 'transaction' : 'transactions'} · {full(out)} spent{moved ? ` · ${full(moved)} moved between your accounts` : ''}
+          {txs.length} {txs.length === 1 ? 'transaction' : 'transactions'} · {full(out)} spent{cardBills ? ` · ${full(cardBills)} card bills paid` : ''}
+          {moved ? ` · ${full(moved)} moved between your accounts` : ''}
         </span>
         <span>Change a category to fix a Gmail mis-read · totals update everywhere</span>
       </div>
@@ -129,8 +128,7 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat }: Props) {
         </h2>
         {bills.length === 0 && <div style={{ padding: '12px 24px 16px', fontSize: 14, color: C.textMuted }}>No more bills due before payday.</div>}
         {bills.map(b => {
-          const c = categoryByName(b.category);
-          const ic = iconColors(c?.type);
+          const ic = iconColors(b.category);
           const inDays = cycle.offsetOf(b.date) - cycle.dayIdx;
           return (
             <div key={b.title} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 24px' }}>
@@ -157,49 +155,21 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat }: Props) {
 
 function TxRow({ t, amount, onRecat }: { t: TxView; amount: string; onRecat: Props['onRecat'] }) {
   const c = categoryByName(t.cat);
-  const ic = iconColors(c?.type);
+  const ic = iconColors(t.cat);
   return (
     <div className={s.hoverRow} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 24px' }}>
-      <IconChip d={c ? c.icon : t.isTransfer ? IC.transfer : IC.coins} bg={ic.bg} ink={ic.ink} />
+      <IconChip d={c ? c.icon : t.isCcPayment ? IC.card : t.isTransfer ? IC.transfer : IC.coins} bg={ic.bg} ink={ic.ink} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginRight: 'auto', minWidth: 0 }}>
         <span style={{ fontSize: 15, fontWeight: 700 }}>{t.title}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: C.textMuted }}>
-          <select
-            value={t.cat}
-            onChange={e => onRecat(t.id, t.category, e.target.value)}
-            aria-label={`Category for ${t.title}`}
-            title="Change category"
-            style={{
-              fontSize: 12,
-              fontWeight: 700,
-              color: ic.ink,
-              backgroundColor: ic.bg,
-              backgroundImage: chevron(ic.ink.slice(1)),
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 10px center',
-              appearance: 'none',
-              WebkitAppearance: 'none',
-              border: 'none',
-              borderRadius: 999,
-              padding: '6px 30px 6px 12px',
-              minHeight: 30,
-              cursor: 'pointer',
-            }}
-          >
-            {CATEGORIES.map(o => (
-              <option key={o.name} value={o.name}>
-                {o.name}
-              </option>
-            ))}
-            <optgroup label="Not spending">
-              {OTHER_CATEGORIES.map(o => (
-                <option key={o} value={o}>
-                  {o === 'Transfer' ? 'Transfer (own accounts)' : o}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-          <span>{t.source}</span>
+          {t.isCcPayment ? (
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.text, background: C.divider, borderRadius: 999, padding: '4px 10px' }}>
+              Transfer · {t.account} → {t.toAccount ?? 'card'}
+            </span>
+          ) : (
+            <CategorySelect t={t} onRecat={onRecat} />
+          )}
+          <span>{t.type === 'expense' ? `${t.account} · ${t.source}` : t.source}</span>
           {t.edited && <span style={{ fontWeight: 700, color: C.accent600 }}>✎ Recategorised from {t.category}</span>}
         </div>
       </div>
@@ -208,5 +178,37 @@ function TxRow({ t, amount, onRecat }: { t: TxView; amount: string; onRecat: Pro
         <span style={{ fontSize: 12, color: C.textMuted }}>{t.time}</span>
       </div>
     </div>
+  );
+}
+
+/** Pill select coloured as the chosen category (tint background, ink text, colour outline). */
+function CategorySelect({ t, onRecat }: { t: TxView; onRecat: Props['onRecat'] }) {
+  const c = categoryByName(t.cat);
+  const ic = iconColors(t.cat);
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', color: ic.ink }}>
+      <select
+        className={s.catSelect}
+        value={t.cat}
+        onChange={e => onRecat(t.id, t.category, e.target.value)}
+        aria-label={`Category for ${t.title}`}
+        title="Change category"
+        style={{ color: ic.ink, backgroundColor: ic.bg, border: `1.5px solid ${c?.color ?? C.accent500}` }}
+      >
+        {CATEGORIES.map(o => (
+          <option key={o.name} value={o.name} style={{ color: o.ink, backgroundColor: o.tint }}>
+            ● {o.name}
+          </option>
+        ))}
+        <optgroup label="Not spending">
+          {OTHER_CATEGORIES.map(o => (
+            <option key={o} value={o}>
+              {o === 'Transfer' ? 'Transfer (own accounts)' : o}
+            </option>
+          ))}
+        </optgroup>
+      </select>
+      <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+    </span>
   );
 }

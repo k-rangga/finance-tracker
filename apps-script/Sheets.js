@@ -6,7 +6,7 @@
  */
 
 const TABLES = {
-  transactions: ['id', 'occurred_at', 'title', 'category', 'amount', 'currency', 'source', 'sender', 'subject', 'imported_at', 'ref', 'kind'],
+  transactions: ['id', 'occurred_at', 'title', 'category', 'amount', 'currency', 'source', 'sender', 'subject', 'imported_at', 'ref', 'kind', 'account', 'to_account'],
   overrides: ['tx_id', 'category', 'updated_at'],
   trades: [
     'id', 'market', 'ticker', 'name', 'buy_date', 'price', 'quantity', 'fee', 'style', 'conviction', 'target', 'stop',

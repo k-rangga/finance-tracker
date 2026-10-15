@@ -44,7 +44,7 @@ const cases = [
   [
     'BCA card alert for Grab → ref from booking id',
     parse('FW: Credit Card Transaction Notification', ME, fwd('KartuKreditBCA@klikbca.com', 'Credit Card Transaction Notification', 'Terima kasih telah bertransaksi menggunakan Kartu Kredit BCA:\nMerchant / ATM : Grab* A-9P7SEJAWX6SSAV\nJenis Transaksi : E-COMMERCE\nPada Tanggal : 30-08-2026 08:23:16 WIB\nSejumlah : IDR 16.000')),
-    { kind: 'spend', amount: 16000, title: 'Grab', source: 'Card receipt', ref: 'grab:A-9P7SEJAWX6SSAV:16000' },
+    { kind: 'spend', amount: 16000, title: 'Grab', source: 'Card receipt', account: 'CC BCA', ref: 'grab:A-9P7SEJAWX6SSAV:16000' },
   ],
   [
     'BCA card reversal',
@@ -115,6 +115,26 @@ const cases = [
     'QRIS at a feeder bus → Transport (category from the merchant name only)',
     parse('FW: Internet Transaction Journal', ME, fwd('BCA <bca@bca.co.id>', 'Internet Transaction Journal', 'Hello BUDI SANTOSO,\nTransaction Type : QRIS Payment\nPayment to : RMD SINAR JAYA FEEDER BUS\nAcquirer : DANA\nTotal Payment : IDR 15,000.00\nReference No. : Q1')),
     { amount: 15000, category: 'Transport' },
+  ],
+  [
+    'BCA journal credit card bill → CC Payment transfer to the card',
+    parse('FW: Internet Transaction Journal', ME, fwd('BCA <bca@bca.co.id>', 'Internet Transaction Journal', 'Hello BUDI SANTOSO,\nTransaction Type : Credit Card Payment\nPayment to : KARTU KREDIT BCA\nTotal Payment : IDR 1,830,000.00\nReference No. : CC1')),
+    { kind: 'transfer', amount: 1830000, category: 'CC Payment', account: 'Bank', to_account: 'CC BCA' },
+  ],
+  [
+    'Mandiri credit card payment email → CC Payment to CC Mandiri',
+    parse('Pembayaran Kartu Kredit Berhasil', 'Livin by Mandiri <noreply.livin@bankmandiri.co.id>', 'Pembayaran kartu kredit Mandiri\nNominal : Rp 2.000.000'),
+    { kind: 'transfer', amount: 2000000, category: 'CC Payment', account: 'Bank', to_account: 'CC Mandiri' },
+  ],
+  [
+    'Older stored row: credit card payment saved as Transfer → CC Payment',
+    vm.runInContext('accounts_', ctx)({ kind: 'transfer', category: 'Transfer', source: 'Bank email' }, 'bca@bca.co.id\nInternet Transaction Journal\nCredit card payment'),
+    { category: 'CC Payment', account: 'Bank', to_account: 'CC BCA' },
+  ],
+  [
+    'Older stored row: card receipt → card account',
+    vm.runInContext('accounts_', ctx)({ kind: 'spend', category: 'Dining', source: 'Card receipt' }, 'KartuKreditBCA@klikbca.com\nCredit Card Transaction Notification\nTuku'),
+    { category: 'Dining', account: 'CC BCA', to_account: '' },
   ],
   ['Newsletter → null', parse('Newsletter', 'News <n@x.com>', 'No amounts here'), null],
   ['Plain Netflix (not forwarded)', parse('Your Netflix bill', 'Netflix <info@netflix.com>', 'Amount charged: Rp 186.000\nPlan: Premium'), { amount: 186000, title: 'Netflix', category: 'Subscriptions' }],

@@ -1,6 +1,6 @@
-import logoUrl from '../assets/logo-cat.svg';
+import logoUrl from '../assets/logo-cat.jpg';
 
-/** Circular cat logo, inlined into the single-file build. Replace src/assets/logo-cat.svg to change it. */
+/** Circular cat logo, inlined into the single-file build. Replace src/assets/logo-cat.jpg to change it. */
 export function Logo({ size }: { size: number }) {
   return (
     <img
