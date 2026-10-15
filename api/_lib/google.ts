@@ -6,10 +6,26 @@ export function redirectUri(req: Request): string {
   return process.env.GOOGLE_REDIRECT_URI || new URL(req.url).origin + '/api/gmail/callback';
 }
 
+/** The client ID, checked for shape so a bad paste fails here with a clear message instead of Google's invalid_client. */
+export function clientId(): string {
+  const id = env('GOOGLE_CLIENT_ID');
+  if (!/^\d+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(id)) {
+    const hint = id.startsWith('GOCSPX')
+      ? 'it looks like the client secret, not the ID'
+      : !id.endsWith('.apps.googleusercontent.com')
+        ? 'it should end with .apps.googleusercontent.com'
+        : !/^\d+-/.test(id)
+          ? 'it should start with the project number and a dash'
+          : 'it contains unexpected characters';
+    throw new HttpError(500, `GOOGLE_CLIENT_ID looks wrong (${id.length} characters; ${hint}). Copy the full Client ID from Google Cloud and save it again.`);
+  }
+  return id;
+}
+
 export function consentUrl(req: Request, state: string): string {
   const u = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   u.search = new URLSearchParams({
-    client_id: env('GOOGLE_CLIENT_ID'),
+    client_id: clientId(),
     redirect_uri: redirectUri(req),
     response_type: 'code',
     scope: `openid email ${GMAIL_SCOPE}`,
@@ -26,7 +42,7 @@ async function tokenRequest(body: Record<string, string>): Promise<TokenResponse
   const r = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: env('GOOGLE_CLIENT_ID'), client_secret: env('GOOGLE_CLIENT_SECRET'), ...body }),
+    body: new URLSearchParams({ client_id: clientId(), client_secret: env('GOOGLE_CLIENT_SECRET'), ...body }),
   });
   const j = (await r.json()) as TokenResponse;
   if (!r.ok || j.error) {

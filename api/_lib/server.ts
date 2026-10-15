@@ -1,7 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
+/** Read a server env var, trimming whitespace and stray quotes that pasting can add. */
 export function env(name: string): string {
-  const v = process.env[name];
+  const v = process.env[name]?.trim().replace(/^["']|["']$/g, '').trim();
   if (!v) throw new HttpError(500, `Server is missing ${name}.`);
   return v;
 }
