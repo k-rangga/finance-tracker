@@ -13,6 +13,8 @@
  */
 
 const TRANSFER = 'Transfer';
+/** Grab booking/order code, e.g. A-9SNARFAGWUHIAV (the card alert shows it as "Grab* A-…"). */
+const GRAB_CODE = /\bA-[A-Z0-9]{10,}\b/;
 const INCOME = 'Income';
 
 const CATEGORY_RULES = [
@@ -20,9 +22,9 @@ const CATEGORY_RULES = [
   ['Insurance', /\b(asuransi|insurance|premi|prudential|allianz|axa|manulife|bpjs)\b/i],
   ['Utilities', /\b(pln|listrik|electricity|token listrik|pdam|water bill|indihome|biznet|first ?media|myrepublic|pulsa|paket data|gas bill|pgn|telkomsel)\b/i],
   ['Subscriptions', /\b(netflix|spotify|youtube premium|apple\.com\/bill|icloud|google (one|play)|disney|vidio|prime video|chatgpt|openai|anthropic|claude|subscription|langganan|membership)\b/i],
-  ['Groceries', /\b(grabmart|supermarket|hypermart|superindo|alfamart|alfamidi|indomaret|ranch market|lotte mart|transmart|hero|sayurbox|segari|astro|grocer|groceries|fresh market|carrefour|aeon)\b/i],
-  ['Dining', /\b(grabfood|gofood|shopeefood|restaurant|restoran|resto|cafe|caf[eé]|coffee|kopi|starbucks|mcdonald|kfc|bakery|dining|warung|bakso|pentol|mie|nasi|ayam|sate|soto|martabak|roti|dimsum|sushi|ramen|pizza|burger|boba|chatime|food)\b/i],
-  ['Transport', /\b(goride|gocar|grabbike|grabcar|bike|car|ride|bluebird|taxi|taksi|krl|mrt|lrt|transjakarta|commuter|pertamina|shell|bensin|fuel|bbm|parkir|parking|e-?toll|tol|flazz|e-?money|tapcash|brizzi|kai|tiket kereta|toyota|bengkel|bodyrepai\w*|service)\b/i],
+  ['Groceries', /\b(grabmart|supermarket|hypermart|superindo|alfamart|alfamidi|indomaret|ranch market|lotte mart|transmart|hero|sayurbox|segari|astro|grocer|groceries|fresh market|carrefour|aeon|lawson|family ?mart|circle ?k|buah|fruit|sayur|minimarket)\b/i],
+  ['Dining', /\b(grabfood|gofood|shopeefood|restaurant|restoran|resto|rm|cafe|caf[eé]|coffee|kopi|tuku|starbucks|mcdonald|kfc|bakery|patisserie|dining|warung|bakso|pentol|mie|bakmi|kwetiau|nasi|ayam|bebek|geprek|pecel|padang|sate|soto|martabak|kebab|roti|dimsum|sushi|ramen|pizza|burger|bowls?|boba|chatime|teh|tea|food ?court|food)\b/i],
+  ['Transport', /\b(goride|gocar|grabbike|grabcar|bluebird|taxi|taksi|krl|mrt|lrt|stasiun|transjakarta|busway|bus|feeder|damri|commuter|pertamina|shell|spbu|bensin|fuel|bbm|parkir|parking|e-?toll|tol|flazz|e-?money|tapcash|brizzi|kai|tiket kereta|toyota|honda|bengkel|bodyrepai\w*)\b/i],
   ['Shopping', /\b(tokopedia|shopee|lazada|blibli|zalora|bukalapak|amazon|uniqlo|ikea|ace hardware|pesanan|order|grabexpress)\b/i],
 ];
 
@@ -109,9 +111,9 @@ function isSelf_(name, holderNames) {
 }
 
 function parseBcaJournal_(subject, text) {
-  if (!/internet transaction journal|mybca|klikbca/i.test(subject + text.slice(0, 600)) || !/(transaction|transfer) type\s*:/i.test(text)) return null;
+  if (!/internet transaction journal|mybca|klikbca/i.test(subject + text.slice(0, 600)) || !/(transaction|transfer) type\s*:|type of transaction\s*:/i.test(text)) return null;
   const f = fields_(text);
-  const type = f['transaction type'] || f['transfer type'] || '';
+  const type = f['transaction type'] || f['transfer type'] || f['type of transaction'] || '';
   const amt = money_(f['total payment'] || f['top up amount'] || f['transfer amount'] || f['amount'] || f['total'] || f['nominal'] || '');
   if (!amt) return null;
   const to = f['payment to'] || f['beneficiary name'] || f['receiver name'] || f['recipient name'] || f['to account name'] || f['account name'] || f['merchant name'] || '';
@@ -119,12 +121,29 @@ function parseBcaJournal_(subject, text) {
   const base = { amount: amt.amount, currency: amt.currency, source: 'Bank email', ref: 'bca:' + ref };
   if (/flazz|e-?money|tapcash|brizzi/i.test(type)) return Object.assign(base, { title: 'Flazz top-up', category: 'Transport' });
   if (/top ?up/i.test(type)) return Object.assign(base, { kind: 'transfer', title: (to || type).trim() });
+  if (/virtual account/i.test(type)) {
+    // e.g. "KLIRING KOMODITI INDONESIA PT / KKI-PLUANG" paid under your own name: money into your own
+    // investment or e-wallet account, not spending. A VA in someone else's name is a bill.
+    const company = f['company/product name'] || f['company name'] || f['product name'] || '';
+    const self = isSelf_(f['name'] || '', [holder_(text)]) || INVESTING.test(company);
+    return Object.assign(base, { kind: self ? 'transfer' : 'spend', title: vaTitle_(company) || type, category: self ? TRANSFER : categoryOfName_(company) });
+  }
   if (/transfer/i.test(type)) {
     const self = isSelf_(to, [holder_(text)]);
-    return Object.assign(base, { kind: self ? 'transfer' : 'spend', title: to || type, category: self ? TRANSFER : undefined });
+    return Object.assign(base, { kind: self ? 'transfer' : 'spend', title: to || type, category: self ? TRANSFER : categoryOfName_(to) });
   }
   if (/credit card|kartu kredit/i.test(type + to)) return Object.assign(base, { kind: 'transfer', title: 'Credit card payment' });
-  return Object.assign(base, { title: to || type });
+  return Object.assign(base, { title: to || type, category: categoryOfName_(to) });
+}
+
+/** Investment and e-wallet providers: paying into them moves your own money. */
+const INVESTING = /\b(pluang|bibit|ajaib|stockbit|ipot|indo ?premier|bareksa|tokocrypto|pintu|indodax|reku|mirae|sinarmas sekuritas|motion trade|gopay|ovo|dana|shopeepay|linkaja|flip)\b/i;
+
+/** "KLIRING KOMODITI INDONESIA PT / KKI-PLUANG" → "Pluang"; otherwise the company name in title case. */
+function vaTitle_(company) {
+  const known = company.match(INVESTING);
+  if (known) return known[1].charAt(0).toUpperCase() + known[1].slice(1).toLowerCase();
+  return merchantName_(company.split('/')[0]);
 }
 
 function parseBcaCard_(subject, text) {
@@ -133,15 +152,16 @@ function parseBcaCard_(subject, text) {
   const merchant = (f['merchant / atm'] || '').trim();
   const amt = money_(f['sejumlah'] || f['amount'] || '');
   if (!amt) return null;
-  const booking = merchant.match(/\bA-[A-Z0-9]{8,}\b/);
+  const booking = merchant.match(GRAB_CODE);
   const kind = /reversal|void/i.test(subject) ? 'reversal' : 'spend';
   return {
     kind: kind,
     amount: amt.amount,
     currency: amt.currency,
     title: merchantName_(merchant),
+    category: /^grab\b/i.test(merchant) ? 'Transport' : categoryOfName_(merchant),
     source: 'Card receipt',
-    ref: booking ? 'grab:' + booking[0] : 'card:' + letters_(merchant) + ':' + amt.amount + ':' + (f['pada tanggal'] || '').slice(0, 16),
+    ref: booking ? 'grab:' + booking[0] + ':' + amt.amount : 'card:' + letters_(merchant) + ':' + amt.amount + ':' + (f['pada tanggal'] || '').slice(0, 16),
   };
 }
 
@@ -172,32 +192,42 @@ function parseBlu_(subject, text) {
   const to = after[0] || '';
   const self = isSelf_(to, [own, greet]);
   void lines;
-  return Object.assign(base, { kind: self ? 'transfer' : 'spend', title: merchantName_(to) || type || 'blu payment' });
+  return Object.assign(base, { kind: self ? 'transfer' : 'spend', title: merchantName_(to) || type || 'blu payment', category: self ? TRANSFER : categoryOfName_(to) });
 }
 
 function parseGrab_(subject, from, text) {
   if (!/grab/i.test(from) || !/receipt/i.test(subject)) return null;
-  const total = text.match(/Total(?: Paid)?\s*\n\s*(?:Rp\s?)?([\d.,]+)/i);
-  const amt = money_(total ? 'Rp' + total[1] : '');
+  // The amount actually charged, in order of preference (rides, food, mart, tips). The tax invoice further down
+  // repeats a "Total" without delivery fees, so labelled totals come first.
+  const amtRaw =
+    (text.match(/Total harga\s*\n?\s*Rp\.?\s?([\d.,]+)/i) ||
+      text.match(/Total \((?:incl\.?|including) tax\)\s*Rp\.?\s?([\d.,]+)/i) ||
+      text.match(/Total(?: Paid)?\s*\n\s*(?:Rp\.?\s?)?([\d.,]+)/i) ||
+      [])[1];
+  const amt = money_(amtRaw ? 'Rp' + amtRaw : '');
   if (!amt) return null;
-  // Rides say "Booking ID", food/mart orders (Indonesian receipts) say "Pesanan ID" or "Order ID".
-  const booking = text.match(/(?:Booking|Pesanan|Order)\s*ID\s*:?\s*\n?\s*(A-[A-Z0-9]{8,})/i);
-  const vehicle = (text.match(/Jenis Kendaraan\s*:?\s*\n?\s*([^\n]+)/i) || [])[1] || '';
-  const shop = ((text.match(/(?:Pesanan Dari|Order(?:ed)? from)\s*:?\s*\n?\s*([^\n]{2,80})/i) || [])[1] || '').trim();
+  // Grab booking/order codes look like A-9SNARFAGWUHIAV, whatever the label ("Booking ID", "Pesanan ID",
+  // "No. Order (Pesanan)", "Kode Booking"). The card alert shows the same code as its merchant.
+  const booking = text.match(GRAB_CODE);
+  const vehicle = (text.match(/(?:Jenis Kendaraan|Dipesan dengan)\s*:?\s*\n?\s*([^\n]+)/i) || [])[1] || '';
+  const shop = ((text.match(/(?:Pesanan Dari|Dipesan dari|Order(?:ed)? from)\s*:?\s*\n?\s*([^\n]{2,80})/i) || [])[1] || '').trim();
   const firstLine = text.split('\n').map(l => l.trim()).filter(l => l && !/^[_\[<]|^(from|sent|to|subject)\s*:/i.test(l))[0] || '';
+  const tip = /\btip\b/i.test(text.slice(0, 1500)) && /tip darimu|your tip|tip for/i.test(text);
   let category = 'Transport';
   let title = 'Grab ' + (firstLine.match(/bike|car|taxi/i) ? firstLine : 'ride');
   if (/mart/i.test(vehicle) || (/grabmart/i.test(text.slice(0, 2000)) && !/enjoyed your ride/i.test(text))) {
     category = 'Groceries';
     title = shop || 'GrabMart';
-  } else if (/food/i.test(vehicle) || shop || (/grabfood|menikmati makanan|enjoy your (food|meal)/i.test(text.slice(0, 2000)) && !/enjoyed your ride/i.test(text))) {
+  } else if (/food/i.test(vehicle) || /food/i.test(firstLine) || shop || (/grabfood|menikmati makanan|enjoy your (food|meal)/i.test(text.slice(0, 2000)) && !/enjoyed your ride/i.test(text))) {
     category = 'Dining';
     title = shop || 'GrabFood';
   } else if (/grabexpress|express|delivery/i.test(firstLine)) {
     category = 'Shopping';
     title = 'GrabExpress';
   }
-  return { amount: amt.amount, currency: amt.currency, title: title, category: category, source: 'Ride app email', ref: booking ? 'grab:' + booking[1].toUpperCase() : '' };
+  if (tip) title = 'Grab tip';
+  // Ref includes the amount: a tip reuses the order's booking code but is a separate charge.
+  return { amount: amt.amount, currency: amt.currency, title: title, category: category, source: 'Ride app email', ref: booking ? 'grab:' + booking[0].toUpperCase() + ':' + amt.amount : '' };
 }
 
 // ---------------------------------------------------------------- generic fallback
@@ -250,6 +280,12 @@ function findAmounts_(text) {
 }
 
 // ---------------------------------------------------------------- naming & categories
+
+/** Category from a merchant or payee name only (bank emails are mostly boilerplate). */
+function categoryOfName_(name) {
+  const r = CATEGORY_RULES.filter(x => x[1].test(String(name || '')))[0];
+  return r ? r[0] : 'Buffer';
+}
 
 function categoryOf_(kind, hay) {
   if (kind === 'transfer') return TRANSFER;

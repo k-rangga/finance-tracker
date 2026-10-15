@@ -44,17 +44,17 @@ const cases = [
   [
     'BCA card alert for Grab → ref from booking id',
     parse('FW: Credit Card Transaction Notification', ME, fwd('KartuKreditBCA@klikbca.com', 'Credit Card Transaction Notification', 'Terima kasih telah bertransaksi menggunakan Kartu Kredit BCA:\nMerchant / ATM : Grab* A-9P7SEJAWX6SSAV\nJenis Transaksi : E-COMMERCE\nPada Tanggal : 30-08-2026 08:23:16 WIB\nSejumlah : IDR 16.000')),
-    { kind: 'spend', amount: 16000, title: 'Grab', source: 'Card receipt', ref: 'grab:A-9P7SEJAWX6SSAV' },
+    { kind: 'spend', amount: 16000, title: 'Grab', source: 'Card receipt', ref: 'grab:A-9P7SEJAWX6SSAV:16000' },
   ],
   [
     'BCA card reversal',
     parse('FW: Credit Card Reversal/Void Transaction Notification', ME, fwd('KartuKreditBCA@klikbca.com', 'Credit Card Reversal/Void Transaction Notification', 'Kami informasikan adanya transaksi reversal/void:\nMerchant / ATM : Grab* A-9QXN92HGWH3BAV\nSejumlah : IDR 9.000')),
-    { kind: 'reversal', amount: 9000, ref: 'grab:A-9QXN92HGWH3BAV' },
+    { kind: 'reversal', amount: 9000, ref: 'grab:A-9QXN92HGWH3BAV:9000' },
   ],
   [
     'Grab ride receipt',
     parse('FW: Your Grab E-Receipt', ME, fwd('Grab <no-reply@grab.com>', 'Your Grab E-Receipt', 'Bike Standard\n[Grab]\nHope you enjoyed your ride!\nBooking ID: A-9P7SEJAWX6SSAV\nTotal Paid\nRp16.000\nBreakdown\nFare\n12.000')),
-    { kind: 'spend', amount: 16000, title: 'Grab Bike Standard', category: 'Transport', source: 'Ride app email', ref: 'grab:A-9P7SEJAWX6SSAV' },
+    { kind: 'spend', amount: 16000, title: 'Grab Bike Standard', category: 'Transport', source: 'Ride app email', ref: 'grab:A-9P7SEJAWX6SSAV:16000' },
   ],
   [
     'blu debit card at a shop → spend',
@@ -89,7 +89,32 @@ const cases = [
   [
     'GrabFood receipt (Indonesian) → restaurant + order id ref',
     parse('FW: Your Grab E-Receipt', ME, fwd('Grab <no-reply@grab.com>', 'Your Grab E-Receipt', '[E-receipt]\nSelamat menikmati makanan Anda!\nTOTAL\nRp 172000 TANGGAL | WAKTU\n26 Sep 26 09:47 +0700\nDetail Pesanan\nJenis Kendaraan:\nGrabFood\n\nPesanan ID\nA-9SNARFAGWUHIAV\n\nPesanan Dari:\nBakmi Kun - Kota Wisata\nRuko Fresh Market 5\nSubtotal Rp 336000\nTOTAL (INCL. TAX) Rp 172000')),
-    { kind: 'spend', amount: 172000, title: 'Bakmi Kun - Kota Wisata', category: 'Dining', ref: 'grab:A-9SNARFAGWUHIAV' },
+    { kind: 'spend', amount: 172000, title: 'Bakmi Kun - Kota Wisata', category: 'Dining', ref: 'grab:A-9SNARFAGWUHIAV:172000' },
+  ],
+  [
+    'GrabMart (Indonesian) → charged total, not the tax-invoice total',
+    parse('FW: Your Grab E-Receipt', ME, fwd('Grab <no-reply@grab.com>', 'Your Grab E-Receipt', '[E-receipt]\nTerima kasih sudah memesan dari kami!\nTotal harga\nRp 186100 Diantar pada\n13 Oct 26 09:44 +0700\nDetail Pesanan\nDipesan dengan:\nGrabMart\n\nNo. Order (Pesanan)\nA-9UTCL4GWWM8SAV\n\nDipesan dari:\nAEON Store - Kota Wisata\nSubtotal Rp 171100\nOngkos kirim Rp 15000\nTotal (Including tax) Rp 186100*\nFaktur PPN\nNomor faktur\nA-9UTCL4GWWM8SAV-1\nTotal Rp 176100\nPPN Rp 17451')),
+    { amount: 186100, title: 'AEON Store - Kota Wisata', category: 'Groceries', ref: 'grab:A-9UTCL4GWWM8SAV:186100' },
+  ],
+  [
+    'Grab tip → separate charge from the order',
+    parse('FW: Your Grab E-Receipt', ME, fwd('Grab <no-reply@grab.com>', 'Your Grab E-Receipt', 'GrabFood\n[Grab]\nTerima kasih! Tip darimu sudah disalurkan ke pengemudimu.\nTotal\nRP 10000\nTip\nKode Booking: A-9U5HT82GWLW5AV\n10000')),
+    { amount: 10000, title: 'Grab tip', category: 'Dining', ref: 'grab:A-9U5HT82GWLW5AV:10000' },
+  ],
+  [
+    'BCA Virtual Account to own Pluang → Transfer',
+    parse('FW: Internet Transaction Journal', ME, fwd('BCA <bca@bca.co.id>', 'Internet Transaction Journal', 'Hello BUDI SANTOSO,\n\nTransfer Type : Transfer to BCA Virtual Account\nBCA Virtual Account No. : 1526\nName : BUDI SANTOSO\nCompany/Product Name : KLIRING KOMODITI INDONESIA PT / KKI-PLUANG\nPay Amount : IDR 3,000,000.00\nTotal Payment : IDR 3,000,000.00\nReference No. : 95271TVA')),
+    { kind: 'transfer', amount: 3000000, title: 'Pluang', category: 'Transfer' },
+  ],
+  [
+    'BCA QRIS Transfer (Type of Transaction) to a person',
+    parse('FW: Internet Transaction Journal', ME, fwd('BCA <bca@bca.co.id>', 'Internet Transaction Journal', 'Hello BUDI SANTOSO,\nType of Transaction : QRIS Transfer\nBeneficiary Name : SITI AMINAH\nSender Name : BUDI SANTOSO\nAmount : IDR 50,000.00\nFee : -\nReference No. : 95271QRS')),
+    { kind: 'spend', amount: 50000, title: 'SITI AMINAH', category: 'Buffer' },
+  ],
+  [
+    'QRIS at a feeder bus → Transport (category from the merchant name only)',
+    parse('FW: Internet Transaction Journal', ME, fwd('BCA <bca@bca.co.id>', 'Internet Transaction Journal', 'Hello BUDI SANTOSO,\nTransaction Type : QRIS Payment\nPayment to : RMD SINAR JAYA FEEDER BUS\nAcquirer : DANA\nTotal Payment : IDR 15,000.00\nReference No. : Q1')),
+    { amount: 15000, category: 'Transport' },
   ],
   ['Newsletter → null', parse('Newsletter', 'News <n@x.com>', 'No amounts here'), null],
   ['Plain Netflix (not forwarded)', parse('Your Netflix bill', 'Netflix <info@netflix.com>', 'Amount charged: Rp 186.000\nPlan: Premium'), { amount: 186000, title: 'Netflix', category: 'Subscriptions' }],
