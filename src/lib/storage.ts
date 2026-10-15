@@ -1,17 +1,7 @@
-/**
- * Small persistence layer. Everything the app saves goes through here so the
- * localStorage backend can later be swapped for an API without touching screens.
- */
+/** Per-device UI preferences (sidebar, last tab). User data lives in Supabase — see backend.ts. */
 export const KEYS = {
-  auth: 'moneyTracker.auth',
   nav: 'moneyTracker.nav',
   tab: 'moneyTracker.tab',
-  recat: 'moneyTracker.recat',
-  journal: 'moneyTracker.journal',
-  prices: 'moneyTracker.prices',
-  snaps: 'moneyTracker.snaps',
-  settings: 'moneyTracker.settings',
-  buckets: 'moneyTracker.buckets',
 } as const;
 
 export const storage = {

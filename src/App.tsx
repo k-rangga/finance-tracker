@@ -1,16 +1,18 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import s from './styles/ui.module.css';
 import { IC, Icon } from './components/Icon';
 import { Logo } from './components/Logo';
 import { SettingsDialog } from './components/SettingsDialog';
+import { GmailDialog, syncedAgo } from './components/GmailDialog';
+import { CALLBACK_MESSAGES } from './lib/gmail';
 import { KEYS, storage } from './lib/storage';
 import { getCycle } from './lib/cycle';
 import { computeBudget } from './lib/budget';
-import { dayLabel, dayMonth, startOfToday } from './lib/format';
+import { addDays, dayLabel, dayMonth, startOfToday } from './lib/format';
 import { useSettings } from './lib/settings';
 import { signOut } from './lib/auth';
 import { useData } from './lib/data';
-import { loadCycleTransactions, loadUpcomingBills } from './data/transactions';
+import { expectedBills, inCycle, toTransaction } from './data/transactions';
 import { Summary } from './screens/Summary';
 import { Categories } from './screens/Categories';
 import { Activity, type ActivityFilter } from './screens/Activity';
@@ -33,20 +35,33 @@ export default function App({ email }: { email: string | null }) {
     const t = storage.getRaw(KEYS.tab) as Tab | null;
     return t && TABS.some(x => x.key === t) ? t : 'summary';
   });
-  const { recat, setOverride, saveError, dismissError } = useData();
+  const { recat, setOverride, saveError, dismissError, txRows, gmail } = useData();
   const [txFilter, setTxFilter] = useState<ActivityFilter>({ range: 'week', cat: '', q: '' });
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Opened automatically when Google redirects back with ?gmail=…
+  const [gmailOpen, setGmailOpen] = useState<{ notice?: string } | null>(() => {
+    const q = new URLSearchParams(window.location.search).get('gmail');
+    return q ? { notice: CALLBACK_MESSAGES[q] ?? CALLBACK_MESSAGES.error } : null;
+  });
+  useEffect(() => {
+    if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
+  }, []);
   const { settings } = useSettings();
 
   const today = useMemo(startOfToday, []);
   const cycle = useMemo(() => getCycle(today), [today]);
-  const transactions = useMemo(() => loadCycleTransactions(cycle, settings.income), [cycle, settings.income]);
-  const bills = useMemo(() => loadUpcomingBills(cycle, settings.income), [cycle, settings.income]);
+  const prevCycle = useMemo(() => getCycle(addDays(cycle.start, -1)), [cycle]);
+  const all = useMemo(() => txRows.map(r => toTransaction(r, settings.currency, settings.fxRate)), [txRows, settings.currency, settings.fxRate]);
+  const transactions = useMemo(() => inCycle(all, cycle), [all, cycle]);
+  const prevTransactions = useMemo(() => all.filter(t => t.date >= prevCycle.start && t.date < cycle.start), [all, prevCycle, cycle]);
+  const bills = useMemo(() => expectedBills(prevTransactions, prevCycle, transactions, cycle, recat), [prevTransactions, prevCycle, transactions, cycle, recat]);
   const budget = useMemo(
-    () => computeBudget({ transactions, bills, recat, cycle, income: settings.income, warnAt: settings.warnAt }),
-    [transactions, bills, recat, cycle, settings.income, settings.warnAt],
+    () => computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, cycle, income: settings.income, warnAt: settings.warnAt }),
+    [transactions, prevTransactions, prevCycle, bills, recat, cycle, settings.income, settings.warnAt],
   );
+  const syncLabel = !gmail ? 'Connect Gmail' : !gmail.label_id ? 'Choose Gmail label' : gmail.last_sync_status?.startsWith('error') ? 'Gmail sync failed' : `Synced ${syncedAgo(gmail.last_synced_at)}`;
+  const syncWarn = !gmail?.label_id || !!gmail.last_sync_status?.startsWith('error');
 
   const setTab = useCallback((t: Tab) => {
     storage.setRaw(KEYS.tab, t);
@@ -163,10 +178,16 @@ export default function App({ email }: { email: string | null }) {
               Next payday {dayLabel(cycle.next)}
               {nextNote}
             </span>
-            <span className={s.chip}>
+            <button
+              type="button"
+              className={s.chip}
+              onClick={() => setGmailOpen({})}
+              style={syncWarn ? { borderColor: 'var(--amber)', color: 'var(--amber-ink)', fontWeight: 700 } : undefined}
+              title="Gmail sync settings"
+            >
               <Icon d={IC.refresh} size={14} />
-              Synced from Gmail
-            </span>
+              {syncLabel}
+            </button>
             <button type="button" className={`${s.chip} ${s.mobileOnly}`} onClick={() => setSettingsOpen(true)} aria-label="Settings" title="Settings">
               <Icon d={IC.settings} size={14} />
             </button>
@@ -184,6 +205,21 @@ export default function App({ email }: { email: string | null }) {
             </div>
           )}
 
+          {(!gmail?.label_id || txRows.length === 0) && tab !== 'invest' && (
+            <div className={s.note} style={{ background: 'var(--accent-tint)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ marginRight: 'auto' }}>
+                {!gmail
+                  ? 'Connect Gmail to import your receipts. Spending, categories and the savings plan fill in from them.'
+                  : !gmail.label_id
+                    ? 'Choose the Gmail label that holds your receipts to start importing.'
+                    : 'No receipts imported yet. Check the label, or press Sync now.'}
+              </span>
+              <button type="button" className={s.btnPrimary} onClick={() => setGmailOpen({})}>
+                {!gmail ? 'Connect Gmail' : !gmail.label_id ? 'Choose label' : 'Open Gmail sync'}
+              </button>
+            </div>
+          )}
+
           {tab === 'summary' && <Summary cycle={cycle} budget={budget} onOpenCategory={showCategory} />}
           {tab === 'categories' && (
             <Categories cycle={cycle} budget={budget} open={openCat} setOpen={setOpenCat} onShowTransactions={showTransactions} />
@@ -194,6 +230,7 @@ export default function App({ email }: { email: string | null }) {
         </div>
       </main>
 
+      {gmailOpen && <GmailDialog notice={gmailOpen.notice} onClose={() => setGmailOpen(null)} />}
       {settingsOpen && <SettingsDialog email={email} onClose={() => setSettingsOpen(false)} />}
     </div>
   );

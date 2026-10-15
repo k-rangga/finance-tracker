@@ -56,7 +56,7 @@ export function SettingsDialog({ onClose, email }: { onClose: () => void; email:
   return (
     <Modal title="Settings" onClose={onClose} width={560}>
       <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-        {email ? `Signed in as ${email} · saved to your account` : 'Demo mode · saved in this browser only'}
+        Signed in as {email ?? 'your account'} · settings are saved to your account
       </span>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span className={s.label}>Currency</span>

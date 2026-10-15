@@ -1,8 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { KEYS, storage } from './storage';
 import { DEFAULT_SETTINGS, type Settings } from './settings';
 import { addDays, startOfToday, toISO } from './format';
-import { SEED_JOURNAL, type Prices, type Snap, type Trade } from '../screens/invest/model';
+import type { Prices, Snap, Trade } from '../screens/invest/model';
+import type { TxRow } from '../data/transactions';
+
+export type GmailConnection = {
+  google_email: string | null;
+  label_id: string | null;
+  label_name: string | null;
+  last_synced_at: string | null;
+  last_sync_status: string | null;
+  last_sync_count: number | null;
+};
 
 /** Everything the app stores per user. */
 export type UserData = {
@@ -11,11 +20,15 @@ export type UserData = {
   journal: Trade[];
   prices: Prices;
   snaps: Snap[];
+  /** Imported Gmail receipts from the start of the previous pay cycle. */
+  txRows: TxRow[];
+  gmail: GmailConnection | null;
 };
 
 export type Backend = {
-  mode: 'local' | 'cloud';
-  load(): Promise<UserData>;
+  load(since: Date): Promise<UserData>;
+  /** Re-read imported transactions and Gmail status (after a sync). */
+  loadImports(since: Date): Promise<Pick<UserData, 'txRows' | 'gmail'>>;
   saveSettings(s: Settings): Promise<void>;
   /** `category: null` removes the override. */
   setOverride(txId: string, category: string | null): Promise<void>;
@@ -25,44 +38,6 @@ export type Backend = {
 };
 
 const defaultPrices = (): Prices => ({ map: {}, at: toISO(addDays(startOfToday(), -4)) });
-
-// ---------------------------------------------------------------- browser storage
-
-export const localBackend: Backend = {
-  mode: 'local',
-  async load() {
-    return {
-      settings: { ...DEFAULT_SETTINGS, ...storage.get<Partial<Settings>>(KEYS.settings, {}) },
-      recat: storage.get(KEYS.recat, {}),
-      journal: storage.get(KEYS.journal, SEED_JOURNAL),
-      prices: storage.get(KEYS.prices, defaultPrices()),
-      snaps: storage.get(KEYS.snaps, []),
-    };
-  },
-  async saveSettings(s) {
-    storage.set(KEYS.settings, s);
-  },
-  async setOverride(txId, category) {
-    const r = storage.get<Record<string, string>>(KEYS.recat, {});
-    if (category == null) delete r[txId];
-    else r[txId] = category;
-    storage.set(KEYS.recat, r);
-  },
-  async saveTrade(t) {
-    const j = storage.get<Trade[]>(KEYS.journal, SEED_JOURNAL);
-    const i = j.findIndex(x => x.id === t.id);
-    storage.set(KEYS.journal, i < 0 ? [t, ...j] : j.map(x => (x.id === t.id ? t : x)));
-  },
-  async savePrices(p) {
-    storage.set(KEYS.prices, p);
-  },
-  async saveSnapshot(s) {
-    const list = storage.get<Snap[]>(KEYS.snaps, []).filter(x => x.d !== s.d);
-    list.push(s);
-    list.sort((a, b) => a.d.localeCompare(b.d));
-    storage.set(KEYS.snaps, list);
-  },
-};
 
 // ---------------------------------------------------------------- Supabase
 
@@ -161,19 +136,32 @@ function check<T>(r: { data: T; error: { message: string } | null }): T {
 }
 
 export function supabaseBackend(db: SupabaseClient): Backend {
+  const loadImports = async (since: Date) => {
+    const [tx, g] = await Promise.all([
+      db.from('transactions').select('id, occurred_at, title, category, amount, currency, source').gte('occurred_at', since.toISOString()).order('occurred_at', { ascending: false }),
+      db.from('gmail_connections').select('google_email, label_id, label_name, last_synced_at, last_sync_status, last_sync_count').maybeSingle(),
+    ]);
+    return { txRows: check(tx) as TxRow[], gmail: check(g) as GmailConnection | null };
+  };
   return {
-    mode: 'cloud',
-    async load() {
-      const [s, o, t, p, n] = await Promise.all([
+    loadImports,
+    async load(since) {
+      const [s, o, t, p, n, imports] = await Promise.all([
         db.from('user_settings').select('*').maybeSingle(),
         db.from('transaction_overrides').select('tx_id, category'),
         db.from('trades').select('*').order('buy_date', { ascending: false }),
         db.from('prices').select('ticker, price'),
         db.from('portfolio_snapshots').select('day, value, contributed').order('day'),
+        loadImports(since),
       ]);
       const srow = check(s) as Record<string, unknown> | null;
-      if (!srow) return importLocal(db);
+      if (!srow) {
+        // New account: start empty with default settings.
+        check(await db.from('user_settings').upsert(settingsRow(DEFAULT_SETTINGS)));
+        return { settings: DEFAULT_SETTINGS, recat: {}, journal: [], prices: defaultPrices(), snaps: [], ...imports };
+      }
       return {
+        ...imports,
         settings: {
           income: srow.income as number,
           currency: srow.currency as Settings['currency'],
@@ -212,30 +200,4 @@ export function supabaseBackend(db: SupabaseClient): Backend {
       check(await db.from('portfolio_snapshots').upsert({ day: s.d, value: s.v, contributed: s.c }));
     },
   };
-}
-
-/**
- * First sign-in: copy what this browser already has (settings, category fixes,
- * journal edits, prices, snapshots) into the new account. Nothing local → empty account.
- */
-async function importLocal(db: SupabaseClient): Promise<UserData> {
-  const has = (k: string) => storage.getRaw(k) != null;
-  const local = await localBackend.load();
-  const data: UserData = {
-    settings: local.settings,
-    recat: has(KEYS.recat) ? local.recat : {},
-    journal: has(KEYS.journal) ? local.journal : [],
-    prices: has(KEYS.prices) ? local.prices : defaultPrices(),
-    snaps: has(KEYS.snaps) ? local.snaps : [],
-  };
-  const overrides = Object.entries(data.recat).map(([tx_id, category]) => ({ tx_id, category }));
-  const prices = Object.entries(data.prices.map).map(([ticker, price]) => ({ ticker, price }));
-  const snaps = data.snaps.map(s => ({ day: s.d, value: s.v, contributed: s.c }));
-  if (overrides.length) check(await db.from('transaction_overrides').upsert(overrides));
-  if (data.journal.length) check(await db.from('trades').upsert(data.journal.map(toRow)));
-  if (prices.length) check(await db.from('prices').upsert(prices));
-  if (snaps.length) check(await db.from('portfolio_snapshots').upsert(snaps));
-  // Settings last: its presence marks the account as initialised.
-  check(await db.from('user_settings').upsert(settingsRow(data.settings, has(KEYS.prices) ? data.prices.at : undefined)));
-  return data;
 }

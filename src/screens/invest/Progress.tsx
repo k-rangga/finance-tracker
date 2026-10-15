@@ -9,30 +9,13 @@ import { useInvestFmt } from './Invest';
 type Range = '3M' | '6M' | 'YTD' | '1Y' | 'All';
 type Pt = { dt: Date; v: number; c: number };
 
-const SAMPLE_WEEKS = 78;
 
-/** `sample` pads the history with synthetic weeks (demo mode only). */
-export function Progress({ today, snaps, sample }: { today: Date; snaps: Snap[]; sample: boolean }) {
+export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
   const { dF, dS } = useInvestFmt();
   const [rg, setRg] = useState<Range>('6M');
   const [hov, setHov] = useState<number | null>(null);
 
-  // Weeks before the first real snapshot are synthetic sample data shaped to end at today's figures.
-  const pts = useMemo<Pt[]>(() => {
-    const real = snaps.filter(x => x.v > 0 && x.c > 0).map(x => ({ dt: parseISO(x.d), v: x.v, c: x.c }));
-    if (!sample || !real.length) return real;
-    const firstReal = real[0].dt;
-    const { v: vNow, c: cNow } = real[real.length - 1];
-    const ratio = vNow / cNow - 1;
-    const out: Pt[] = [];
-    for (let i = SAMPLE_WEEKS; i >= 1; i--) {
-      const dt = new Date(firstReal.getFullYear(), firstReal.getMonth(), firstReal.getDate() - 7 * i);
-      const f = (SAMPLE_WEEKS - i) / SAMPLE_WEEKS;
-      const c = cNow * (0.2 + (0.8 * Math.floor(f * 18)) / 18);
-      out.push({ dt, c, v: c * (1 + ratio * f + 0.035 * Math.sin(i * 0.9) + 0.025 * Math.sin(i * 0.31)) });
-    }
-    return out.concat(real);
-  }, [snaps, sample]);
+  const pts = useMemo<Pt[]>(() => snaps.filter(x => x.v > 0 && x.c > 0).map(x => ({ dt: parseISO(x.d), v: x.v, c: x.c })), [snaps]);
 
   if (pts.length < 2)
     return (
@@ -203,9 +186,7 @@ export function Progress({ today, snaps, sample }: { today: Date; snaps: Snap[];
           ))}
         </div>
       </div>
-      <span className={s.caption}>
-        {sample ? `Weeks before ${fullDate(firstReal)} are sample data. ` : ''}Each price update adds a real point.
-      </span>
+      <span className={s.caption}>Tracking since {fullDate(firstReal)}. Each price update adds a point.</span>
     </Card>
   );
 }

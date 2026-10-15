@@ -2,9 +2,15 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { Backend, UserData } from './backend';
 import type { Settings } from './settings';
 import type { Prices, Snap, Trade } from '../screens/invest/model';
+import { getCycle } from './cycle';
+import { addDays, startOfToday } from './format';
+
+/** Load transactions from the start of the previous pay cycle (needed for last-cycle comparisons). */
+const importsSince = () => getCycle(addDays(getCycle(startOfToday()).start, -1)).start;
 
 type Ctx = UserData & {
-  mode: Backend['mode'];
+  /** Re-read imported transactions and Gmail status. */
+  refreshImports: () => Promise<void>;
   /** Last write that failed, shown as a banner until dismissed. */
   saveError: string | null;
   dismissError: () => void;
@@ -28,7 +34,7 @@ export function DataProvider({ backend, children, loading, failed }: { backend: 
     let live = true;
     setLoadError(null);
     backend
-      .load()
+      .load(importsSince())
       .then(d => live && setData(d))
       .catch(e => live && setLoadError(e instanceof Error ? e.message : String(e)));
     return () => {
@@ -44,7 +50,10 @@ export function DataProvider({ backend, children, loading, failed }: { backend: 
     if (!data) return null;
     return {
       ...data,
-      mode: backend.mode,
+      refreshImports: async () => {
+        const imports = await backend.loadImports(importsSince());
+        setData(d => d && { ...d, ...imports });
+      },
       saveError,
       dismissError: () => setSaveError(null),
       saveSettings: s => {

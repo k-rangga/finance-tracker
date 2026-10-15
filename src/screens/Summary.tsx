@@ -206,8 +206,9 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
     if (idx !== hover) setHover(idx);
   };
 
-  const bg =
-    'conic-gradient(' +
+  const bg = !dCats.length
+    ? C.divider
+    : 'conic-gradient(' +
     dCats.map((c, i) => `${hover === null || hover === i ? c.color : C.borderStrong} ${(stops[i].from * 360).toFixed(2)}deg ${(stops[i].to * 360).toFixed(2)}deg`).join(', ') +
     ')';
   const sel = hover === null ? null : dCats[hover];

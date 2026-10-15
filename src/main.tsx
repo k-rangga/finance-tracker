@@ -5,7 +5,7 @@ import s from './styles/ui.module.css';
 import App from './App';
 import { SettingsProvider } from './lib/settings';
 import { DataProvider } from './lib/data';
-import { localBackend, supabaseBackend } from './lib/backend';
+import { supabaseBackend } from './lib/backend';
 import { supabase } from './lib/supabase';
 import { signOut, useUser } from './lib/auth';
 import { Login } from './screens/Login';
@@ -24,8 +24,15 @@ function Centered({ children }: { children: React.ReactNode }) {
 
 function Root() {
   const user = useUser();
-  const backend = useMemo(() => (supabase ? supabaseBackend(supabase) : localBackend), []);
+  const backend = useMemo(() => supabase && supabaseBackend(supabase), []);
 
+  if (!backend)
+    return (
+      <Centered>
+        <h1 style={{ fontSize: 22 }}>Database not configured</h1>
+        <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>Set the Supabase environment variables (run vercel env pull) and reload.</span>
+      </Centered>
+    );
   if (user === undefined) return <Centered><span className={s.label}>Loading…</span></Centered>;
   if (!user) return <Login />;
 

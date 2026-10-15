@@ -37,7 +37,7 @@ export function useInvestFmt() {
 export function Invest({ cycle }: { cycle: Cycle }) {
   const { settings } = useSettings();
   const todayISO = toISO(cycle.today);
-  const { journal, prices, snaps, mode, saveTrade, savePrices, saveSnapshot } = useData();
+  const { journal, prices, snaps, saveTrade, savePrices, saveSnapshot } = useData();
   const [sub, setSub] = useState<Sub>('portfolio');
   const [jf, setJf] = useState<JournalFilter>('all');
   const [jOpen, setJOpen] = useState<string | null>(null);
@@ -77,7 +77,7 @@ export function Invest({ cycle }: { cycle: Cycle }) {
       </div>
 
       {sub === 'portfolio' && <Portfolio cycle={cycle} P={P} prices={prices} onOpenPrices={() => setPxOpen(true)} onOpenTrade={goJournal} />}
-      {sub === 'progress' && <Progress today={cycle.today} snaps={snaps} sample={mode === 'local'} />}
+      {sub === 'progress' && <Progress today={cycle.today} snaps={snaps} />}
       {sub === 'journal' && (
         <Journal
           today={cycle.today}

@@ -72,13 +72,16 @@ export type Budget = {
 
 export function computeBudget(args: {
   transactions: Transaction[];
+  /** Last cycle's transactions, for the comparisons. */
+  prevTransactions: Transaction[];
+  prevCycle: Cycle;
   bills: Bill[];
   recat: Record<string, string>;
   cycle: Cycle;
   income: number;
   warnAt: number;
 }): Budget {
-  const { transactions, bills, recat, cycle, income, warnAt } = args;
+  const { transactions, prevTransactions, prevCycle, bills, recat, cycle, income, warnAt } = args;
   const ofIncome = (p: number) => (p / 100) * income;
 
   const txs: TxView[] = transactions
@@ -93,7 +96,8 @@ export function computeBudget(args: {
   const cats: CatView[] = CATEGORIES.map(c => {
     const mine = txs.filter(t => t.cat === c.name);
     const cur = [0, 1, 2, 3].map(w => sum(mine.filter(t => t.week === w).map(t => t.amount)));
-    const prev = c.prevPct.map(ofIncome);
+    const prevMine = prevTransactions.filter(t => (recat[t.id] ?? t.category) === c.name);
+    const prev = [0, 1, 2, 3].map(w => sum(prevMine.filter(t => weekOf(prevCycle.offsetOf(t.date)) === w).map(t => t.amount)));
     const spent = sum(cur);
     const limit = ofIncome(c.limitPct);
     const used = limit ? (spent / limit) * 100 : 0;

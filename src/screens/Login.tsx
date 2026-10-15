@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import s from '../styles/ui.module.css';
 import { Logo } from '../components/Logo';
-import { isDemoAuth, signInWithGoogle, signInWithPassword, signUp } from '../lib/auth';
+import { signInWithGoogle, signInWithPassword, signUp } from '../lib/auth';
 
 type Mode = 'signin' | 'signup';
 
@@ -118,7 +118,6 @@ export function Login() {
           <button type="button" className={s.linkBtn} style={{ fontSize: 14 }} onClick={switchMode}>
             {signup ? 'Sign in' : 'Create an account'}
           </button>
-          {isDemoAuth() && <div style={{ marginTop: 8, fontSize: 12 }}>Demo mode: any email and password works.</div>}
         </div>
       </form>
     </div>

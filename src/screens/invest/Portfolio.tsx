@@ -4,13 +4,11 @@ import { payday, type Cycle } from '../../lib/cycle';
 import { dayLabel, dayMonth, diffDays, fmtPct, parseISO, pc, addDays, sum } from '../../lib/format';
 import { useSettings } from '../../lib/settings';
 import { C, plInk } from '../../lib/tokens';
-import { levOf, levTag, liqOf, MARKETS, MK_COLOR, MK_NAME, nat, qtyLabel, type Market, type Portfolio as PortfolioModel, type Prices } from './model';
+import { buyFee, levOf, levTag, liqOf, MARKETS, MK_COLOR, MK_NAME, nat, qtyLabel, type Market, type Portfolio as PortfolioModel, type Prices } from './model';
 import { useInvestFmt } from './Invest';
 
 type Props = { cycle: Cycle; P: PortfolioModel; prices: Prices; onOpenPrices: () => void; onOpenTrade: (id: string) => void };
 
-// % of income moved to brokers in the five cycles before this one.
-const CONTRIB_HISTORY = [20, 20, 13.3, 20, 26.7];
 
 const GRID = 'minmax(190px,1.3fr) 110px 150px 140px 130px minmax(200px,1.3fr)';
 
@@ -39,9 +37,16 @@ export function Portfolio({ cycle, P, prices, onOpenPrices, onOpenTrade }: Props
 
   const rows = [...P.pos].sort((a, b) => b.val - a.val);
 
-  const hist = [...CONTRIB_HISTORY, settings.investPct];
-  const cmax = Math.max(...hist) * 1.15;
-  const labels = hist.map((_, i) => dayMonth(payday(cycle.start.getFullYear(), cycle.start.getMonth() + i - 5)));
+  // Money put into new positions in each of the last six pay cycles, as % of income.
+  const trades = [...P.pos.map(p => p.t), ...P.done.map(d => d.t)];
+  const starts = Array.from({ length: 7 }, (_, i) => payday(cycle.start.getFullYear(), cycle.start.getMonth() + i - 5));
+  const hist = starts.slice(0, 6).map((from, i) => {
+    const idr = sum(trades.filter(t => parseISO(t.d) >= from && parseISO(t.d) < starts[i + 1]).map(t => P.toIdr((t.px * t.q) / levOf(t) + buyFee(t), t.mk)));
+    const money = settings.currency === 'USD' ? idr / settings.fxRate : idr;
+    return (money / settings.income) * 100;
+  });
+  const cmax = Math.max(...hist, settings.investPct) * 1.15;
+  const labels = starts.slice(0, 6).map(dayMonth);
 
   return (
     <div className={s.stack}>
@@ -203,8 +208,8 @@ export function Portfolio({ cycle, P, prices, onOpenPrices, onOpenTrade }: Props
       <Card style={{ gap: 16 }}>
         <CardHead title="Contributions from savings" caption={`Dashed line = plan (${settings.investPct}% of income)`} />
         <p style={{ fontSize: 14, lineHeight: 1.5, color: C.textSoft }}>
-          {full(ofIncome(settings.investPct))} moved to your brokers on {dayLabel(cycle.start)}, out of the {full(ofIncome(60))} savings transfer.{' '}
-          {full(ofIncome(sum(hist)))} invested over the last six cycles.
+          Plan: {full(ofIncome(settings.investPct))} of each payday's {full(ofIncome(60))} savings goes to your brokers. This cycle you've put{' '}
+          {full(ofIncome(hist[5]))} into new positions since {dayLabel(cycle.start)}; {full(ofIncome(sum(hist)))} over the last six cycles, from your journal entries.
         </p>
         <div style={{ position: 'relative', height: 160, display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0,1fr))', gap: 16 }}>
           <div
@@ -222,7 +227,7 @@ export function Portfolio({ cycle, P, prices, onOpenPrices, onOpenTrade }: Props
           {hist.map((p, i) => (
             <div key={i} style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center' }}>
               <div
-                title={`${labels[i]}: ${p}% · ${full(ofIncome(p))}`}
+                title={`${labels[i]}: ${p.toFixed(1)}% · ${full(ofIncome(p))}`}
                 style={{ width: '100%', maxWidth: 64, borderRadius: 12, height: pc((p / cmax) * 100), background: i === 5 ? C.accent700 : C.mint[5] }}
               />
             </div>

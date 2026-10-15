@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import s from '../styles/ui.module.css';
-import { Bar, Card, CardHead, Dot } from '../components/ui';
+import { Card, CardHead, Dot } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
 import type { Budget } from '../lib/budget';
 import { paydaysFrom, type Cycle } from '../lib/cycle';
@@ -59,32 +59,11 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
   const investPct = Math.min(SAVINGS_TARGET_PCT, settings.investPct);
   const bigPct = Math.min(10, SAVINGS_TARGET_PCT - investPct);
   const emergencyPct = Math.max(0, SAVINGS_TARGET_PCT - investPct - bigPct);
-  const cyclesThisYear = cycle.start.getMonth() + 1;
   const buckets = [
-    {
-      name: 'Emergency fund',
-      pct: emergencyPct,
-      balance: b.budget * 2.6,
-      target: b.budget * 6,
-      note: '6 × monthly spend',
-    },
-    {
-      name: 'Investing',
-      pct: investPct,
-      balance: ofIncome(investPct) * cyclesThisYear,
-      target: ofIncome(investPct) * 12,
-      note: 'Contributions this year vs a 12-payday plan',
-      link: true,
-    },
-    {
-      name: 'Planned big costs',
-      pct: bigPct,
-      balance: b.income * 0.9,
-      target: b.income * 2,
-      note: 'Travel, laptop, annual fees',
-    },
+    { name: 'Emergency fund', pct: emergencyPct, note: `Target ${full(b.budget * 6)}, six months of spending` },
+    { name: 'Investing', pct: investPct, note: 'Moved to your brokers; tracked in the investment journal', link: true },
+    { name: 'Planned big costs', pct: bigPct, note: 'Travel, devices, annual fees' },
   ].filter(x => x.pct > 0);
-  const behind = buckets.filter(x => !x.link).sort((x, y) => x.balance / x.target - y.balance / y.target)[0];
 
   return (
     <div className={s.stack}>
@@ -187,46 +166,35 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
 
       <Card>
         <CardHead title="Savings buckets" caption={`How the ${SAVINGS_TARGET_PCT}% is split each payday`} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {buckets.map(k => (
-            <div key={k.name} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 700, fontSize: 16, marginRight: 'auto' }}>
-                  {k.name} <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>· {k.pct}% · {full(ofIncome(k.pct))} a payday</span>
-                </span>
-                <span style={{ fontSize: 14 }}>
-                  <strong>{full(k.balance)}</strong> <span style={{ color: C.textMuted }}>of {full(k.target)}</span>
-                </span>
-              </div>
-              <Bar value={k.balance} max={k.target} color={k === behind ? C.amber : C.mint[5]} label={`${k.name} ${Math.round((k.balance / k.target) * 100)}% funded`} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 12, color: C.textMuted }}>
-                <span>
-                  {Math.round((k.balance / k.target) * 100)}% · {k.note}
-                </span>
+        <div style={{ display: 'flex', height: 14, borderRadius: 999, overflow: 'hidden', gap: 3 }} aria-hidden="true">
+          {buckets.map((k, i) => (
+            <div key={k.name} style={{ flex: k.pct, background: [C.accent700, C.mint[5], C.mint[7]][i] }} />
+          ))}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {buckets.map((k, i) => (
+            <div key={k.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: `1.5px solid ${C.divider}`, flexWrap: 'wrap' }}>
+              <Dot color={[C.accent700, C.mint[5], C.mint[7]][i]} />
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
+                <span style={{ fontWeight: 700, fontSize: 15 }}>{k.name}</span>
+                <span style={{ fontSize: 12, color: C.textMuted }}>{k.note}</span>
                 {k.link && (
-                  <button type="button" className={s.linkBtn} onClick={onOpenInvest}>
+                  <button type="button" className={s.linkBtn} style={{ alignSelf: 'flex-start' }} onClick={onOpenInvest}>
                     Open investment journal <Icon d={IC.arrowRight} size={14} />
                   </button>
                 )}
-              </div>
+              </span>
+              <span style={{ color: C.textMuted, fontSize: 14, width: 44, textAlign: 'right' }}>{k.pct}%</span>
+              <span style={{ fontWeight: 700, fontSize: 14, minWidth: 120, textAlign: 'right' }}>{full(ofIncome(k.pct))}</span>
             </div>
           ))}
         </div>
-        {behind && (
+        {bufLeft > 0 && (
           <div className={s.note}>
-            {bufLeft > 0 ? (
-              <>
-                <strong>Unused Buffer goes to {behind.name}.</strong> {full(bufLeft)} is still unspent; if it stays that way it moves to the most behind bucket on{' '}
-                {dayLabel(cycle.end)}.
-              </>
-            ) : (
-              <>
-                <strong>{behind.name} is the most behind bucket.</strong> Any Buffer left at the end of a cycle is routed there.
-              </>
-            )}
+            <strong>Unspent Buffer goes to savings.</strong> {full(bufLeft)} of this cycle's buffer is still unspent; whatever remains on {dayLabel(cycle.end)} adds to the
+            emergency fund.
           </div>
         )}
-        <span className={s.caption}>Bucket balances are sample figures until a savings account is connected.</span>
       </Card>
     </div>
   );
