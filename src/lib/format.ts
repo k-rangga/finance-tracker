@@ -9,12 +9,12 @@ export function fmtFull(v: number, cur: Currency, signed = false): string {
   return sign(v, signed) + body;
 }
 
-/** `Rp 1.2M`, `Rp 450K`, `$1.2k`, `$450`. */
+/** `Rp 1.2B`, `Rp 1.2M`, `Rp 450K`, `Rp 0`, `$1.2k`, `$450`. */
 export function fmtShort(v: number, cur: Currency, signed = false): string {
   const a = Math.abs(v);
   let body: string;
   if (cur === 'USD') body = '$' + (a >= 1000 ? (a / 1000).toFixed(1) + 'k' : Math.round(a));
-  else body = 'Rp ' + (a >= 1e6 ? (a / 1e6).toFixed(1) + 'M' : Math.round(a / 1e3) + 'K');
+  else body = 'Rp ' + (a >= 1e9 ? (a / 1e9).toFixed(1) + 'B' : a >= 1e6 ? (a / 1e6).toFixed(1) + 'M' : a >= 500 ? Math.round(a / 1e3) + 'K' : '0');
   return sign(v, signed) + body;
 }
 

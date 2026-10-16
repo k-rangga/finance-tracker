@@ -35,14 +35,21 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink, on
   const [creating, setCreating] = useState<{ name: string; tx: TxView } | null>(null);
   const expenses = budget.txs.filter(t => !t.isIncome && !t.isTransfer);
   const { range, cat, q } = filter;
-  const wStart = cycle.weekIdx * 7;
+  // Calendar weeks (Monday to Sunday), not weeks of the pay cycle, which start on payday's weekday.
+  // Only this cycle's transactions are listed, so a week reaching back before payday starts at payday.
+  const wStart = cycle.offsetOf(cycle.today) - ((cycle.today.getDay() + 6) % 7);
   const bounds: Record<Range, [number, number]> = {
     today: [cycle.dayIdx, cycle.dayIdx],
-    week: [wStart, cycle.dayIdx],
+    week: [Math.max(0, wStart), cycle.dayIdx],
     last: [Math.max(0, wStart - 7), wStart - 1],
     cycle: [0, cycle.dayIdx],
   };
   const [lo, hi] = bounds[range];
+  const span = (a: number, b: number) => (a === b ? dayLabel(cycle.dateOf(a)) : `${dayLabel(cycle.dateOf(a))} – ${dayLabel(cycle.dateOf(b))}`);
+  const rangeLabel =
+    hi < lo
+      ? 'Last week was before this pay cycle'
+      : span(lo, hi) + (range !== 'cycle' && range !== 'today' && lo === 0 && (range === 'last' ? wStart - 7 : wStart) < 0 ? ' (from payday)' : '');
   const needle = q.trim().toLowerCase();
   const txs = budget.txs.filter(
     t => t.offset >= lo && t.offset <= hi && (!cat || t.cat === cat) && (!needle || `${t.title} ${t.account} ${t.source} ${t.cat}`.toLowerCase().includes(needle)),
@@ -110,7 +117,7 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink, on
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
         <span aria-live="polite">
-          {txs.length} {txs.length === 1 ? 'transaction' : 'transactions'} · {full(out)} spent{paidBack ? ` after ${full(paidBack)} reimbursed` : ''}{cardBills ? ` · ${full(cardBills)} card bills paid` : ''}
+          <strong style={{ color: C.textSoft, fontWeight: 700 }}>{rangeLabel}</strong> · {txs.length} {txs.length === 1 ? 'transaction' : 'transactions'} · {full(out)} spent{paidBack ? ` after ${full(paidBack)} reimbursed` : ''}{cardBills ? ` · ${full(cardBills)} card bills paid` : ''}
           {invested ? ` · ${full(invested)} invested` : ''}
           {moved ? ` · ${full(moved)} moved between your accounts` : ''}
         </span>

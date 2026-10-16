@@ -93,31 +93,32 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Filters on the left, prices on the right, on one line when there's room. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div className={s.pills} role="group" aria-label="Filter entries" style={{ marginRight: 'auto' }}>
+          {filters.map(([k, l]) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={filter === k}
+              className={filter === k ? s.optOn : s.opt}
+              onClick={() => {
+                setFilter(k);
+                setClosing(null);
+              }}
+            >
+              {l} · {count(k)}
+            </button>
+          ))}
+        </div>
         <button type="button" className={s.btnOutline} onClick={prices.refresh} disabled={prices.busy}>
           {prices.busy ? 'Refreshing prices…' : 'Refresh prices'}
         </button>
         {prices.msg && (
-          <span role="status" style={{ fontSize: 13, color: C.textMuted }}>
+          <span role="status" style={{ flexBasis: '100%', textAlign: 'right', fontSize: 13, color: C.textMuted }}>
             {prices.msg}
           </span>
         )}
-      </div>
-      <div className={s.pills} role="group" aria-label="Filter entries">
-        {filters.map(([k, l]) => (
-          <button
-            key={k}
-            type="button"
-            aria-pressed={filter === k}
-            className={filter === k ? s.optOn : s.opt}
-            onClick={() => {
-              setFilter(k);
-              setClosing(null);
-            }}
-          >
-            {l} · {count(k)}
-          </button>
-        ))}
       </div>
       <div className={s.cardFlush}>
         {list.length === 0 && <div style={{ padding: '48px 24px', textAlign: 'center', fontSize: 15, color: C.textMuted }}>No entries here yet.</div>}
@@ -203,7 +204,7 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
                       <span style={{ fontSize: 12, color: C.textMuted }}>{catWhen}</span>
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
                     {plan.map(p => (
                       <div key={p.k} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 2 }}>
                         <span style={{ fontSize: 12, color: C.textMuted }}>{p.k}</span>
@@ -235,18 +236,19 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
                   {closing !== t.id && (
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       {!cl && (
-                        <button type="button" className={s.btnOutline} onClick={() => startClose(t)}>
+                        <button type="button" className={s.btnOutline} onClick={() => setForm({ t })}>
+                          <Icon d={IC.plus} size={16} /> Add update
+                        </button>
+                      )}
+                      <button type="button" className={s.btnOutline} onClick={() => onEdit(storedOf(t))}>
+                        Edit entry
+                      </button>
+                      {/* Closing is final, so it sits apart from the everyday actions. */}
+                      {!cl && (
+                        <button type="button" className={s.btnGhost} onClick={() => startClose(t)} style={{ marginLeft: 'auto' }}>
                           Close trade
                         </button>
                       )}
-                      {!cl && (
-                        <button type="button" className={s.btnOutline} onClick={() => setForm({ t })}>
-                          Add update
-                        </button>
-                      )}
-                      <button type="button" className={s.btnGhost} onClick={() => onEdit(storedOf(t))}>
-                        Edit
-                      </button>
                     </div>
                   )}
                   {!cl && closing === t.id && (

@@ -102,8 +102,8 @@ export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
         </div>
       </div>
       <div className={s.stats}>
-        <Stat label="Portfolio value" value={dF(fl.v)} sub="As of last price update" />
-        <Stat label="Total contributed" value={dF(fl.c)} sub={dS(fl.c - fs0.c, true) + ' added in this range'} />
+        <Stat label="Portfolio value" value={dS(fl.v)} sub={dF(fl.v) + ' · as of last price update'} />
+        <Stat label="Total contributed" value={dS(fl.c)} sub={dS(fl.c - fs0.c, true) + ' added in this range'} />
         <Stat label="Total gain" value={dS(gNow, true)} sub={fmtPct((gNow / fl.c) * 100) + ' of contributions'} ink={plInk(gNow)} subInk={plInk(gNow)} />
         <Stat label="Gain in range" value={dS(gRange, true)} sub={'Since ' + fullDate(fs0.dt) + ', excluding deposits'} ink={plInk(gRange)} />
       </div>

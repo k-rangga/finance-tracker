@@ -11,7 +11,6 @@ import type { PriceRefresh } from './Journal';
 type Props = { cycle: Cycle; P: PortfolioModel; prices: Prices; refresh: PriceRefresh; onOpenPrices: () => void; onOpenTrade: (id: string) => void };
 
 
-const GRID = 'minmax(190px,1.3fr) 110px 150px 140px 130px minmax(200px,1.3fr)';
 
 export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade }: Props) {
   const { settings, full, short, ofIncome } = useSettings();
@@ -58,7 +57,7 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
       <Card style={{ gap: 24 }}>
         <CardHead title="Portfolio" caption={`Totals in ${settings.currency} · USD at Rp ${settings.fxRate.toLocaleString('id-ID')}`} />
         <div className={s.stats}>
-          <Stat label="Portfolio value" value={dF(P.tot)} sub={`${P.pos.length} open positions`} />
+          <Stat label="Portfolio value" value={dS(P.tot)} sub={`${dF(P.tot)} · ${P.pos.length} open ${P.pos.length === 1 ? 'position' : 'positions'}`} />
           <Stat
             label="Unrealised P/L"
             value={dS(P.upl, true)}
@@ -112,15 +111,15 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
           )}
           <span style={{ flexBasis: '100%', fontSize: 12, color: C.textMuted }}>Grey tick = entry, dot = last price · tap a row for its journal entry</span>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <div style={{ minWidth: 920, display: 'flex', flexDirection: 'column' }} role="table" aria-label="Holdings">
-            <div role="row" className={s.eyebrow} style={{ display: 'grid', gridTemplateColumns: GRID, padding: '12px 0', borderTop: `1px solid ${C.border}` }}>
-              <span role="columnheader" style={{ padding: '0 16px 0 28px' }}>Asset</span>
-              <span role="columnheader" style={{ padding: '0 16px' }}>Qty</span>
-              <span role="columnheader" style={{ padding: '0 16px' }}>Last / avg</span>
-              <span role="columnheader" style={{ padding: '0 16px', textAlign: 'right' }}>Value</span>
-              <span role="columnheader" style={{ padding: '0 16px', textAlign: 'right' }}>P/L</span>
-              <span role="columnheader" style={{ padding: '0 28px 0 16px' }}>Stop → target</span>
+        <div>
+          <div style={{ display: 'flex', flexDirection: 'column' }} role="table" aria-label="Holdings">
+            <div role="row" className={`${s.eyebrow} ${s.holdRow} ${s.holdHead}`}>
+              <span role="columnheader" className={s.hAsset}>Asset</span>
+              <span role="columnheader" className={s.hQty}>Qty</span>
+              <span role="columnheader" className={s.hLast}>Last / avg</span>
+              <span role="columnheader" className={s.hValue}>Value</span>
+              <span role="columnheader" className={s.hPl}>P/L</span>
+              <span role="columnheader" className={s.hPlan}>Stop → target</span>
             </div>
             {rows.length === 0 && (
               <div style={{ padding: '32px 28px', borderTop: `1px solid ${C.border}`, fontSize: 14, color: C.textMuted }}>
@@ -130,6 +129,8 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
             {rows.map(p => {
               const t = p.t;
               const hasPlan = !!(t.tg && t.sl);
+              /** % the last price is above the stop, for trades with a stop but no target. */
+              const toStop = t.sl ? ((p.last - t.sl) / t.sl) * 100 : 0;
               let tag: [string, string, string] = ['In range', C.divider, C.textMuted];
               let lastL = '0%';
               let entryL = '0%';
@@ -150,11 +151,10 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
                   key={t.id}
                   type="button"
                   role="row"
-                  className={`${s.rowBtn} ${s.hoverRow}`}
+                  className={`${s.rowBtn} ${s.hoverRow} ${s.holdRow}`}
                   onClick={() => onOpenTrade(t.id)}
-                  style={{ display: 'grid', gridTemplateColumns: GRID, alignItems: 'center', padding: '16px 0', borderTop: `1px solid ${C.border}`, fontSize: 15 }}
                 >
-                  <span role="cell" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px 0 28px', minWidth: 0 }}>
+                  <span role="cell" className={s.hAsset} style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                     <Dot color={MK_COLOR[t.mk]} />
                     <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                       <span style={{ fontWeight: 700 }}>{t.tk}</span>
@@ -164,23 +164,23 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
                       </span>
                     </span>
                   </span>
-                  <span role="cell" style={{ padding: '0 16px' }}>{qtyLabel(t)}</span>
-                  <span role="cell" style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 16px' }}>
+                  <span role="cell" className={s.hQty}>{qtyLabel(t)}</span>
+                  <span role="cell" className={s.hLast} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <span>
                       {nat(p.last, t.mk)}
                       {!P.hasPrice(t) ? ' · no price' : prices.auto?.[t.tk] ? '' : ' · manual'}
                     </span>
                     <span style={{ fontSize: 12, color: C.textMuted }}>avg {nat(t.px, t.mk)}</span>
                   </span>
-                  <span role="cell" style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 16px', textAlign: 'right' }}>
+                  <span role="cell" className={s.hValue} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <span style={{ fontWeight: 700 }}>{dS(p.val)}</span>
                     <span style={{ fontSize: 12, color: C.textMuted }}>{Math.round((p.val / P.tot) * 100)}% of portfolio</span>
                   </span>
-                  <span role="cell" style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 16px', textAlign: 'right' }}>
+                  <span role="cell" className={s.hPl} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <span style={{ fontWeight: 700, color: ink }}>{fmtPct(p.plp)}</span>
                     <span style={{ fontSize: 12, color: ink }}>{dS(p.pl, true)}</span>
                   </span>
-                  <span role="cell" style={{ padding: '0 28px 0 16px' }}>
+                  <span role="cell" className={s.hPlan}>
                     {hasPlan ? (
                       <span style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <span className={s.badge} style={{ alignSelf: 'flex-start', padding: '3px 10px', background: tag[1], color: tag[2] }}>
@@ -202,13 +202,20 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
                             }}
                           />
                         </span>
-                        <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, color: C.textMuted }}>
+                        <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, color: C.textMuted, whiteSpace: 'nowrap' }}>
                           <span>Stop {nat(t.sl!, t.mk)}</span>
                           <span>Target {nat(t.tg!, t.mk)}</span>
                         </span>
                       </span>
+                    ) : t.sl ? (
+                      <span style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12, color: C.textMuted }}>
+                        <span style={{ whiteSpace: 'nowrap' }}>Stop {nat(t.sl, t.mk)} · no target</span>
+                        <span style={{ fontWeight: 700, color: toStop < 0 ? C.redInk : toStop <= 3 ? C.amberInk : C.textMuted }}>
+                          {toStop < 0 ? 'Stop breached' : `${toStop.toFixed(1)}% above stop`}
+                        </span>
+                      </span>
                     ) : (
-                      <span style={{ fontSize: 13, color: C.textMuted }}>Long-term · no exit levels</span>
+                      <span style={{ fontSize: 12, color: C.textMuted }}>{t.st === 'Long-term' ? 'Long-term · no exit levels' : 'No exit levels'}</span>
                     )}
                   </span>
                 </button>
