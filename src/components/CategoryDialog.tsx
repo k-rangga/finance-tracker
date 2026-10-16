@@ -42,13 +42,40 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
   const current = builtIn ? categoryByName(builtIn.name) : undefined;
   const [name, setName] = useState((existing?.name ?? builtIn?.name ?? initialName).trim());
   const [type, setType] = useState<CategoryType>(existing?.type ?? builtIn?.type ?? 'variable');
-  const [pct, setPct] = useState(String(existing?.limitPct ?? current?.limitPct ?? 2));
+  // The limit is stored as % of income; you can type either the % or the amount and the other fills in.
+  const ofIncome = (p: number) => (p / 100) * settings.income;
+  const fmtPct = (p: number) => String(Math.round(p * 100) / 100);
+  const fmtAmt = (v: number) => (settings.currency === 'IDR' ? Math.round(v).toLocaleString('id-ID') : String(Math.round(v * 100) / 100));
+  const startPct = existing?.limitPct ?? current?.limitPct ?? 2;
+  const [limitPct, setLimitPct] = useState(startPct);
+  const [pctText, setPctText] = useState(fmtPct(startPct));
+  const [amtText, setAmtText] = useState(fmtAmt(ofIncome(startPct)));
+  const setFromPct = (text: string) => {
+    setPctText(text);
+    const p = Number(text.replace(',', '.'));
+    setLimitPct(text.trim() === '' ? NaN : p);
+    if (text.trim() !== '' && Number.isFinite(p)) setAmtText(fmtAmt(ofIncome(p)));
+    setErr('');
+  };
+  const setFromAmount = (text: string) => {
+    setAmtText(text);
+    const v = settings.currency === 'IDR' ? Number(text.replace(/\D/g, '')) : Number(text.replace(/[^\d.]/g, ''));
+    const p = settings.income > 0 ? (v / settings.income) * 100 : NaN;
+    // Keep full precision so the amount you typed is exactly the limit.
+    setLimitPct(text.trim() === '' ? NaN : p);
+    if (text.trim() !== '' && Number.isFinite(p)) setPctText(fmtPct(p));
+    setErr('');
+  };
+  const resetTo = (p: number) => {
+    setLimitPct(p);
+    setPctText(fmtPct(p));
+    setAmtText(fmtAmt(ofIncome(p)));
+  };
   const [icon, setIcon] = useState<string>(existing?.icon ?? 'wallet');
   const [color, setColor] = useState(existing?.color ?? current?.color ?? nextHue(CATEGORIES).color);
   const [err, setErr] = useState('');
   const [deleting, setDeleting] = useState(false);
 
-  const limitPct = Number(pct.replace(',', '.'));
   const draft: CustomCategory = { name: name.trim() || 'New category', type, limitPct, icon, color };
   const preview = { ...toCategory(draft), ...(builtIn ? { icon: builtIn.icon } : {}) };
   const used = new Set(CATEGORIES.filter(c => c.name !== editing).map(c => c.color));
@@ -64,7 +91,7 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
       // Only store what differs from the default, so defaults can still change later.
       const limits = { ...settings.limitOverrides, [builtIn.name]: limitPct };
       const colors = { ...settings.colorOverrides, [builtIn.name]: color };
-      if (limitPct === builtIn.limitPct) delete limits[builtIn.name];
+      if (Math.abs(limitPct - builtIn.limitPct) < 1e-9) delete limits[builtIn.name];
       if (color === builtIn.color) delete colors[builtIn.name];
       update({ limitOverrides: limits, colorOverrides: colors });
       onSaved?.(builtIn.name);
@@ -144,32 +171,30 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
           />
         )}
       </div>
-      <label className={s.field}>
-        <span>
-          Monthly limit <span style={{ fontWeight: 500 }}>(% of income)</span>
-        </span>
-        <input
-          className={s.input}
-          autoFocus={!!builtIn}
-          inputMode="decimal"
-          value={pct}
-          onChange={e => {
-            setPct(e.target.value);
-            setErr('');
-          }}
-        />
-        <span style={{ fontWeight: 500 }}>
-          {Number.isFinite(limitPct) ? `${full((limitPct / 100) * settings.income)} a month · adds to your spending budget` : ''}
-          {builtIn && limitPct !== builtIn.limitPct && (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span className={s.label}>Monthly limit</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+          <label className={s.field}>
+            <span style={{ fontWeight: 500 }}>% of income</span>
+            <input className={s.input} autoFocus={!!builtIn} inputMode="decimal" value={pctText} onChange={e => setFromPct(e.target.value)} aria-label="Monthly limit as % of income" />
+          </label>
+          <label className={s.field}>
+            <span style={{ fontWeight: 500 }}>Amount a month ({settings.currency})</span>
+            <input className={s.input} inputMode="decimal" value={amtText} onChange={e => setFromAmount(e.target.value)} aria-label={`Monthly limit in ${settings.currency}`} />
+          </label>
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>
+          Of your {full(settings.income)} income · adds to your spending budget
+          {builtIn && Math.abs(limitPct - builtIn.limitPct) > 1e-9 && (
             <>
               {' · '}
-              <button type="button" className={s.textBtnSm} onClick={() => setPct(String(builtIn.limitPct))} style={{ padding: 0 }}>
+              <button type="button" className={s.textBtnSm} onClick={() => resetTo(builtIn.limitPct)} style={{ padding: 0 }}>
                 Reset to {builtIn.limitPct}%
               </button>
             </>
           )}
         </span>
-      </label>
+      </div>
       {!builtIn && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span className={s.label}>Icon</span>
