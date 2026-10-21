@@ -188,7 +188,7 @@ function storeParsed_(parsed) {
   const existing = readTable_('transactions');
   const byRef = {};
   existing.forEach(r => {
-    if (r.ref) byRef[r.ref] = { id: r.id, source: r.source, stored: true };
+    if (r.ref) byRef[r.ref] = { id: r.id, source: r.source, account: r.account, stored: true };
   });
   const rows = {};
   const skipped = [];
@@ -227,12 +227,14 @@ function storeParsed_(parsed) {
       if (prev) {
         duplicates++;
         if (rank_(row.source) <= rank_(prev.source)) return skip('duplicate of ' + prev.id);
-        // This email describes the purchase better (e.g. the Grab receipt after the card alert): swap it in.
+        // This email describes the purchase better (e.g. the Grab receipt after the card alert): swap it in,
+        // on the card if the alert was a card charge, so it still counts on the card.
+        if (prev.source === 'Card receipt' && prev.account) row.account = prev.account;
         if (prev.stored) replaced.push(prev.id);
         else delete rows[prev.id];
         skipped.push({ id: prev.id, subject: '', seen_at: now, reason: 'duplicate of ' + row.id });
       }
-      if (p.ref) byRef[p.ref] = { id: row.id, source: row.source, stored: false };
+      if (p.ref) byRef[p.ref] = { id: row.id, source: row.source, account: row.account, stored: false };
       rows[row.id] = row;
     });
 
@@ -252,7 +254,98 @@ function storeParsed_(parsed) {
   const list = Object.keys(rows).map(k => rows[k]);
   const imported = appendNew_('transactions', 'id', list);
   appendNew_('skipped', 'id', skipped);
-  return { imported: imported, skipped: skipped.length, duplicates: duplicates, reversed: reversed };
+  // Card alerts and merchant receipts for the same purchase carry different codes, so refs don't catch them.
+  const merged = mergeCardDuplicates_();
+  return { imported: imported, skipped: skipped.length, duplicates: duplicates + merged, reversed: reversed };
+}
+
+// ---- card alert + merchant receipt for the same purchase ----
+
+/** The merchant's receipt comes this long after the card alert (or a little before). */
+const CARD_MATCH_AFTER_MS = 2 * 3600e3;
+const CARD_MATCH_BEFORE_MS = 30 * 60e3;
+
+/**
+ * Pairs of { card, receipt } rows that describe one purchase: a card alert ("Grab") and the merchant's
+ * own receipt ("Tianlala – Oregon Square", Dining) with the same amount, the receipt within the window
+ * around the alert, and the alert's merchant named in the receipt. Nearest pairs win; each row pairs once.
+ */
+function pairCardDuplicates_(rows) {
+  const at = r => new Date(r.occurred_at).getTime();
+  const brand = r => (String(r.title).toLowerCase().match(/[a-z0-9]+/) || [''])[0];
+  const cards = rows.filter(r => r.source === 'Card receipt' && r.kind !== 'transfer' && brand(r).length >= 3);
+  const receipts = rows.filter(r => rank_(r.source) === 3 && r.kind !== 'transfer');
+  const pairs = [];
+  cards.forEach(c => {
+    const b = brand(c);
+    receipts.forEach(r => {
+      const dt = at(r) - at(c);
+      if (dt < -CARD_MATCH_BEFORE_MS || dt > CARD_MATCH_AFTER_MS) return;
+      if (Math.abs(Number(r.amount) - Number(c.amount)) > 0.005 || r.currency !== c.currency) return;
+      if ([r.sender, r.title, r.ref].join(' ').toLowerCase().indexOf(b) < 0) return;
+      pairs.push({ card: c, receipt: r, gap: Math.abs(dt) });
+    });
+  });
+  pairs.sort((x, y) => x.gap - y.gap);
+  const used = {};
+  return pairs.filter(p => {
+    if (used[p.card.id] || used[p.receipt.id]) return false;
+    used[p.card.id] = used[p.receipt.id] = true;
+    return true;
+  });
+}
+
+/**
+ * Keep the merchant's receipt for each card + receipt pair, on the card's account (so it still counts on the
+ * card), and drop the card alert. Your category fix, reimbursement link or share on the alert moves to the
+ * receipt. Returns how many alerts were merged.
+ */
+function mergeCardDuplicates_() {
+  const pairs = pairCardDuplicates_(readTable_('transactions'));
+  if (!pairs.length) return 0;
+  const now = new Date().toISOString();
+  const overrides = readTable_('overrides');
+  const shares = readTable_('shares');
+  const links = readTable_('links');
+  pairs.forEach(p => {
+    const from = p.card.id;
+    const to = p.receipt.id;
+    if (p.receipt.account !== p.card.account) upsertRow_('transactions', 'id', Object.assign({}, p.receipt, { account: p.card.account }));
+    const ov = overrides.filter(o => o.tx_id === from)[0];
+    if (ov && !overrides.some(o => o.tx_id === to)) upsertRow_('overrides', 'tx_id', { tx_id: to, category: ov.category, updated_at: now });
+    const sh = shares.filter(x => x.tx_id === from)[0];
+    if (sh && !shares.some(x => x.tx_id === to)) upsertRow_('shares', 'tx_id', { tx_id: to, ratio: sh.ratio, updated_at: now });
+    links.filter(l => l.expense_id === from).forEach(l => upsertRow_('links', 'income_id', { income_id: l.income_id, expense_id: to, updated_at: now }));
+  });
+  const gone = pairs.map(p => p.card.id);
+  deleteWhere_('transactions', 'id', gone);
+  deleteWhere_('overrides', 'tx_id', gone);
+  deleteWhere_('shares', 'tx_id', gone);
+  appendNew_('skipped', 'id', pairs.map(p => ({ id: p.card.id, subject: String(p.card.subject || '').slice(0, 300), seen_at: now, reason: 'duplicate of ' + p.receipt.id })));
+  return pairs.length;
+}
+
+/**
+ * Receipts that replaced a card alert by booking code before accounts were carried over lost the card.
+ * The `skipped` log still says which receipt replaced which alert (alert subject blank, or a card subject),
+ * so put those receipts back on the card. Repeat forwards of the same receipt keep their own subject and are left alone.
+ */
+function restoreCardAccounts_() {
+  const fromCard = {};
+  readTable_('skipped').forEach(k => {
+    const m = String(k.reason || '').match(/^duplicate of (.+)$/);
+    const subj = String(k.subject || '');
+    if (m && (subj === '' || /credit card|kartu kredit/i.test(subj))) fromCard[m[1]] = subj;
+  });
+  let n = 0;
+  readTable_('transactions').forEach(r => {
+    if (!(r.id in fromCard) || rank_(r.source) !== 3 || r.kind === 'transfer' || /^CC /.test(r.account || '')) return;
+    // A blank subject only ever comes from a swap, and only card alerts share a booking code with a receipt.
+    if (fromCard[r.id] === '' && !/^grab:/.test(r.ref || '')) return;
+    upsertRow_('transactions', 'id', Object.assign({}, r, { account: cardAccount_(fromCard[r.id] || 'BCA') }));
+    n++;
+  });
+  return n;
 }
 
 /** Rebuild the transactions tab from Gmail with the current rules. Category fixes (overrides) are kept. */

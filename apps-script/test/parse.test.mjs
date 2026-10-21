@@ -11,6 +11,11 @@ const ctx = {
   // Minimal stand-ins for Sheets.js so storeParsed_ can run.
   readTable_: n => (sheets[n] || []).slice(),
   deleteWhere_: (n, k, vals) => (sheets[n] = (sheets[n] || []).filter(r => !vals.includes(r[k]))),
+  upsertRow_: (n, k, obj) => {
+    const list = sheets[n] || [];
+    const i = list.findIndex(r => r[k] === obj[k]);
+    sheets[n] = i >= 0 ? list.map((r, j) => (j === i ? obj : r)) : [...list, obj];
+  },
   appendNew_: (n, k, objs) => {
     const have = new Set((sheets[n] || []).map(r => r[k]));
     const add = objs.filter(o => !have.has(o[k]));
@@ -212,10 +217,55 @@ try {
   assert.deepEqual(sheets.transactions.map(r => r.id), ['g1']);
   assert.equal(r1.duplicates, 2);
   assert.equal(r2.reversed, 1);
-  console.log('ok   dedupe keeps the Grab receipt, drops card alert + repeat, reversal removes its charge');
+  assert.equal(sheets.transactions[0].account, 'CC BCA', 'receipt that replaced the card alert stays on the card');
+  console.log('ok   dedupe keeps the Grab receipt (on the card), drops card alert + repeat, reversal removes its charge');
 } catch (e) {
   failed++;
   console.log('FAIL dedupe —', e.message, JSON.stringify(sheets.transactions?.map(r => r.id)));
+}
+
+// Card alert and Grab receipt with different codes: matched by amount, time and merchant instead.
+for (const k of Object.keys(sheets)) delete sheets[k];
+sheets.overrides = [{ tx_id: 'c3', category: 'Dining', updated_at: 'x' }];
+sheets.links = [{ income_id: 'in1', expense_id: 'c3', updated_at: 'x' }];
+const r3 = store([
+  msg('c3', '2026-09-10T05:29:00Z', 'FW: Credit Card Transaction Notification', ME, card('A-CCCCCCCCCC3')),
+  msg('g3', '2026-09-10T05:48:00Z', 'FW: Your Grab E-Receipt', ME, grab('A-DDDDDDDDDD4')),
+  // Same amount, five hours later: a different ride.
+  msg('g5', '2026-09-10T10:30:00Z', 'FW: Your Grab E-Receipt', ME, grab('A-EEEEEEEEEE5')),
+]);
+try {
+  assert.deepEqual(sheets.transactions.map(r => r.id).sort(), ['g3', 'g5']);
+  assert.equal(sheets.transactions.find(r => r.id === 'g3').account, 'CC BCA');
+  assert.equal(sheets.transactions.find(r => r.id === 'g5').account, 'Bank');
+  assert.deepEqual(sheets.overrides.map(o => o.tx_id), ['g3'], 'category fix moves to the receipt');
+  assert.equal(sheets.links[0].expense_id, 'g3', 'reimbursement link moves to the receipt');
+  assert.ok(sheets.skipped.some(k => k.id === 'c3' && k.reason === 'duplicate of g3'), 'alert is not imported again');
+  assert.equal(r3.duplicates, 1);
+  console.log('ok   card alert + merchant receipt with different codes merge onto the card; a later same-amount ride stays');
+} catch (e) {
+  failed++;
+  console.log('FAIL card merge —', e.message, JSON.stringify(sheets.transactions));
+}
+
+// Receipts that replaced a card alert before accounts were carried over go back on the card; repeat forwards don't count.
+for (const k of Object.keys(sheets)) delete sheets[k];
+sheets.transactions = [
+  { id: 'g6', source: 'Ride app email', kind: 'spend', ref: 'grab:A-FFFFFFFFFF6:16000', account: 'Bank', amount: 16000 },
+  { id: 'g7', source: 'Ride app email', kind: 'spend', ref: 'grab:A-GGGGGGGGGG7:16000', account: 'Bank', amount: 16000 },
+];
+sheets.skipped = [
+  { id: 'c6', subject: '', reason: 'duplicate of g6' },
+  { id: 'g7b', subject: 'FW: Your Grab E-Receipt', reason: 'duplicate of g7' },
+];
+try {
+  assert.equal(vm.runInContext('restoreCardAccounts_', ctx)(), 1);
+  assert.equal(sheets.transactions.find(r => r.id === 'g6').account, 'CC BCA');
+  assert.equal(sheets.transactions.find(r => r.id === 'g7').account, 'Bank');
+  console.log('ok   receipts that replaced a card alert earlier go back on the card');
+} catch (e) {
+  failed++;
+  console.log('FAIL restore card accounts —', e.message, JSON.stringify(sheets.transactions));
 }
 
 if (failed) {

@@ -104,6 +104,12 @@ function setup() {
 function ensureSetup_() {
   ss_();
   ensureSyncTrigger_();
+  // Once: merge card alerts with merchant receipts imported before the merge existed (later syncs do it themselves).
+  if (!props_('cardMergeV1', false)) {
+    restoreCardAccounts_();
+    mergeCardDuplicates_();
+    setProps_('cardMergeV1', true);
+  }
 }
 
 function overrides_() {
