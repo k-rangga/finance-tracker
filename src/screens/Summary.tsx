@@ -1,4 +1,4 @@
-import { useMemo, useState, type MouseEvent } from 'react';
+import { useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { Badge, Bar, Card, CardHead, Dot, IconChip } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
@@ -38,9 +38,25 @@ export function Summary({ cycle, budget, onOpenCategory }: Props) {
   );
 }
 
+type Row = {
+  id: string;
+  label: string;
+  value?: string;
+  items: Item[];
+  note?: string;
+  strong?: boolean;
+  /** Shown above the items when the row opens (e.g. the savings breakdown). */
+  summary?: ReactNode;
+  /** List the items under collapsible category groups instead of straight by day. */
+  byCategory?: boolean;
+  /** A one-line row with nothing to open and no amount (e.g. "No more bills before payday"). */
+  quiet?: boolean;
+};
+
 function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
   const { full, short, ofIncome, settings } = useSettings();
-  const [open, setOpen] = useState<string | null>('var');
+  // Everything starts collapsed.
+  const [open, setOpen] = useState<string | null>(null);
   const budgetPct = Math.round((b.budget / b.income) * 100);
 
   const txItem = (t: TxView): Item => {
@@ -74,43 +90,73 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
     cat: bill.category,
   }));
   const savings = ofIncome(SAVINGS_TARGET_PCT);
+  const investPlan = ofIncome(settings.investPct);
   const count = (n: number) => (n ? n + (n === 1 ? ' transaction' : ' transactions') : '');
+  const fixedItems = b.txs.filter(t => typeOf(t.cat) === 'fixed').map(txItem);
+  const varItems = b.txs.filter(t => typeOf(t.cat) === 'variable').map(txItem);
 
-  const rows: { id: string; label: string; value: string; items: Item[]; note?: string; strong?: boolean }[] = [
+  // Savings and investing are one pocket: the plan, what went to brokers, and what's left in savings.
+  const aboveInvestPlan = b.invested - investPlan;
+  const leftInSavings = savings - b.invested;
+  const savingsNote =
+    `Invested ${full(b.invested)}` +
+    (b.invested ? (aboveInvestPlan > 0 ? ` · ${full(aboveInvestPlan)} above plan` : ` of ${full(investPlan)} planned`) : '') +
+    (leftInSavings >= 0 ? ` · ${full(leftInSavings)} left in savings` : ` · ${full(-leftInSavings)} more than you saved`);
+  const savingsSummary = (
+    <div style={{ display: 'flex', flexDirection: 'column', padding: '6px 0 4px' }}>
+      <BreakdownLine label={`Planned savings (${SAVINGS_TARGET_PCT}% of income)`} value={full(savings)} />
+      <BreakdownLine
+        label="Invested this cycle"
+        sub={`Plan ${full(investPlan)} (${settings.investPct}% of income)` + (aboveInvestPlan > 0 ? ` · ${full(aboveInvestPlan)} above plan` : '')}
+        value={full(b.invested)}
+        ink={aboveInvestPlan > 0 ? C.amberInk : C.text}
+      />
+      <BreakdownLine
+        label={leftInSavings >= 0 ? 'Left in savings' : 'Invested beyond your savings'}
+        value={full(Math.abs(leftInSavings))}
+        ink={leftInSavings >= 0 ? C.accent800 : C.redInk}
+        strong
+      />
+    </div>
+  );
+
+  const rows: Row[] = [
     { id: 'inc', label: 'Income', value: full(b.income), items: b.txs.filter(t => t.isIncome && !t.reimbursesId).map(txItem) },
     {
       id: 'save',
       label: `Savings (${SAVINGS_TARGET_PCT}%)`,
       value: full(savings),
-      items: [{ key: 'save', title: 'Transfer to savings', sub: `${dayMonth(cycle.start)} · Payday · Automatic`, value: '- ' + full(savings), ink: C.text, icon: IC.piggy }],
-    },
-    {
-      id: 'invest',
-      label: 'Invested',
-      value: full(b.invested),
       items: b.txs.filter(t => t.isInvestment).map(txItem),
-      note: `${full(b.invested)} of ${full(ofIncome(settings.investPct))} invested this cycle · Investing pocket, not spending`,
+      note: savingsNote,
+      summary: savingsSummary,
     },
-    { id: 'fixed', label: 'Fixed bills paid', value: full(b.fixedSpent), items: b.txs.filter(t => typeOf(t.cat) === 'fixed').map(txItem) },
-    { id: 'var', label: 'Variable spending', value: full(b.varSpent), items: b.txs.filter(t => typeOf(t.cat) === 'variable').map(txItem) },
-    { id: 'due', label: 'Bills still due', value: full(b.fixedDue), items: billItems, note: `${billItems.length} upcoming before ${dayMonth(cycle.end)}` },
+    { id: 'fixed', label: 'Fixed bills paid', value: full(b.fixedSpent), items: fixedItems },
+    { id: 'var', label: 'Variable spending', value: full(b.varSpent), items: varItems, byCategory: true },
+    billItems.length
+      ? { id: 'due', label: 'Bills still due', value: full(b.fixedDue), items: billItems, note: `${billItems.length} upcoming before ${dayMonth(cycle.end)}` }
+      : { id: 'due', label: 'No more bills before payday', items: [], quiet: true },
     {
       id: 'safe',
       label: 'Safe to spend / day',
       value: full(b.safeDay),
       items: [],
-      note: `${cycle.daysLeft} days left · ${full(b.budget - b.spent - b.fixedDue)} after bills`,
+      note: `${cycle.daysLeft} ${cycle.daysLeft === 1 ? 'day' : 'days'} left · ${full(b.budget - b.spent - b.fixedDue)} after bills`,
     },
     { id: 'left', label: 'Left to spend', value: full(b.budget - b.spent), items: [], strong: true },
-  ];
+  ].filter((r: Row) => r.quiet || r.strong || r.id === 'inc' || r.id === 'safe' || r.items.length > 0 || r.summary || r.value !== full(0));
 
   const ringDeg = Math.max(0, Math.min(100, b.projSavePct)) * 3.6;
   const onTarget = b.projSavePct >= SAVINGS_TARGET_PCT;
-  const heroColor = b.spent > b.budget ? C.red : b.spent > b.paceToday ? C.amber : C.mint[5];
+  const usedInk = b.spent > b.budget ? C.redInk : b.spent > b.paceToday ? C.amberInk : C.textMuted;
+  // The bar is the spending budget, coloured by what it went on (largest first).
+  const segs = b.cats.filter(c => c.spent > 0).sort((x, y) => y.spent - x.spent);
+  const scale = Math.max(b.budget, b.spent);
+  const ending = cycle.daysLeft <= 2;
 
   return (
     <Card style={{ gap: 24, overflow: 'hidden' }}>
       <CardHead title="This cycle" caption="Tap a row to see its transactions" />
+      {ending && <CycleWrapUp cycle={cycle} budget={b} />}
       <div style={{ display: 'flex', gap: 32, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flex: 1, minWidth: 240 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -122,22 +168,33 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
             <span style={{ fontSize: 22, fontWeight: 700 }}>{full(b.budget)}</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div className={s.track} style={{ height: 14 }}>
-              <div className={s.fill} style={{ width: pc((b.spent / b.budget) * 100), background: heroColor }} />
-              <div className={s.tick} style={{ top: -5, bottom: -5, width: 4, left: pc((b.paceToday / b.budget) * 100) }} />
+            <div
+              className={s.track}
+              style={{ height: 14, display: 'flex', overflow: 'visible' }}
+              role="img"
+              aria-label={'Spent by category: ' + segs.map(c => `${c.name} ${full(c.spent)}`).join(', ')}
+            >
+              <div style={{ display: 'flex', width: '100%', height: '100%', borderRadius: 999, overflow: 'hidden', gap: 2 }}>
+                {segs.map(c => (
+                  <div key={c.name} title={`${c.name} ${full(c.spent)}`} style={{ flex: 'none', width: pc((c.spent / scale) * 100), background: c.color }} />
+                ))}
+              </div>
+              <div className={s.tick} style={{ top: -5, bottom: -5, width: 4, left: pc((b.paceToday / scale) * 100) }} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, color: C.textMuted }}>
-              <span>{Math.round((b.spent / b.budget) * 100)}% used</span>
-              <span>Pace target today {short(b.paceToday)}</span>
+              <span style={{ color: usedInk, fontWeight: usedInk === C.textMuted ? 400 : 700 }}>
+                {Math.round((b.spent / b.budget) * 100)}% used{b.spent > b.budget ? ` · ${full(b.spent - b.budget)} over` : ''}
+              </span>
+              <span>{ending ? `${full(Math.max(0, b.budget - b.spent))} left until payday` : `Pace target today ${short(b.paceToday)}`}</span>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: C.textMuted }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Dot color={C.accent700} /> Fixed {full(b.fixedSpent)}
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Dot color={C.mint[5]} /> Variable {full(b.varSpent)}
-            </span>
+          <div style={{ display: 'flex', gap: '6px 14px', flexWrap: 'wrap', fontSize: 12, color: C.textMuted }}>
+            {segs.slice(0, 5).map(c => (
+              <span key={c.name} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Dot color={c.color} /> {c.name} {short(c.spent)}
+              </span>
+            ))}
+            {segs.length > 5 && <span>+{segs.length - 5} more</span>}
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, margin: '0 auto' }}>
@@ -163,8 +220,15 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
       </div>
       <div className={s.bleed}>
         {rows.map(r => {
-          const has = r.items.length > 0;
+          const has = r.items.length > 0 || !!r.summary;
           const isOpen = open === r.id && has;
+          if (r.quiet)
+            return (
+              <div key={r.id} style={{ borderBottom: `1.5px solid ${C.divider}`, padding: '14px var(--pad)', fontSize: 13, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon d={IC.calendar} size={15} />
+                {r.label}
+              </div>
+            );
           return (
             <div key={r.id} style={{ borderBottom: `1.5px solid ${C.divider}` }}>
               <button
@@ -184,21 +248,8 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
               </button>
               {isOpen && (
                 <div className="fade-in" style={{ padding: '0 var(--pad) 8px' }}>
-                  {groupByDay(r.items).map(g => (
-                    <div key={g.label || 'items'}>
-                      {g.label && (
-                        <h3
-                          style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.textMuted, padding: '14px 0 6px' }}
-                        >
-                          <span>{g.label}</span>
-                          <span style={{ letterSpacing: 0, textTransform: 'none' }}>{dayTotalLabel(sum(g.items.map(i => i.dayAmount ?? 0)), full)}</span>
-                        </h3>
-                      )}
-                      {g.items.map(i => (
-                        <CycleItem key={i.key} i={i} />
-                      ))}
-                    </div>
-                  ))}
+                  {r.summary}
+                  {r.byCategory ? <ByCategory key={r.id} items={r.items} /> : <ByDay items={r.items} />}
                 </div>
               )}
             </div>
@@ -206,6 +257,123 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
         })}
       </div>
     </Card>
+  );
+}
+
+/** Last days of the cycle: how it's ending, instead of how it's pacing. */
+function CycleWrapUp({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
+  const { full } = useSettings();
+  const when = cycle.daysLeft === 0 ? 'today' : cycle.daysLeft === 1 ? 'tomorrow' : `in ${cycle.daysLeft} days`;
+  const over = b.cats.filter(c => c.spent > c.limit).sort((x, y) => y.spent - y.limit - (x.spent - x.limit))[0];
+  const usedPct = Math.round((b.spent / b.budget) * 100);
+  const onTarget = b.projSavePct >= SAVINGS_TARGET_PCT;
+  return (
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: C.accentSoft, borderRadius: 16, padding: '14px 16px' }}>
+      <IconChip d={IC.calendar} bg={C.accentTint} ink={C.accent800} size={34} iconSize={16} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+        <span style={{ fontSize: 15, fontWeight: 700 }}>
+          Cycle closes {when} · payday {dayLabel(cycle.next)}
+        </span>
+        <span style={{ fontSize: 13, color: C.textSoft, lineHeight: 1.5 }}>
+          Spent {usedPct}% of your budget · saving {b.projSavePct.toFixed(1)}% vs your {SAVINGS_TARGET_PCT}% target{onTarget ? ' ✓' : ''} ·{' '}
+          {over ? (
+            <>
+              biggest overspend: <strong style={{ color: C.redInk, whiteSpace: 'nowrap' }}>{over.name} +{full(over.spent - over.limit)}</strong>
+            </>
+          ) : (
+            'every category within its limit'
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function BreakdownLine({ label, sub, value, ink = C.text, strong }: { label: string; sub?: string; value: string; ink?: string; strong?: boolean }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: `1px solid ${C.divider}` }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
+        <span style={{ fontSize: 14, fontWeight: strong ? 700 : 600 }}>{label}</span>
+        {sub && <span style={{ fontSize: 12, color: C.textMuted }}>{sub}</span>}
+      </div>
+      <span style={{ fontSize: 14, fontWeight: strong ? 700 : 600, color: ink, whiteSpace: 'nowrap' }}>{value}</span>
+    </div>
+  );
+}
+
+/** Items under day headers with each day's total. */
+function ByDay({ items }: { items: Item[] }) {
+  const { full } = useSettings();
+  return (
+    <>
+      {groupByDay(items).map(g => (
+        <div key={g.label || 'items'}>
+          {g.label && (
+            <h3 style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.textMuted, padding: '14px 0 6px' }}>
+              <span>{g.label}</span>
+              <span style={{ letterSpacing: 0, textTransform: 'none' }}>{dayTotalLabel(sum(g.items.map(i => i.dayAmount ?? 0)), full)}</span>
+            </h3>
+          )}
+          {g.items.map(i => (
+            <CycleItem key={i.key} i={i} />
+          ))}
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** One collapsible group per category (largest first), each listing its items by day. All start collapsed. */
+function ByCategory({ items }: { items: Item[] }) {
+  const { full } = useSettings();
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const groups = useMemo(() => {
+    const m = new Map<string, Item[]>();
+    for (const i of items) m.set(i.cat ?? '', [...(m.get(i.cat ?? '') ?? []), i]);
+    return [...m].map(([cat, list]) => ({ cat, list, total: -sum(list.map(i => i.dayAmount ?? 0)) })).sort((x, y) => y.total - x.total);
+  }, [items]);
+  const toggle = (cat: string) =>
+    setOpen(o => {
+      const n = new Set(o);
+      if (n.has(cat)) n.delete(cat);
+      else n.add(cat);
+      return n;
+    });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {groups.map(g => {
+        const c = categoryByName(g.cat);
+        const ic = iconColors(g.cat);
+        const isOpen = open.has(g.cat);
+        return (
+          <div key={g.cat} style={{ borderTop: `1px solid ${C.divider}` }}>
+            <button
+              type="button"
+              className={s.rowBtn}
+              aria-expanded={isOpen}
+              onClick={() => toggle(g.cat)}
+              style={{ padding: '12px 0', gap: 12, background: 'transparent' }}
+            >
+              <IconChip d={c?.icon ?? IC.coins} bg={ic.bg} ink={ic.ink} size={34} iconSize={16} />
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0, textAlign: 'left' }}>
+                <span style={{ fontSize: 14, fontWeight: 700 }}>{g.cat}</span>
+                <span style={{ fontSize: 12, fontWeight: 500, color: C.textMuted }}>
+                  {g.list.length} {g.list.length === 1 ? 'transaction' : 'transactions'}
+                </span>
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 700 }}>{full(g.total)}</span>
+              <Icon d={IC.chevDown} size={15} color={C.textMuted} style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }} />
+            </button>
+            {isOpen && (
+              <div className="fade-in" style={{ paddingLeft: 46, paddingBottom: 6 }}>
+                {/* The group already says the category. */}
+                <ByDay items={g.list.map(i => ({ ...i, sub: i.sub.replace(` · ${g.cat} · `, ' · ') }))} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
