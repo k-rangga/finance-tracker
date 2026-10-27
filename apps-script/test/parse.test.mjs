@@ -253,6 +253,33 @@ try {
   console.log('FAIL card merge —', e.message, JSON.stringify(sheets.transactions));
 }
 
+// One transfer between your own accounts, told by both banks: names match ignoring punctuation.
+for (const k of Object.keys(sheets)) delete sheets[k];
+{
+  const tx = (id, at, title, ref, amount = 8500000) => ({ id, occurred_at: at, title, ref, amount, currency: 'IDR', kind: 'transfer', category: 'Transfer', source: 'Bank email', account: 'Bank' });
+  sheets.transactions = [
+    tx('t1', '2026-10-27T13:01:00Z', 'KALAKA RANGGA S', 'bca:111'),
+    tx('t2', '2026-10-27T13:01:30Z', 'KALAKA RANGGA, S', 'blu:222'),
+    // Two separate BCA transfers of the same amount: both stay.
+    tx('t3', '2026-10-27T14:00:00Z', 'SITI AMINAH', 'bca:333', 50000),
+    tx('t4', '2026-10-27T14:05:00Z', 'SITI AMINAH', 'bca:444', 50000),
+    // Same name and amount, an hour later: a second transfer.
+    tx('t5', '2026-10-27T14:10:00Z', 'KALAKA RANGGA S', 'blu:555'),
+  ];
+  sheets.overrides = [{ tx_id: 't2', category: 'Savings', updated_at: 'x' }];
+  const n = vm.runInContext('mergeTransferDuplicates_', ctx)();
+  try {
+    assert.equal(n, 1);
+    assert.deepEqual(sheets.transactions.map(r => r.id).sort(), ['t1', 't3', 't4', 't5']);
+    assert.deepEqual(sheets.overrides.map(o => [o.tx_id, o.category]), [['t1', 'Savings']], 'category fix moves to the kept row');
+    assert.ok(sheets.skipped.some(k => k.id === 't2' && k.reason === 'duplicate of t1'), 'dropped email is not imported again');
+    console.log('ok   both banks\' emails for one own transfer merge (punctuation ignored); separate transfers stay');
+  } catch (e) {
+    failed++;
+    console.log('FAIL transfer merge —', e.message, JSON.stringify(sheets.transactions?.map(r => r.id)));
+  }
+}
+
 // Receipts that replaced a card alert before accounts were carried over go back on the card; repeat forwards don't count.
 for (const k of Object.keys(sheets)) delete sheets[k];
 sheets.transactions = [

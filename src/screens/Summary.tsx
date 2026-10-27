@@ -278,6 +278,38 @@ function ThisCycle({ cycle, budget: b, onOpenSettings }: { cycle: Cycle; budget:
   );
 }
 
+/** "KALAKA RANGGA S" → "Kalaka Rangga S"; names already in mixed case are left alone. */
+const tidyName = (s: string) => (s === s.toUpperCase() && /[A-Z]/.test(s) ? s.toLowerCase().replace(/(^|[\s(/-])\p{L}/gu, c => c.toUpperCase()) : s);
+
+/** Header shared by the side cards: title with an optional action on the right, one summary line below. */
+function SideHead({ title, sub, action }: { title: string; sub?: ReactNode; action?: ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+        <h3 className={s.sideTitle}>{title}</h3>
+        {action}
+      </div>
+      {sub && <span style={{ fontSize: 13, color: C.textMuted }}>{sub}</span>}
+    </div>
+  );
+}
+
+/** One line in a side card: marker, name over a detail line, amount. */
+function SideRow({ mark, title, sub, value, ink = C.text }: { mark: ReactNode; title: string; sub: string; value: string; ink?: string }) {
+  return (
+    <div className={s.sideRow}>
+      <span className={s.sideMark}>{mark}</span>
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
+        <span className={s.ellipsis} style={{ fontSize: 14, fontWeight: 500 }}>
+          {title}
+        </span>
+        <span style={{ fontSize: 13, color: C.textMuted }}>{sub}</span>
+      </span>
+      <span style={{ fontSize: 14, fontWeight: 600, flex: 'none', color: ink }}>{value}</span>
+    </div>
+  );
+}
+
 /** Savings ring: what you moved with "Transfer (savings)" against the target. */
 function SavingsCard({ cycle, budget: b, onMark }: { cycle: Cycle; budget: Budget; onMark: () => void }) {
   const { full, short, ofIncome } = useSettings();
@@ -289,70 +321,77 @@ function SavingsCard({ cycle, budget: b, onMark }: { cycle: Cycle; budget: Budge
   const ring = onTarget ? C.mint[5] : cycle.daysLeft <= 7 && !none ? C.amber : C.accent600;
   const deg = Math.max(0, Math.min(100, (b.saved / Math.max(1, target)) * 100)) * 3.6;
   return (
-    <Card style={{ gap: 14, alignItems: 'center', textAlign: 'center' }}>
-      <div style={{ alignSelf: 'stretch', textAlign: 'left' }}>
-        <CardHead small title="Savings" caption={`Target ${SAVINGS_TARGET_PCT}% of income · ${full(target)}`} />
-      </div>
-      <div
-        role="img"
-        aria-label={`Saved ${b.savedPct.toFixed(1)}% of income this cycle against a ${SAVINGS_TARGET_PCT}% target`}
-        style={{ width: 148, height: 148, borderRadius: '50%', background: `conic-gradient(${ring} 0deg ${deg}deg, ${C.divider} ${deg}deg 360deg)`, display: 'grid', placeItems: 'center' }}
-      >
-        <div style={{ width: 114, height: 114, borderRadius: '50%', background: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontWeight: 800, letterSpacing: '-0.02em', fontSize: 26, color: ink }}>{none ? '0%' : b.savedPct.toFixed(1) + '%'}</span>
-          <span style={{ fontSize: 13, color: C.textMuted }}>of income saved</span>
+    <section className={s.sideCard}>
+      <SideHead title="Savings" sub={`Target ${SAVINGS_TARGET_PCT}% of income · ${full(target)}`} />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center' }}>
+        <div
+          role="img"
+          aria-label={`Saved ${b.savedPct.toFixed(1)}% of income this cycle against a ${SAVINGS_TARGET_PCT}% target`}
+          style={{ width: 136, height: 136, borderRadius: '50%', background: `conic-gradient(${ring} 0deg ${deg}deg, ${C.divider} ${deg}deg 360deg)`, display: 'grid', placeItems: 'center' }}
+        >
+          <div style={{ width: 106, height: 106, borderRadius: '50%', background: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontWeight: 700, letterSpacing: '-0.02em', fontSize: 24, color: ink }}>{none ? '0%' : b.savedPct.toFixed(1) + '%'}</span>
+            <span style={{ fontSize: 12, color: C.textMuted }}>of income saved</span>
+          </div>
         </div>
+        {none ? (
+          <>
+            <span style={{ fontSize: 13, color: C.textSoft }}>No savings transfer yet this cycle.</span>
+            <button type="button" className={s.btnOutline} onClick={onMark}>
+              Mark your savings transfer
+            </button>
+          </>
+        ) : (
+          <span style={{ fontSize: 13, color: C.textSoft }}>
+            {full(b.saved)} saved · {onTarget ? 'target reached ✓' : `${short(target - b.saved)} to go`}
+          </span>
+        )}
       </div>
-      {none ? (
-        <>
-          <span style={{ fontSize: 14, color: C.textSoft }}>No savings transfer yet this cycle.</span>
-          <button type="button" className={s.btnOutline} onClick={onMark}>
-            Mark your savings transfer
-          </button>
-        </>
-      ) : (
-        <span style={{ fontSize: 14, color: C.textSoft }}>
-          {full(b.saved)} saved · {onTarget ? 'target reached ✓' : `${short(target - b.saved)} to go`}
-        </span>
-      )}
-    </Card>
+    </section>
   );
 }
 
-/** Today's transactions, newest first. */
+/** Today's spending and income, newest first. Moves between your own accounts aren't spending, so they're only counted. */
 function TodayCard({ cycle, budget: b, onSeeAll }: { cycle: Cycle; budget: Budget; onSeeAll: () => void }) {
   const { full } = useSettings();
-  const today = b.txs.filter(t => t.offset === cycle.dayIdx);
-  const spent = today.filter(t => !t.isIncome && !t.isTransfer).reduce((a, t) => a + t.net, 0);
+  const all = b.txs.filter(t => t.offset === cycle.dayIdx);
+  const today = all.filter(t => !t.isTransfer);
+  const transfers = all.length - today.length;
+  const spent = today.filter(t => !t.isIncome).reduce((a, t) => a + t.net, 0);
   return (
-    <Card style={{ gap: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-        <CardHead small title="Today" caption={today.length ? `${full(spent)} spent` : undefined} />
-        {today.length > 0 && (
-          <button type="button" className={s.textBtnSm} onClick={onSeeAll}>
-            See all
-          </button>
-        )}
-      </div>
-      {today.length === 0 && <span style={{ fontSize: 14, color: C.textMuted }}>Nothing yet today.</span>}
-      {today.slice(0, 5).map(t => (
-        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <Dot color={categoryByName(t.cat)?.color ?? C.accent500} />
-          <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, marginRight: 'auto' }}>
-            <span className={s.ellipsis} style={{ fontSize: 14, fontWeight: 600 }}>
-              {t.title}
-            </span>
-            <span style={{ fontSize: 13, color: C.textMuted }}>
-              {t.cat} · {t.time}
-            </span>
-          </span>
-          <span style={{ fontSize: 14, fontWeight: 700, flex: 'none', color: t.isIncome ? C.accent800 : C.text }}>
-            {t.isIncome ? '+ ' + full(t.amount) : t.isTransfer ? full(t.amount) : '- ' + full(t.net)}
-          </span>
+    <section className={s.sideCard}>
+      <SideHead
+        title="Today"
+        sub={today.length ? `${full(spent)} spent` : undefined}
+        action={
+          all.length > 0 && (
+            <button type="button" className={s.textBtnSm} onClick={onSeeAll}>
+              See all
+            </button>
+          )
+        }
+      />
+      {today.length === 0 && <span style={{ fontSize: 14, color: C.textMuted }}>No spending yet today.</span>}
+      {today.length > 0 && (
+        <div className={s.sideList}>
+          {today.slice(0, 5).map(t => (
+            <SideRow
+              key={t.id}
+              mark={<Dot color={categoryByName(t.cat)?.color ?? C.accent500} />}
+              title={tidyName(t.title)}
+              sub={`${t.cat} · ${t.time}`}
+              value={t.isIncome ? '+ ' + full(t.amount) : full(t.net)}
+              ink={t.isIncome ? C.accent800 : C.text}
+            />
+          ))}
         </div>
-      ))}
-      {today.length > 5 && <span style={{ fontSize: 13, color: C.textMuted }}>+{today.length - 5} more</span>}
-    </Card>
+      )}
+      {(today.length > 5 || transfers > 0) && (
+        <span style={{ fontSize: 13, color: C.textMuted }}>
+          {[today.length > 5 && `+${today.length - 5} more`, transfers > 0 && `${transfers} ${transfers === 1 ? 'transfer' : 'transfers'} between your accounts`].filter(Boolean).join(' · ')}
+        </span>
+      )}
+    </section>
   );
 }
 
@@ -361,28 +400,27 @@ function ComingUpCard({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
   const { full } = useSettings();
   const bills = [...b.bills].sort((x, y) => x.date.getTime() - y.date.getTime());
   return (
-    <Card style={{ gap: 10 }}>
-      <CardHead small title="Coming up" caption={bills.length ? `${full(b.fixedDue)} in bills before payday` : undefined} />
+    <section className={s.sideCard}>
+      <SideHead title="Coming up" sub={bills.length ? `${full(b.fixedDue)} in bills before payday` : undefined} />
       {bills.length === 0 && <span style={{ fontSize: 14, color: C.textMuted }}>No more bills before payday.</span>}
-      {bills.slice(0, 4).map(bill => {
-        const inDays = cycle.offsetOf(bill.date) - cycle.dayIdx;
-        return (
-          <div key={bill.title} style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-            <Icon d={IC.calendar} size={16} color={C.textMuted} />
-            <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, marginRight: 'auto' }}>
-              <span className={s.ellipsis} style={{ fontSize: 14, fontWeight: 600 }}>
-                {bill.title}
-              </span>
-              <span style={{ fontSize: 13, color: C.textMuted }}>
-                {dayMonth(bill.date)} · {inDays === 0 ? 'today' : inDays === 1 ? 'tomorrow' : `in ${inDays} days`}
-              </span>
-            </span>
-            <span style={{ fontSize: 14, fontWeight: 700, flex: 'none' }}>{full(bill.amount)}</span>
-          </div>
-        );
-      })}
+      {bills.length > 0 && (
+        <div className={s.sideList}>
+          {bills.slice(0, 4).map(bill => {
+            const inDays = cycle.offsetOf(bill.date) - cycle.dayIdx;
+            return (
+              <SideRow
+                key={bill.title}
+                mark={<Icon d={IC.calendar} size={15} color={C.textMuted} />}
+                title={tidyName(bill.title)}
+                sub={`${dayMonth(bill.date)} · ${inDays === 0 ? 'today' : inDays === 1 ? 'tomorrow' : `in ${inDays} days`}`}
+                value={full(bill.amount)}
+              />
+            );
+          })}
+        </div>
+      )}
       {bills.length > 4 && <span style={{ fontSize: 13, color: C.textMuted }}>+{bills.length - 4} more</span>}
-    </Card>
+    </section>
   );
 }
 
@@ -394,14 +432,14 @@ function VsLastCycleCard({ cycle, budget: b }: { cycle: Cycle; budget: Budget })
   const last = sum(vari.map(c => c.lastSameDays));
   const ch = changeBadge(cur, last);
   return (
-    <Card style={{ gap: 10 }}>
-      <CardHead small title="vs last cycle" caption={`Variable spending by day ${cycle.dayN}`} />
+    <section className={s.sideCard}>
+      <SideHead title="Compared with last cycle" sub={`Variable spending by day ${cycle.dayN}`} />
       {last <= 0 ? (
         <span style={{ fontSize: 14, color: C.textMuted }}>No spending from last cycle to compare yet.</span>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto' }}>
-            <span style={{ fontSize: 20, fontWeight: 800 }}>{full(cur)}</span>
+            <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em' }}>{full(cur)}</span>
             <span style={{ fontSize: 13, color: C.textMuted }}>Last cycle {full(last)}</span>
           </span>
           <Badge bg={ch.bg} ink={ch.ink}>
@@ -409,7 +447,7 @@ function VsLastCycleCard({ cycle, budget: b }: { cycle: Cycle; budget: Budget })
           </Badge>
         </div>
       )}
-    </Card>
+    </section>
   );
 }
 

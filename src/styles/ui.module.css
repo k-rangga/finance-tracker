@@ -1384,3 +1384,40 @@ textarea.input {
   border-radius: 999px;
   background: var(--accent-500);
 }
+
+/* ---------- Summary side cards ---------- */
+.sideCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.sideTitle {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.sideList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sideRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+/* Marker lines up with the name, not the middle of the two lines. */
+.sideMark {
+  flex: none;
+  width: 16px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+}

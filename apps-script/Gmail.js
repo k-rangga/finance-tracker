@@ -255,7 +255,7 @@ function storeParsed_(parsed) {
   const imported = appendNew_('transactions', 'id', list);
   appendNew_('skipped', 'id', skipped);
   // Card alerts and merchant receipts for the same purchase carry different codes, so refs don't catch them.
-  const merged = mergeCardDuplicates_();
+  const merged = mergeCardDuplicates_() + mergeTransferDuplicates_();
   return { imported: imported, skipped: skipped.length, duplicates: duplicates + merged, reversed: reversed };
 }
 
@@ -302,27 +302,84 @@ function pairCardDuplicates_(rows) {
  */
 function mergeCardDuplicates_() {
   const pairs = pairCardDuplicates_(readTable_('transactions'));
+  pairs.forEach(p => {
+    if (p.receipt.account !== p.card.account) upsertRow_('transactions', 'id', Object.assign({}, p.receipt, { account: p.card.account }));
+  });
+  return dropDuplicates_(pairs.map(p => ({ keep: p.receipt, drop: p.card })));
+}
+
+/**
+ * Drop each pair's `drop` row and keep `keep`. Your category fix, reimbursement link or share on the dropped
+ * row moves to the kept one, and the dropped email is noted in `skipped` so it isn't imported again.
+ */
+function dropDuplicates_(pairs) {
   if (!pairs.length) return 0;
   const now = new Date().toISOString();
   const overrides = readTable_('overrides');
   const shares = readTable_('shares');
   const links = readTable_('links');
+  const removed = readTable_('removed');
   pairs.forEach(p => {
-    const from = p.card.id;
-    const to = p.receipt.id;
-    if (p.receipt.account !== p.card.account) upsertRow_('transactions', 'id', Object.assign({}, p.receipt, { account: p.card.account }));
+    const from = p.drop.id;
+    const to = p.keep.id;
     const ov = overrides.filter(o => o.tx_id === from)[0];
     if (ov && !overrides.some(o => o.tx_id === to)) upsertRow_('overrides', 'tx_id', { tx_id: to, category: ov.category, updated_at: now });
     const sh = shares.filter(x => x.tx_id === from)[0];
     if (sh && !shares.some(x => x.tx_id === to)) upsertRow_('shares', 'tx_id', { tx_id: to, ratio: sh.ratio, updated_at: now });
     links.filter(l => l.expense_id === from).forEach(l => upsertRow_('links', 'income_id', { income_id: l.income_id, expense_id: to, updated_at: now }));
+    links.filter(l => l.income_id === from).forEach(l => upsertRow_('links', 'income_id', { income_id: to, expense_id: l.expense_id, updated_at: now }));
+    if (removed.some(x => x.tx_id === from) && !removed.some(x => x.tx_id === to)) upsertRow_('removed', 'tx_id', { tx_id: to, removed_at: now });
   });
-  const gone = pairs.map(p => p.card.id);
+  const gone = pairs.map(p => p.drop.id);
   deleteWhere_('transactions', 'id', gone);
   deleteWhere_('overrides', 'tx_id', gone);
   deleteWhere_('shares', 'tx_id', gone);
-  appendNew_('skipped', 'id', pairs.map(p => ({ id: p.card.id, subject: String(p.card.subject || '').slice(0, 300), seen_at: now, reason: 'duplicate of ' + p.receipt.id })));
+  deleteWhere_('links', 'income_id', gone);
+  deleteWhere_('removed', 'tx_id', gone);
+  appendNew_('skipped', 'id', pairs.map(p => ({ id: p.drop.id, subject: String(p.drop.subject || '').slice(0, 300), seen_at: now, reason: 'duplicate of ' + p.keep.id })));
   return pairs.length;
+}
+
+// ---- both sides of one move between your own accounts ----
+
+/** The sending and receiving banks' emails for one transfer arrive this close together. */
+const TRANSFER_MATCH_MS = 15 * 60e3;
+/** A name with punctuation and spacing ignored: "KALAKA RANGGA, S" and "Kalaka Rangga S" match. */
+const nameKey_ = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+/** Which parser read the email ("bca", "blu", …): the two sides of a transfer come from different ones. */
+const refSource_ = r => String(r.ref || '').split(':')[0];
+
+/**
+ * Pairs of { keep, drop } rows that are one transfer told twice: the bank it left and the bank it reached,
+ * same amount and name, minutes apart. Two transfers read by the same parser (e.g. two BCA journals) are
+ * separate transfers, never merged. The earlier email is kept; nearest pairs win; each row pairs once.
+ */
+function pairTransferDuplicates_(rows) {
+  const at = r => new Date(r.occurred_at).getTime();
+  const xs = rows.filter(r => r.kind === 'transfer' && nameKey_(r.title).length >= 3).sort((a, b) => at(a) - at(b));
+  const pairs = [];
+  xs.forEach((a, i) => {
+    for (let j = i + 1; j < xs.length; j++) {
+      const b = xs[j];
+      const gap = at(b) - at(a);
+      if (gap > TRANSFER_MATCH_MS) break;
+      if (Math.abs(Number(a.amount) - Number(b.amount)) > 0.005 || a.currency !== b.currency) continue;
+      if (nameKey_(a.title) !== nameKey_(b.title) || refSource_(a) === refSource_(b)) continue;
+      pairs.push({ keep: a, drop: b, gap: gap });
+    }
+  });
+  pairs.sort((x, y) => x.gap - y.gap);
+  const used = {};
+  return pairs.filter(p => {
+    if (used[p.keep.id] || used[p.drop.id]) return false;
+    used[p.keep.id] = used[p.drop.id] = true;
+    return true;
+  });
+}
+
+/** Merge transfers between your own accounts that were imported from both banks' emails. Returns how many. */
+function mergeTransferDuplicates_() {
+  return dropDuplicates_(pairTransferDuplicates_(readTable_('transactions')));
 }
 
 /**
