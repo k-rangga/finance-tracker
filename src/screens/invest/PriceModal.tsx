@@ -23,11 +23,11 @@ export function PriceModal({ P, onClose, onSave }: { P: Portfolio; onClose: () =
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
               <Dot color={MK_COLOR[t.mk]} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span style={{ fontSize: 15, fontWeight: 700 }}>{t.tk}</span>
+                <span style={{ fontSize: 15, fontWeight: 600 }}>{t.tk}</span>
                 <span style={{ fontSize: 13, color: C.textMuted }}>Was {nat(P.lastOf(t), t.mk)}</span>
               </div>
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: C.textSoft }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: C.textSoft }}>
               <span>{t.mk === 'IDX' ? 'Rp' : '$'}</span>
               <input className={s.input} inputMode="decimal" aria-label={`${t.tk} price`} value={draft[t.tk] ?? ''} onChange={e => setDraft(d => ({ ...d, [t.tk]: e.target.value }))} />
             </label>

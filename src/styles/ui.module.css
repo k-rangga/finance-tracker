@@ -8,12 +8,11 @@
 .side {
   flex: none;
   position: sticky;
-  top: 16px;
-  margin: 16px 0 16px 16px;
-  height: calc(100vh - 32px);
-  background: var(--surface);
-  border-radius: 24px;
-  border: 1px solid var(--border);
+  top: 0;
+  height: 100vh;
+  /* Part of the page, not a floating card: a hairline is enough to set it apart. */
+  background: var(--bg);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
 }
@@ -144,14 +143,14 @@
 }
 
 .navItem {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
-  color: var(--text-muted);
+  color: var(--text-soft);
   background: transparent;
   border: none;
-  border-radius: 999px;
-  padding: 12px 16px;
-  min-height: 44px;
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-height: 38px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -161,20 +160,19 @@
 .navItem:hover,
 .railBtn:hover,
 .miniBtn:hover {
-  background: var(--accent-hover);
-  color: var(--accent-900);
+  background: var(--hover);
+  color: var(--text);
 }
 .navItemActive {
   composes: navItem;
-  color: var(--accent-600);
-  background: var(--accent-tint);
-  font-weight: 600;
+  color: var(--text);
+  background: var(--border);
 }
 
 .railBtn {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -183,8 +181,8 @@
 }
 .railBtnActive {
   composes: railBtn;
-  color: var(--accent-600);
-  background: var(--accent-tint);
+  color: var(--text);
+  background: var(--border);
 }
 
 .miniBtn {
@@ -225,7 +223,7 @@
 }
 .bottomBtnActive {
   composes: bottomBtn;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent-800);
   background: var(--accent-tint);
 }
@@ -243,42 +241,49 @@
 .header {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 12px 14px;
+  align-items: center;
+  gap: 10px 12px;
 }
 .headerTitle {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   margin-right: auto;
 }
+/* Title and cycle on one line; the cycle drops under the title when there's no room. */
+.headerLine {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
 .h1 {
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  font-size: clamp(30px, 4vw, 40px);
-  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  font-size: clamp(24px, 3vw, 28px);
+  line-height: 1.2;
 }
 
 /* ---------- Cards & type ---------- */
 .card {
-  --pad: 28px;
+  --pad: 24px;
   background: var(--surface);
-  border-radius: 24px;
+  border-radius: 12px;
   border: 1px solid var(--border);
   padding: var(--pad);
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 .cardFlush {
   background: var(--surface);
-  border-radius: 24px;
+  border-radius: 12px;
   border: 1px solid var(--border);
   overflow: hidden;
 }
 @media (max-width: 759px) {
   .card {
-    --pad: 20px;
+    --pad: 16px;
   }
 }
 
@@ -287,7 +292,7 @@
   display: flex;
   flex-direction: column;
   margin: 0 calc(-1 * var(--pad)) calc(-1 * var(--pad));
-  border-top: 1.5px solid var(--divider);
+  border-top: 1px solid var(--divider);
 }
 
 .cardHead {
@@ -299,13 +304,13 @@
 }
 
 .h2 {
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .h2Sm {
   composes: h2;
-  font-size: 22px;
+  font-size: 16px;
 }
 .caption {
   font-size: 13px;
@@ -313,12 +318,12 @@
 }
 .label {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-muted);
 }
 .eyebrow {
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -333,19 +338,26 @@
 
 /* ---------- Badges / chips ---------- */
 .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
-  font-weight: 700;
-  padding: 4px 12px;
-  border-radius: 999px;
+  font-weight: 500;
   white-space: nowrap;
+}
+.badgeDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
 }
 .badgeAccent {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 500;
   color: var(--accent-800);
   background: var(--accent-tint);
-  padding: 8px 14px;
-  border-radius: 999px;
+  padding: 7px 12px;
+  border-radius: 8px;
   white-space: nowrap;
 }
 .chip {
@@ -354,9 +366,9 @@
   gap: 6px;
   font-size: 13px;
   color: var(--text-muted);
-  padding: 7px 14px;
-  border-radius: 999px;
-  border: 1.5px solid var(--border-strong);
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
   background: transparent;
   white-space: nowrap;
 }
@@ -378,7 +390,7 @@ button.chip:hover {
   font-weight: 500;
   padding: 9px 18px;
   min-height: 44px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1.5px solid var(--border-strong);
   color: var(--text);
   background: var(--surface);
@@ -391,7 +403,7 @@ button.chip:hover {
   border-color: var(--accent-500);
   color: var(--accent-800);
   background: var(--accent-tint);
-  font-weight: 700;
+  font-weight: 600;
 }
 .pillActive:hover {
   background: var(--accent-tint);
@@ -400,10 +412,10 @@ button.chip:hover {
 /* Segmented option (forms) */
 .opt {
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 10px 18px;
   min-height: 44px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1.5px solid var(--border-strong);
   background: var(--surface);
   color: var(--text-soft);
@@ -413,9 +425,9 @@ button.chip:hover {
 }
 .optOn {
   composes: opt;
-  border-color: var(--accent-800);
-  background: var(--accent-800);
-  color: #ffffff;
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: var(--on-accent);
 }
 .optOn:hover {
   background: var(--accent-800);
@@ -429,11 +441,11 @@ button.chip:hover {
 /* ---------- Buttons ---------- */
 .btnPrimary {
   font-size: 15px;
-  font-weight: 700;
-  color: #ffffff;
-  background: var(--accent-600);
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent-strong);
   border: none;
-  border-radius: 999px;
+  border-radius: 8px;
   padding: 12px 22px;
   min-height: 44px;
   display: inline-flex;
@@ -446,18 +458,18 @@ button.chip:hover {
 }
 .btnDanger {
   composes: btnPrimary;
-  background: var(--red, #c94a4a);
+  background: var(--red, var(--red));
 }
 .btnDanger:hover {
-  background: #a3302f;
+  background: var(--red-ink);
 }
 .btnOutline {
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent-600);
   background: var(--surface);
   border: 1.5px solid var(--accent-600);
-  border-radius: 999px;
+  border-radius: 8px;
   padding: 9px 18px;
   min-height: 44px;
 }
@@ -508,7 +520,7 @@ button.chip:hover {
   border: none;
   padding: 0;
   color: var(--accent-600);
-  font-weight: 700;
+  font-weight: 600;
   font-size: 13px;
   display: inline-flex;
   align-items: center;
@@ -531,13 +543,13 @@ button.chip:hover {
   color: inherit;
 }
 .rowBtn:hover:not(:disabled) {
-  background: var(--divider);
+  background: var(--hover);
 }
 .rowBtn:disabled {
   cursor: default;
 }
 .hoverRow:hover {
-  background: #f5f9f8;
+  background: var(--hover);
 }
 
 /* ---------- Forms ---------- */
@@ -555,7 +567,7 @@ button.chip:hover {
   color: var(--text);
   background: var(--surface);
   border: 1.5px solid var(--border-strong);
-  border-radius: 14px;
+  border-radius: 8px;
   padding: 13px 14px;
   width: 100%;
   min-width: 0;
@@ -568,14 +580,14 @@ textarea.input {
   appearance: none;
   -webkit-appearance: none;
   padding-right: 44px;
-  background: #ffffff
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235c6a67' stroke-width='2.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+  background: var(--surface)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238a877e' stroke-width='2.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
     no-repeat right 16px center;
   cursor: pointer;
 }
 .error {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--red-ink);
 }
 
@@ -633,7 +645,7 @@ textarea.input {
   gap: 4px;
 }
 .statValue {
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.02em;
   font-size: 30px;
   line-height: 1.1;
@@ -642,7 +654,7 @@ textarea.input {
 }
 .note {
   background: var(--bg);
-  border-radius: 16px;
+  border-radius: 10px;
   padding: 14px 18px;
   font-size: 14px;
   line-height: 1.5;
@@ -662,10 +674,10 @@ textarea.input {
 }
 .dialog {
   background: var(--surface);
-  border-radius: 24px;
+  border-radius: 14px;
   width: 100%;
   box-sizing: border-box;
-  padding: 28px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -728,16 +740,18 @@ textarea.input {
   min-width: 0;
   font: inherit;
   font-size: 13px;
-  font-weight: 700;
-  padding: 4px 28px 4px 10px;
-  border: 1.5px solid;
-  border-radius: 999px;
+  font-weight: 500;
+  color: var(--text-soft);
+  background: var(--surface);
+  padding: 3px 26px 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
   min-height: 28px;
   cursor: pointer;
   text-align: left;
 }
 .catPill:focus-visible {
-  outline: 2px solid #14a08a;
+  outline: 2px solid var(--accent-500);
   outline-offset: 2px;
 }
 .catPillText {
@@ -753,8 +767,8 @@ textarea.input {
   padding: 4px 2px;
   font: inherit;
   font-size: 13px;
-  font-weight: 700;
-  color: #0b7a6a;
+  font-weight: 600;
+  color: var(--accent-600);
   cursor: pointer;
 }
 .textBtnSm:hover {
@@ -766,12 +780,12 @@ textarea.input {
   align-items: center;
   max-width: 100%;
   min-width: 0;
-  background: #e3f6f2;
-  border: 1.5px solid #14a08a;
-  color: #0b5c50;
+  background: var(--accent-tint);
+  border: 1.5px solid var(--accent-500);
+  color: var(--accent-800);
   border-radius: 999px;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .paidChipLabel,
 .paidChipX {
@@ -802,11 +816,11 @@ textarea.input {
   z-index: 30;
   margin-top: 6px;
   width: min(400px, 100vw - 48px);
-  background: #fff;
-  border: 1px solid #d8e1df;
-  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
   padding: 8px;
-  box-shadow: 0 10px 30px rgba(23, 32, 27, 0.14);
+  box-shadow: 0 10px 30px rgba(31, 30, 28, 0.14);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -815,12 +829,12 @@ textarea.input {
   display: flex;
   align-items: center;
   gap: 8px;
-  border: 1.5px solid #d8e1df;
+  border: 1.5px solid var(--border-strong);
   border-radius: 10px;
   padding: 0 10px;
 }
 .pickSearch:focus-within {
-  border-color: #14a08a;
+  border-color: var(--accent-500);
 }
 .pickSearch input {
   flex: 1;
@@ -831,7 +845,7 @@ textarea.input {
   font: inherit;
   font-size: 14px;
   padding: 9px 0;
-  color: #16201e;
+  color: var(--text);
 }
 .pickList {
   display: flex;
@@ -852,18 +866,18 @@ textarea.input {
   cursor: pointer;
 }
 .pickRow:hover {
-  background: #ecf1f0;
+  background: var(--divider);
 }
 .pickRowOn,
 .pickRowOn:hover {
-  background: #e3f6f2;
+  background: var(--accent-tint);
 }
 .pickSuggest {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #0b7a6a;
+  color: var(--accent-600);
 }
 @media (max-width: 480px) {
   /* Start under the row icon so the popover fits the screen. */
@@ -886,25 +900,25 @@ textarea.input {
 .splitBtn {
   font: inherit;
   font-size: 13px;
-  font-weight: 700;
-  color: #0b5c50;
-  background: #e3f6f2;
+  font-weight: 600;
+  color: var(--accent-800);
+  background: var(--accent-tint);
   border: none;
   border-radius: 999px;
   padding: 6px 12px;
   cursor: pointer;
 }
 .splitBtn:hover {
-  background: #cdeee6;
+  background: var(--accent-tint);
 }
 
 /* ---------- Category menu & new category ---------- */
 .menuGroup {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #5c6a67;
+  color: var(--text-muted);
   padding: 10px 10px 4px;
 }
 .menuIcon {
@@ -916,7 +930,7 @@ textarea.input {
   border-radius: 50%;
 }
 .pickRowActive {
-  background: #ecf1f0;
+  background: var(--divider);
 }
 .iconGrid {
   display: grid;
@@ -934,7 +948,7 @@ textarea.input {
   cursor: pointer;
 }
 .iconOpt:hover {
-  background: #f5f9f8;
+  background: var(--hover);
 }
 .swatches {
   display: flex;
@@ -1010,11 +1024,11 @@ textarea.input {
   margin-top: 8px;
   width: max-content;
   max-width: calc(100vw - 32px);
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 18px;
+  border-radius: 12px;
   padding: 16px 18px;
-  box-shadow: 0 10px 30px rgba(23, 32, 27, 0.14);
+  box-shadow: 0 10px 30px rgba(31, 30, 28, 0.14);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1063,7 +1077,7 @@ textarea.input {
   background: var(--divider);
 }
 .calNav button:disabled {
-  color: #c9d1ce;
+  color: var(--text-faint);
   cursor: default;
 }
 .calNavPhone {
@@ -1099,7 +1113,7 @@ textarea.input {
   background: var(--divider);
 }
 .calDay button:disabled {
-  color: #c2cbc8;
+  color: var(--text-faint);
   cursor: default;
 }
 .calIn {
@@ -1115,9 +1129,9 @@ textarea.input {
 }
 .calDay button.calDayEnd,
 .calDay button.calDayEnd:hover {
-  background: var(--accent-800);
-  color: #fff;
-  font-weight: 700;
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  font-weight: 600;
 }
 .calFoot {
   display: flex;
@@ -1151,7 +1165,7 @@ textarea.input {
   border-color: var(--accent-500);
   background: var(--accent-tint);
   color: var(--accent-800);
-  font-weight: 700;
+  font-weight: 600;
 }
 /* Phones: one month, with its own back arrow. */
 @media (max-width: 640px) {
@@ -1206,7 +1220,9 @@ textarea.input {
   display: flex;
   align-items: center;
   gap: 16px;
-  background: var(--text);
+  /* Always dark, in both themes, so it reads as a passing message rather than part of the page. */
+  background: #2b2a27;
+  border: 1px solid #46443f;
   color: #fff;
   font-size: 14px;
   border-radius: 14px;
@@ -1218,7 +1234,7 @@ textarea.input {
   border: none;
   background: none;
   color: #8fe3cf;
-  font-weight: 700;
+  font-weight: 600;
   padding: 6px 10px;
   border-radius: 8px;
   cursor: pointer;
@@ -1253,7 +1269,7 @@ textarea.input {
   justify-content: space-between;
   gap: 12px;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-muted);
   letter-spacing: 0;
   padding: 10px 18px 6px;
@@ -1280,7 +1296,7 @@ textarea.input {
   position: relative;
   display: flex;
   width: 100%;
-  border-radius: 14px;
+  border-radius: 12px;
   overflow: hidden;
 }
 /* Solid tiles packed edge to edge; a hairline of white keeps neighbours apart. */
@@ -1288,7 +1304,7 @@ textarea.input {
   position: absolute;
   box-sizing: border-box;
   border: none;
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 0 0 0.5px var(--surface);
   border-radius: 0;
   display: flex;
   flex-direction: column;
@@ -1314,7 +1330,7 @@ textarea.input {
   flex-direction: column;
   gap: 2px;
   padding: 10px 12px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: 12px;
   box-shadow: 0 10px 30px rgba(23, 32, 27, 0.16);
@@ -1354,10 +1370,12 @@ textarea.input {
 .summarySide {
   grid-area: side;
   min-width: 0;
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  align-self: start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
 }
 @media (min-width: 1200px) {
   .summaryGrid {
@@ -1365,15 +1383,11 @@ textarea.input {
     grid-template-areas: 'cycle side' 'rest side';
     align-items: start;
   }
-  .summarySide {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 .cycleProgress {
   display: block;
   width: min(240px, 100%);
-  height: 4px;
-  margin-top: 6px;
+  height: 3px;
   border-radius: 999px;
   background: var(--border);
   overflow: hidden;
@@ -1386,19 +1400,20 @@ textarea.input {
 }
 
 /* ---------- Summary side cards ---------- */
+/* One panel; its sections are separated by hairlines instead of each being a boxed card. */
 .sideCard {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 18px 20px;
+  padding: 20px 24px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
+.sideCard + .sideCard {
+  border-top: 1px solid var(--divider);
+}
 .sideTitle {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 600;
   letter-spacing: -0.01em;
   margin: 0;
 }
@@ -1420,4 +1435,23 @@ textarea.input {
   height: 20px;
   display: grid;
   place-items: center;
+}
+
+/* ---------- Where it went: category rows ---------- */
+.catBadges {
+  flex: none;
+  display: grid;
+  grid-template-columns: 92px 64px;
+  gap: 10px;
+}
+/* When the badges wrap under the bar on phones, line them up with the category name. */
+@media (max-width: 640px) {
+  .catBadges {
+    margin-left: 48px;
+  }
+}
+@media (max-width: 759px) {
+  .sideCard {
+    padding: 16px;
+  }
 }

@@ -3,7 +3,7 @@ import s from '../styles/ui.module.css';
 import { Badge, IconChip, Pills } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
 import { Select } from '../components/Select';
-import { categoryStatus, changeBadge, iconColors, type Budget, type CatView } from '../lib/budget';
+import { categoryStatus, changeBadge, ICON_CHIP, type Budget, type CatView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { pc } from '../lib/format';
 import { useSettings } from '../lib/settings';
@@ -84,7 +84,7 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
             { value: 'fixed', label: 'Fixed bills' },
             { value: 'variable', label: 'Variable' },
           ]}
-          style={{ width: 'auto', borderRadius: 999, fontSize: 14, padding: '10px 44px 10px 18px' }}
+          style={{ width: 'auto', borderRadius: 8, fontSize: 14, padding: '9px 40px 9px 14px' }}
         />
       </div>
       <span style={{ fontSize: 13, color: C.textMuted }}>{caption}</span>
@@ -95,17 +95,17 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
       )}
       {sections.map(([title, rows]) => (
         <section key={title} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <h2 style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, letterSpacing: 0, padding: '0 4px' }}>
+          <h2 style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, letterSpacing: 0, padding: '0 4px' }}>
             {title} · {full(rows.reduce((a, r) => a + r.cur, 0))} of {full(rows.reduce((a, r) => a + r.lim, 0))}
           </h2>
           <div className={s.cardFlush}>
             {rows.map(({ c, cur, last, lim, st, scale }) => {
               const isOpen = open === c.name;
-              const ic = iconColors(c.name);
+              const ic = ICON_CHIP;
               const ch = changeBadge(cur, last);
               const wmax = Math.max(...c.cur, ...c.prev, 0.01);
               return (
-                <div key={c.name} id={'cat-' + c.name} style={{ borderBottom: `1.5px solid ${C.divider}`, background: st.rowBg }}>
+                <div key={c.name} id={'cat-' + c.name} style={{ background: st.rowBg }}>
                   <button
                     type="button"
                     className={s.rowBtn}
@@ -115,22 +115,22 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
                   >
                     <span style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                       <IconChip d={c.icon} bg={ic.bg} ink={ic.ink} size={40} iconSize={18} />
-                      <span style={{ fontWeight: 700, fontSize: 16, marginRight: 'auto' }}>{c.name}</span>
-                      <Badge bg={st.bg} ink={st.ink}>
+                      <span style={{ fontWeight: 600, fontSize: 16, marginRight: 'auto' }}>{c.name}</span>
+                      <Badge ink={st.ink}>
                         {st.label}
                       </Badge>
-                      <Badge bg={ch.bg} ink={ch.ink} style={{ fontSize: 13, fontWeight: 800 }}>
+                      <Badge ink={ch.ink} style={{ fontSize: 13, fontWeight: 600 }}>
                         {ch.label}
                       </Badge>
                       <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }} />
                     </span>
                     <span style={{ display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr) auto', alignItems: 'center', gap: '8px 12px', fontSize: 13 }}>
-                      <span style={{ fontWeight: 700 }}>This</span>
+                      <span style={{ fontWeight: 600 }}>This</span>
                       <span className={s.track}>
                         <span className={s.fill} style={{ width: pc((cur / scale) * 100), background: st.bar }} />
                         <span className={s.tick} style={{ left: pc((lim / scale) * 100) }} />
                       </span>
-                      <span style={{ fontWeight: 700, minWidth: 96, textAlign: 'right' }}>{full(cur)}</span>
+                      <span style={{ fontWeight: 600, minWidth: 96, textAlign: 'right' }}>{full(cur)}</span>
                       <span style={{ color: C.textMuted }}>Last</span>
                       <span className={s.track}>
                         <span className={s.fill} style={{ width: pc((last / scale) * 100), background: C.grey }} />
@@ -151,7 +151,7 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
                       </span>
                     </span>
                     {st.key !== 'ok' && (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: st.key === 'over' ? C.redInk : C.amberInk }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: st.key === 'over' ? C.redInk : C.amberInk }}>
                         <Icon d={IC.alert} size={16} />
                         {st.key === 'over' ? `Limit reached · ${short(cur - lim)} over` : `${settings.warnAt}% of limit used · ${short(lim - cur)} left`}
                       </span>

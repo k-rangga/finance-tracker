@@ -20,9 +20,11 @@ export function CardHead({ title, caption, small }: { title: ReactNode; caption?
   );
 }
 
-export function Badge({ bg, ink, children, style }: { bg: string; ink: string; children: ReactNode; style?: CSSProperties }) {
+/** Status as a small coloured dot and plain text, not a filled pill. */
+export function Badge({ ink, children, style }: { ink: string; children: ReactNode; style?: CSSProperties }) {
   return (
-    <span className={s.badge} style={{ background: bg, color: ink, ...style }}>
+    <span className={s.badge} style={{ color: ink, ...style }}>
+      <span className={s.badgeDot} style={{ background: ink }} aria-hidden="true" />
       {children}
     </span>
   );

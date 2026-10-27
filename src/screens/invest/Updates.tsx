@@ -44,7 +44,7 @@ export function UpdateTimeline({ t, updates, onOpen }: { t: Trade; updates: Trad
                 <KindBadge kind={u.kind} />
               </span>
               {isAdd(u) && (
-                <span style={{ fontSize: 14, fontWeight: 700 }}>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>
                   {addLabel(t, u)} <span style={{ fontWeight: 500, color: C.textMuted }}>· new avg {nat(after.avg, t.mk)}</span>
                 </span>
               )}
@@ -79,7 +79,7 @@ export function UpdateDetail({ t, updates, update, last, onEdit, onDelete, onClo
   const row = (k: string, v: string, ink?: string) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderTop: `1px solid ${C.divider}`, fontSize: 14 }}>
       <span style={{ color: C.textMuted }}>{k}</span>
-      <span style={{ fontWeight: 700, color: ink, textAlign: 'right' }}>{v}</span>
+      <span style={{ fontWeight: 600, color: ink, textAlign: 'right' }}>{v}</span>
     </div>
   );
   const pos = (p: PosState) => `${lotsLabel(t, p.q)} · avg ${nat(p.avg, t.mk)} · cost ${nat(p.cost, t.mk)}`;
@@ -87,7 +87,7 @@ export function UpdateDetail({ t, updates, update, last, onEdit, onDelete, onClo
     <Modal title={`${t.tk} · ${UPDATE_LABEL[u.kind]}`} onClose={onClose} width={520}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <KindBadge kind={u.kind} />
-        <span style={{ fontSize: 14, fontWeight: 700 }}>{fmtAt(u.at)}</span>
+        <span style={{ fontSize: 14, fontWeight: 600 }}>{fmtAt(u.at)}</span>
       </div>
       <div>
         {isAdd(u) && (

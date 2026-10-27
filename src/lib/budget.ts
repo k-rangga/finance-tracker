@@ -19,10 +19,10 @@ export type Status = {
 
 /** Red (over) and amber (near) override the category's own colour on bars. */
 export function categoryStatus(used: number, c: Pick<Category, 'type' | 'color'>, warnAt: number): Status {
-  if (used >= 100.5) return { key: 'over', label: 'Over limit', bg: C.red, ink: '#ffffff', bar: C.red, rowBg: '#fff8f7', rank: 0 };
+  if (used >= 100.5) return { key: 'over', label: 'Over limit', bg: C.redTint, ink: C.redInk, bar: C.red, rowBg: 'var(--red-row)', rank: 0 };
   if (c.type === 'fixed')
     return { key: 'ok', label: used >= 99 ? 'Bill paid' : 'On plan', bg: C.accentTint, ink: C.accent800, bar: c.color, rowBg: 'transparent', rank: 2 };
-  if (used >= warnAt) return { key: 'near', label: 'Near limit', bg: C.amberTint, ink: C.amberInk, bar: C.amber, rowBg: '#fffcf5', rank: 1 };
+  if (used >= warnAt) return { key: 'near', label: 'Near limit', bg: C.amberTint, ink: C.amberInk, bar: C.amber, rowBg: 'var(--amber-row)', rank: 1 };
   return { key: 'ok', label: 'On track', bg: C.accentTint, ink: C.accent800, bar: c.color, rowBg: 'transparent', rank: 2 };
 }
 
@@ -299,8 +299,5 @@ export function changeBadge(cur: number, last: number) {
   return ch < 0 ? { label: '↓ ' + r + '%', bg: C.accentTint, ink: C.accent800 } : { label: '↑ ' + r + '%', bg: C.redTint, ink: C.redInk };
 }
 
-/** Icon chip colours for a category; anything else (income, savings, transfers) uses the accent. */
-export function iconColors(category?: string) {
-  const c = category ? categoryByName(category) : undefined;
-  return c ? { bg: c.tint, ink: c.ink } : { bg: C.accentTint, ink: C.accent800 };
-}
+/** Icon chips are neutral grey: category colour is kept for dots, bars and charts, where it carries meaning. */
+export const ICON_CHIP = { bg: C.divider, ink: C.textSoft } as const;

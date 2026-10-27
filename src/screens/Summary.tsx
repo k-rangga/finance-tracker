@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { Badge, Bar, Card, CardHead, Dot, IconChip } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
-import { changeBadge, dayAmount, dayTotalLabel, iconColors, type Budget, type TxView } from '../lib/budget';
+import { changeBadge, dayAmount, dayTotalLabel, ICON_CHIP, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth, pc, sum } from '../lib/format';
 import { useSettings } from '../lib/settings';
@@ -176,7 +176,7 @@ function ThisCycle({ cycle, budget: b, onOpenSettings }: { cycle: Cycle; budget:
     <Card style={{ gap: 24, overflow: 'hidden' }}>
       <CardHead title="This cycle" />
       {plannedPct > 100 && (
-        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: '8px 12px', flexWrap: 'wrap', background: C.amberTint, color: C.amberInk, borderRadius: 14, padding: '10px 14px', fontSize: 14 }}>
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: '8px 12px', flexWrap: 'wrap', background: C.amberTint, color: C.amberInk, borderRadius: 10, padding: '10px 14px', fontSize: 14 }}>
           <span style={{ marginRight: 'auto' }}>
             Budget {budgetPct}% + savings {SAVINGS_TARGET_PCT}% = <strong>{plannedPct}% of income</strong>. Lower a category limit or the savings target so they fit.
           </span>
@@ -191,7 +191,7 @@ function ThisCycle({ cycle, budget: b, onOpenSettings }: { cycle: Cycle; budget:
           {/* One number first: what you can spend today and stay on budget. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 14, color: C.textMuted }}>Safe to spend today</span>
-            <span style={{ fontWeight: 800, letterSpacing: '-0.02em', fontSize: 40, lineHeight: 1.05, color: b.safeDay > 0 ? C.text : C.redInk }}>{full(b.safeDay)}</span>
+            <span style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: 36, lineHeight: 1.05, color: b.safeDay > 0 ? C.text : C.redInk }}>{full(b.safeDay)}</span>
             <span style={{ fontSize: 14, color: C.textSoft }}>
               {full(Math.max(0, b.budget - b.spent - b.fixedDue))} left after bills · {cycle.daysLeft} {cycle.daysLeft === 1 ? 'day' : 'days'} to payday
             </span>
@@ -220,7 +220,7 @@ function ThisCycle({ cycle, budget: b, onOpenSettings }: { cycle: Cycle; budget:
               {ending ? (
                 <span>{full(Math.max(0, b.budget - b.spent))} left until payday</span>
               ) : (
-                <span title={`Pace target today ${full(b.paceToday)}`} style={{ fontWeight: 700, color: overPace > 0 ? C.redInk : C.accent800 }}>
+                <span title={`Pace target today ${full(b.paceToday)}`} style={{ fontWeight: 600, color: overPace > 0 ? C.redInk : C.accent800 }}>
                   {overPace > 0 ? `${short(overPace)} over pace` : `${short(-overPace)} under pace`}
                 </span>
               )}
@@ -242,20 +242,20 @@ function ThisCycle({ cycle, budget: b, onOpenSettings }: { cycle: Cycle; budget:
           const isOpen = open === r.id && has;
           if (r.quiet)
             return (
-              <div key={r.id} style={{ borderBottom: `1.5px solid ${C.divider}`, padding: '14px var(--pad)', fontSize: 13, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div key={r.id} style={{ padding: '12px var(--pad)', fontSize: 13, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon d={IC.calendar} size={15} />
                 {r.label}
               </div>
             );
           return (
-            <div key={r.id} style={{ borderBottom: `1.5px solid ${C.divider}` }}>
+            <div key={r.id} style={{}}>
               <button
                 type="button"
                 className={s.rowBtn}
                 disabled={!has}
                 aria-expanded={has ? isOpen : undefined}
                 onClick={() => has && setOpen(isOpen ? null : r.id)}
-                style={{ padding: '16px var(--pad)', fontWeight: r.strong ? 800 : 600, background: r.strong ? C.accentSoft : undefined, minHeight: 56 }}
+                style={{ padding: '12px var(--pad)', fontWeight: r.strong ? 800 : 600, background: r.strong ? C.accentSoft : undefined, minHeight: 48 }}
               >
                 <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
                   <span style={{ fontSize: 15 }}>{r.label}</span>
@@ -329,8 +329,8 @@ function SavingsCard({ cycle, budget: b, onMark }: { cycle: Cycle; budget: Budge
           aria-label={`Saved ${b.savedPct.toFixed(1)}% of income this cycle against a ${SAVINGS_TARGET_PCT}% target`}
           style={{ width: 136, height: 136, borderRadius: '50%', background: `conic-gradient(${ring} 0deg ${deg}deg, ${C.divider} ${deg}deg 360deg)`, display: 'grid', placeItems: 'center' }}
         >
-          <div style={{ width: 106, height: 106, borderRadius: '50%', background: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontWeight: 700, letterSpacing: '-0.02em', fontSize: 24, color: ink }}>{none ? '0%' : b.savedPct.toFixed(1) + '%'}</span>
+          <div style={{ width: 106, height: 106, borderRadius: '50%', background: C.surface, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: 24, color: ink }}>{none ? '0%' : b.savedPct.toFixed(1) + '%'}</span>
             <span style={{ fontSize: 12, color: C.textMuted }}>of income saved</span>
           </div>
         </div>
@@ -439,10 +439,10 @@ function VsLastCycleCard({ cycle, budget: b }: { cycle: Cycle; budget: Budget })
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto' }}>
-            <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em' }}>{full(cur)}</span>
+            <span style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.01em' }}>{full(cur)}</span>
             <span style={{ fontSize: 13, color: C.textMuted }}>Last cycle {full(last)}</span>
           </span>
-          <Badge bg={ch.bg} ink={ch.ink}>
+          <Badge ink={ch.ink}>
             {ch.label}
           </Badge>
         </div>
@@ -459,10 +459,10 @@ function CycleWrapUp({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
   const usedPct = Math.round((b.spent / b.budget) * 100);
   const onTarget = b.savedPct >= SAVINGS_TARGET_PCT;
   return (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: C.accentSoft, borderRadius: 16, padding: '14px 16px' }}>
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: C.accentSoft, borderRadius: 10, padding: '14px 16px' }}>
       <IconChip d={IC.calendar} bg={C.accentTint} ink={C.accent800} size={34} iconSize={16} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-        <span style={{ fontSize: 15, fontWeight: 700 }}>
+        <span style={{ fontSize: 15, fontWeight: 600 }}>
           Cycle closes {when} · payday {dayLabel(cycle.next)}
         </span>
         <span style={{ fontSize: 13, color: C.textSoft, lineHeight: 1.5 }}>
@@ -500,7 +500,7 @@ function ByDay({ items }: { items: Item[] }) {
       {groupByDay(items).map(g => (
         <div key={g.label || 'items'}>
           {g.label && (
-            <h3 style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.textMuted, padding: '14px 0 6px' }}>
+            <h3 style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.textMuted, padding: '14px 0 6px' }}>
               <span>{g.label}</span>
               <span style={{ letterSpacing: 0, textTransform: 'none' }}>{dayTotalLabel(sum(g.items.map(i => i.dayAmount ?? 0)), full)}</span>
             </h3>
@@ -534,7 +534,7 @@ function ByCategory({ items }: { items: Item[] }) {
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {groups.map(g => {
         const c = categoryByName(g.cat);
-        const ic = iconColors(g.cat);
+        const ic = ICON_CHIP;
         const isOpen = open.has(g.cat);
         return (
           <div key={g.cat} style={{ borderTop: `1px solid ${C.divider}` }}>
@@ -547,12 +547,12 @@ function ByCategory({ items }: { items: Item[] }) {
             >
               <IconChip d={c?.icon ?? IC.coins} bg={ic.bg} ink={ic.ink} size={34} iconSize={16} />
               <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0, textAlign: 'left' }}>
-                <span style={{ fontSize: 14, fontWeight: 700 }}>{g.cat}</span>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{g.cat}</span>
                 <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>
                   {g.list.length} {g.list.length === 1 ? 'transaction' : 'transactions'}
                 </span>
               </span>
-              <span style={{ fontSize: 14, fontWeight: 700 }}>{full(g.total)}</span>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{full(g.total)}</span>
               <Icon d={IC.chevDown} size={15} color={C.textMuted} style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }} />
             </button>
             {isOpen && (
@@ -581,7 +581,7 @@ function groupByDay(items: Item[]) {
 }
 
 function CycleItem({ i }: { i: Item }) {
-  const ic = iconColors(i.cat);
+  const ic = ICON_CHIP;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: `1px solid ${C.divider}` }}>
       <IconChip d={i.icon} bg={ic.bg} ink={ic.ink} size={34} iconSize={16} />
@@ -607,11 +607,11 @@ function CreditCards({ budget: b }: { budget: Budget }) {
       </div>
       <div className={s.bleed}>
         {b.cards.map(c => (
-          <div key={c.account} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px var(--pad)', borderBottom: `1.5px solid ${C.divider}`, flexWrap: 'wrap' }}>
+          <div key={c.account} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px var(--pad)', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: '1 1 260px', minWidth: 0 }}>
               <IconChip d={IC.card} bg={C.accentTint} ink={C.accent800} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
-                <span style={{ fontSize: 15, fontWeight: 700 }}>{c.account.replace(/^CC /, '')} card</span>
+                <span style={{ fontSize: 15, fontWeight: 600 }}>{c.account.replace(/^CC /, '')} card</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
                   <span>Spent this cycle {full(c.spent)}</span>
                   <span aria-hidden="true">·</span>
@@ -621,26 +621,26 @@ function CreditCards({ budget: b }: { budget: Budget }) {
                     Paid {full(c.paid)}
                     {c.paidOn ? ' on ' + dayMonth(c.paidOn) : ''}
                   </span>
-                  <Badge bg={c.paidInFull ? C.accentTint : C.amberTint} ink={c.paidInFull ? C.accent800 : C.amberInk} style={{ fontSize: 13, fontWeight: 700, padding: '4px 10px' }}>
+                  <Badge ink={c.paidInFull ? C.accent800 : C.amberInk} style={{ fontSize: 13, fontWeight: 600, padding: '4px 10px' }}>
                     {c.paidInFull ? 'Paid in full' : full(c.carriedOver) + ' carried over'}
                   </Badge>
                 </span>
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, marginLeft: 'auto', flex: 'none' }}>
-              <span style={{ fontSize: 15, fontWeight: 700 }}>{full(c.owed)}</span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>{full(c.owed)}</span>
               <span style={{ fontSize: 13, color: C.textMuted }}>owed</span>
             </div>
           </div>
         ))}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px var(--pad)', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px var(--pad)', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginRight: 'auto', minWidth: 0 }}>
-            <span style={{ fontSize: 15, fontWeight: 700 }}>Cash out this cycle</span>
+            <span style={{ fontSize: 15, fontWeight: 600 }}>Cash out this cycle</span>
             <span style={{ fontSize: 13, color: C.textMuted }}>
               {full(b.nonCardSpent)} bank &amp; e-wallet spending + {full(b.cardBillsPaid)} card bills paid
             </span>
           </div>
-          <span style={{ fontSize: 15, fontWeight: 700 }}>{full(b.cashOut)}</span>
+          <span style={{ fontSize: 15, fontWeight: 600 }}>{full(b.cashOut)}</span>
         </div>
       </div>
     </Card>
@@ -836,7 +836,7 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
       </div>
       <div className={s.bleed} style={{ marginTop: 4 }}>
         {ranked.map(c => {
-          const ic = iconColors(c.name);
+          const ic = ICON_CHIP;
           const ch = changeBadge(c.spent, c.lastSameDays);
           return (
             <button
@@ -844,23 +844,24 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
               type="button"
               className={s.rowBtn}
               onClick={() => onOpenCategory(c.name)}
-              style={{ padding: '14px var(--pad)', borderBottom: `1.5px solid ${C.divider}`, background: c.status.rowBg, flexWrap: 'wrap' }}
+              style={{ padding: '12px var(--pad)', background: c.status.rowBg, flexWrap: 'wrap' }}
             >
               <IconChip d={c.icon} bg={ic.bg} ink={ic.ink} size={36} iconSize={16} />
               <span style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 220px', minWidth: 0 }}>
-                <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 14 }}>
-                  <span style={{ fontWeight: 700 }}>{c.name}</span>
-                  <span style={{ color: C.textMuted }}>
-                    <strong style={{ color: C.text }}>{full(c.spent)}</strong> / {full(c.limit)}
+                <span style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '2px 8px', fontSize: 14 }}>
+                  <span style={{ fontWeight: 600 }}>{c.name}</span>
+                  <span style={{ color: C.textMuted, whiteSpace: 'nowrap', marginLeft: 'auto' }}>
+                    <strong style={{ color: C.text, fontWeight: 600 }}>{full(c.spent)}</strong> / {full(c.limit)}
                   </span>
                 </span>
                 <Bar value={c.spent} max={Math.max(c.limit, c.spent)} tick={c.limit} color={c.status.bar} height={8} label={`${c.name} ${Math.round(c.used)}% of limit`} />
               </span>
-              <span style={{ display: 'flex', gap: 6, flex: 'none' }}>
-                <Badge bg={c.status.bg} ink={c.status.ink}>
+              {/* Fixed-width badge columns, so every row's bar, limit tick and amount end at the same place. */}
+              <span className={s.catBadges}>
+                <Badge ink={c.status.ink}>
                   {c.status.label}
                 </Badge>
-                <Badge bg={ch.bg} ink={ch.ink} style={{ minWidth: 56, textAlign: 'center' }}>
+                <Badge ink={ch.ink}>
                   {ch.label}
                 </Badge>
               </span>
@@ -936,7 +937,7 @@ function WeeklyPace({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
             fontSize: 13,
           }}
         >
-          <span style={{ flex: 'none', width: 28, height: 28, borderRadius: '50%', background: '#fff', display: 'grid', placeItems: 'center' }}>
+          <span style={{ flex: 'none', width: 28, height: 28, borderRadius: '50%', background: C.surface, display: 'grid', placeItems: 'center' }}>
             <Icon d={down ? IC.trendDown : IC.trend} size={16} />
           </span>
           <span>
@@ -954,9 +955,9 @@ function WeeklyPace({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
             position: 'absolute',
             right: 0,
             fontSize: 13,
-            fontWeight: 700,
+            fontWeight: 600,
             color: C.redInk,
-            background: '#fff',
+            background: C.surface,
             padding: '0 6px',
             transform: 'translateY(50%)',
             bottom: pc((b.budget / scale) * 100),
@@ -980,12 +981,12 @@ function WeeklyPace({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
               flexDirection: 'column',
               justifyContent: 'flex-end',
               border: 'none',
-              borderRadius: 16,
+              borderRadius: 10,
               padding: '0 12px',
               background: sel === wk.i ? C.divider : 'transparent',
             }}
           >
-            <div style={{ height: pc((wk.cum / scale) * 100), display: 'flex', flexDirection: 'column-reverse', borderRadius: 14, overflow: 'hidden' }}>
+            <div style={{ height: pc((wk.cum / scale) * 100), display: 'flex', flexDirection: 'column-reverse', borderRadius: 10, overflow: 'hidden' }}>
               <div style={{ flex: 'none', height: pc((wk.fc / wk.cum) * 100), background: C.accent700 }} />
               <div style={{ flex: 'none', height: pc((wk.vc / wk.cum) * 100), background: C.mint[5] }} />
               <div style={{ flex: 'none', height: pc((wk.pj / wk.cum) * 100), background: `repeating-linear-gradient(135deg, ${C.mint[8]} 0 6px, ${C.accentHover} 6px 12px)` }} />
@@ -1003,7 +1004,7 @@ function WeeklyPace({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
         ))}
       </div>
       <div className={s.note} style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 13 }} aria-live="polite">
-        <span style={{ fontWeight: 700 }}>
+        <span style={{ fontWeight: 600 }}>
           {w.label} · {w.range}
           {w.isFuture ? ' · projected' : ''}
         </span>
@@ -1011,7 +1012,7 @@ function WeeklyPace({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
           {w.isFuture ? 'Projected spend ' + short(w.proj) : 'Spent ' + short(w.weekSpend) + (w.hasProj ? ' + ' + short(w.proj) + ' projected' : '')} · cumulative {short(w.cum)} · ideal{' '}
           {short(w.ideal)}
         </span>
-        <span style={{ fontWeight: 700, color: (w.isFuture ? projOver : diff > 0) ? C.redInk : C.accent800 }}>
+        <span style={{ fontWeight: 600, color: (w.isFuture ? projOver : diff > 0) ? C.redInk : C.accent800 }}>
           {w.isFuture
             ? projOver
               ? `Ends ${short(b.projTotal - b.budget)} over budget at current pace`

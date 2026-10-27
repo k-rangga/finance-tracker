@@ -71,20 +71,20 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
 
   return (
     <div className={s.stack}>
-      <section style={{ background: C.accent800, color: '#fff', borderRadius: 24, padding: 32, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.accentTint }}>
+      <section style={{ background: C.accentStrong, color: C.onAccent, borderRadius: 12, padding: 32, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(255, 255, 255, 0.75)' }}>
           Action plan · {dayLabel(cycle.today)} {cycle.today.getFullYear()}
         </span>
-        <h2 style={{ fontSize: 'clamp(24px, 3vw, 32px)', lineHeight: 1.2, maxWidth: 820, textWrap: 'pretty' } as CSSProperties}>{headline}</h2>
-        <p style={{ fontSize: 15, lineHeight: 1.5, maxWidth: 820, color: C.accentSoft }}>{summary}</p>
+        <h2 style={{ fontSize: 'clamp(22px, 2.6vw, 28px)', fontWeight: 600, lineHeight: 1.25, maxWidth: 820, textWrap: 'pretty' } as CSSProperties}>{headline}</h2>
+        <p style={{ fontSize: 15, lineHeight: 1.5, maxWidth: 820, color: 'rgba(255, 255, 255, 0.85)' }}>{summary}</p>
         <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))', gap: 12 }}>
           {actions.map((a, i) => (
-            <li key={a.title} style={{ background: '#fff', color: C.text, borderRadius: 16, padding: '16px 18px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <span style={{ flex: 'none', width: 30, height: 30, borderRadius: '50%', background: C.accent600, color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 13 }}>
+            <li key={a.title} style={{ background: C.surface, color: C.text, borderRadius: 10, padding: '16px 18px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <span style={{ flex: 'none', width: 30, height: 30, borderRadius: '50%', background: C.accentStrong, color: C.onAccent, display: 'grid', placeItems: 'center', fontWeight: 600, fontSize: 13 }}>
                 {i + 1}
               </span>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{a.title}</span>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>{a.title}</span>
                 <span style={{ fontSize: 13, color: C.textSoft }}>{a.body}</span>
               </div>
             </li>
@@ -144,7 +144,7 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
               const adj = p.getDate() !== 25;
               const isPast = k === 0;
               return (
-                <div key={p.toISOString()} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderBottom: `1.5px solid ${C.divider}`, fontSize: 14 }}>
+                <div key={p.toISOString()} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderBottom: `1px solid ${C.divider}`, fontSize: 14 }}>
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto' }}>
                     <span style={{ fontWeight: k === 1 ? 700 : 500 }}>
                       {dayLabel(p)} {p.getFullYear()}
@@ -177,10 +177,10 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {buckets.map((k, i) => (
-            <div key={k.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: `1.5px solid ${C.divider}`, flexWrap: 'wrap' }}>
+            <div key={k.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: `1px solid ${C.divider}`, flexWrap: 'wrap' }}>
               <Dot color={[C.accent700, C.mint[5], C.mint[7]][i]} />
               <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
-                <span style={{ fontWeight: 700, fontSize: 15 }}>{k.name}</span>
+                <span style={{ fontWeight: 600, fontSize: 15 }}>{k.name}</span>
                 <span style={{ fontSize: 13, color: C.textMuted }}>{k.note}</span>
                 {k.link && (
                   <button type="button" className={s.linkBtn} style={{ alignSelf: 'flex-start' }} onClick={onOpenInvest}>
@@ -189,7 +189,7 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
                 )}
               </span>
               <span style={{ color: C.textMuted, fontSize: 14, width: 44, textAlign: 'right' }}>{k.pct}%</span>
-              <span style={{ fontWeight: 700, fontSize: 14, minWidth: 120, textAlign: 'right' }}>{full(ofIncome(k.pct))}</span>
+              <span style={{ fontWeight: 600, fontSize: 14, minWidth: 120, textAlign: 'right' }}>{full(ofIncome(k.pct))}</span>
             </div>
           ))}
         </div>
@@ -206,7 +206,7 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
 
 function AllocRow({ name, pct, amt, weight = 500, indent, last }: { name: string; pct: number; amt: string; weight?: number; indent?: boolean; last?: boolean }) {
   return (
-    <div style={{ display: 'flex', gap: 12, padding: '9px 0', borderBottom: last ? 'none' : `1.5px solid ${C.divider}`, fontSize: 14, fontWeight: weight }}>
+    <div style={{ display: 'flex', gap: 12, padding: '9px 0', borderBottom: last ? 'none' : `1px solid ${C.divider}`, fontSize: 14, fontWeight: weight }}>
       <span style={{ marginRight: 'auto', paddingLeft: indent ? 18 : 0 }}>{name}</span>
       <span style={{ color: C.textMuted, width: 44, textAlign: 'right' }}>{pct}%</span>
       <span style={{ minWidth: 120, textAlign: 'right' }}>{amt}</span>

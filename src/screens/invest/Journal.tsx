@@ -149,7 +149,7 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
               : 'Add one so the position has a reason to move';
 
           return (
-            <div key={t.id} style={{ borderBottom: `1.5px solid ${C.divider}`, background: isOpen ? C.bg : 'transparent' }}>
+            <div key={t.id} style={{ borderBottom: `1px solid ${C.divider}`, background: isOpen ? C.bg : 'transparent' }}>
               <button
                 type="button"
                 className={`${s.rowBtn} ${s.hoverRow}`}
@@ -162,7 +162,7 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
               >
                 <Dot color={MK_COLOR[t.mk]} />
                 <span style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 220px', minWidth: 0 }}>
-                  <span style={{ fontSize: 16, fontWeight: 700 }}>
+                  <span style={{ fontSize: 16, fontWeight: 600 }}>
                     {t.tk} <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>{t.nm || t.mk}</span>
                   </span>
                   <span style={{ fontSize: 13, color: C.textMuted }}>
@@ -179,7 +179,7 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
                   {levTag(t) ? ' · ' + levTag(t) : ''}
                 </span>
                 <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, minWidth: 120 }}>
-                  <span style={{ fontSize: 16, fontWeight: 800, color: plInk(ret) }}>{fmtPct(ret)}</span>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: plInk(ret) }}>{fmtPct(ret)}</span>
                   <span style={{ fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>
                     {cl ? 'Realised ' : 'Unrealised '}
                     {dS(pl, true)}
@@ -200,21 +200,21 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <span className={s.eyebrow}>Catalyst</span>
-                      <span style={{ fontSize: 14, fontWeight: 700 }}>{t.cat || 'No catalyst set'}</span>
+                      <span style={{ fontSize: 14, fontWeight: 600 }}>{t.cat || 'No catalyst set'}</span>
                       <span style={{ fontSize: 13, color: C.textMuted }}>{catWhen}</span>
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
                     {plan.map(p => (
-                      <div key={p.k} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <div key={p.k} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 2 }}>
                         <span style={{ fontSize: 13, color: C.textMuted }}>{p.k}</span>
-                        <span style={{ fontSize: 16, fontWeight: 800, color: p.ink }}>{p.v}</span>
+                        <span style={{ fontSize: 16, fontWeight: 600, color: p.ink }}>{p.v}</span>
                         <span style={{ fontSize: 13, color: C.textMuted }}>{p.sub}</span>
                       </div>
                     ))}
                   </div>
                   {cl && (
-                    <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 16, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span className={s.eyebrow} style={{ marginRight: 'auto' }}>
                           Review
@@ -252,8 +252,8 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
                     </div>
                   )}
                   {!cl && closing === t.id && (
-                    <div style={{ background: '#fff', border: `1.5px solid ${C.accent600}`, borderRadius: 16, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                      <span style={{ fontSize: 16, fontWeight: 800 }}>Close {t.tk} and review</span>
+                    <div style={{ background: C.surface, border: `1.5px solid ${C.accent600}`, borderRadius: 10, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      <span style={{ fontSize: 16, fontWeight: 600 }}>Close {t.tk} and review</span>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
                         <label className={s.field}>
                           Exit price ({t.mk === 'IDX' ? 'Rp' : '$'})

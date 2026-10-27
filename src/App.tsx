@@ -171,10 +171,12 @@ export default function App() {
               <span className={s.mobileOnly} style={{ fontWeight: 600, fontSize: 14 }}>
                 Personal Spending Tracker
               </span>
-              <span className={s.label}>
-                Cycle {dayMonth(cycle.start)} – {dayMonth(cycle.end)} · Day {cycle.dayN} of {cycle.cycleDays}
-              </span>
-              <h1 className={s.h1}>{current.label}</h1>
+              <div className={s.headerLine}>
+                <h1 className={s.h1}>{current.label}</h1>
+                <span className={s.label}>
+                  Cycle {dayMonth(cycle.start)} – {dayMonth(cycle.end)} · Day {cycle.dayN} of {cycle.cycleDays}
+                </span>
+              </div>
               <span className={s.cycleProgress} role="progressbar" aria-label="Pay cycle" aria-valuemin={1} aria-valuemax={cycle.cycleDays} aria-valuenow={cycle.dayN}>
                 <span style={{ width: `${(cycle.dayN / cycle.cycleDays) * 100}%` }} />
               </span>
@@ -187,7 +189,7 @@ export default function App() {
               type="button"
               className={s.chip}
               onClick={() => setGmailOpen(true)}
-              style={syncWarn ? { borderColor: 'var(--amber)', color: 'var(--amber-ink)', fontWeight: 700 } : undefined}
+              style={syncWarn ? { borderColor: 'var(--amber)', color: 'var(--amber-ink)', fontWeight: 600 } : undefined}
               title="Gmail sync settings"
             >
               <Icon d={IC.refresh} size={14} />
@@ -199,7 +201,7 @@ export default function App() {
           </header>
 
           {saveError && (
-            <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--red-tint)', color: 'var(--red-ink)', borderRadius: 16, padding: '12px 16px', fontSize: 14 }}>
+            <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--red-tint)', color: 'var(--red-ink)', borderRadius: 10, padding: '12px 16px', fontSize: 14 }}>
               <span style={{ marginRight: 'auto' }}>{saveError}</span>
               <button type="button" className={s.btnGhost} style={{ color: 'inherit', padding: '0 8px' }} onClick={dismissError}>
                 Dismiss

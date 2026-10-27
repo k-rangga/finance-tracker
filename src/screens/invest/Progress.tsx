@@ -86,12 +86,12 @@ export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
               }}
               style={{
                 fontSize: 14,
-                fontWeight: 700,
+                fontWeight: 600,
                 padding: '8px 14px',
                 minHeight: 40,
                 borderRadius: 999,
                 border: 'none',
-                background: rg === k ? '#fff' : 'transparent',
+                background: rg === k ? C.surface : 'transparent',
                 color: rg === k ? C.accent800 : C.textMuted,
                 boxShadow: rg === k ? '0 1px 3px rgba(23,32,27,.12)' : 'none',
               }}
@@ -118,7 +118,7 @@ export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
           Contributed <strong>{dF(hp.c)}</strong>
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 3, background: '#cdeee6' }} />
+          <span style={{ width: 12, height: 12, borderRadius: 3, background: C.accentTint }} />
           Gain{' '}
           <strong style={{ color: plInk(hg) }}>
             {dS(hg, true)} ({fmtPct((hg / hp.c) * 100)})
@@ -139,8 +139,8 @@ export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
           ))}
           <svg viewBox="0 0 1000 300" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }}>
             <path d={gainArea} fill="#cdeee6" opacity={0.7} />
-            <path d={cPath} fill="none" stroke={C.textMuted} strokeWidth={2} strokeDasharray="6 5" vectorEffect="non-scaling-stroke" />
-            <path d={vPath} fill="none" stroke={C.accent700} strokeWidth={3} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            <path d={cPath} fill="none" style={{ stroke: C.textMuted }} strokeWidth={2} strokeDasharray="6 5" vectorEffect="non-scaling-stroke" />
+            <path d={vPath} fill="none" style={{ stroke: C.accent700 }} strokeWidth={3} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
           </svg>
           <div style={{ position: 'absolute', top: 0, bottom: 0, width: 1, background: C.text, opacity: 0.2, left: pc(X(hp.dt) / 10) }} />
           <div
@@ -149,7 +149,7 @@ export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
               width: 10,
               height: 10,
               borderRadius: '50%',
-              background: '#fff',
+              background: C.surface,
               border: `2px solid ${C.textMuted}`,
               transform: 'translate(-50%,-50%)',
               left: pc(X(hp.dt) / 10),

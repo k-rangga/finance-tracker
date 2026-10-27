@@ -119,7 +119,7 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
                 <div key={c.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderTop: '1px solid var(--divider)' }}>
                   <IconChip d={c.icon} bg={c.tint} ink={c.ink} size={32} iconSize={15} />
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700 }}>{c.name}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600 }}>{c.name}</span>
                     <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                       {c.type === 'fixed' ? 'Fixed bill' : 'Variable'} · {c.limitPct}% of income ({full((c.limitPct / 100) * settings.income)})
                     </span>

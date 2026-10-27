@@ -5,7 +5,7 @@ import { IC, Icon } from '../components/Icon';
 import { CategoryDialog } from '../components/CategoryDialog';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { Select } from '../components/Select';
-import { dayAmount, dayTotalLabel, iconColors, inDayTotal, type Budget, type TxView } from '../lib/budget';
+import { dayAmount, dayTotalLabel, ICON_CHIP, inDayTotal, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth, parseISO, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
@@ -159,7 +159,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
               ...CATEGORIES.map(c => ({ value: c.name, label: c.name, dot: c.color, group: 'Spending' })),
               ...[...OTHER_CATEGORIES, CC_PAYMENT_CATEGORY].map(c => ({ value: c, label: categoryLabel(c), group: 'Not spending' })),
             ]}
-            style={{ width: 'auto', minWidth: 0, maxWidth: 220, marginLeft: 'auto', borderRadius: 999, fontSize: 14, padding: '9px 40px 9px 16px', minHeight: 44 }}
+            style={{ width: 'auto', minWidth: 0, maxWidth: 220, marginLeft: 'auto', borderRadius: 8, fontSize: 14, padding: '9px 40px 9px 16px', minHeight: 44 }}
           />
           {calOpen && (
             <DateRangePicker
@@ -183,13 +183,13 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
               onChange={e => setFilter({ ...filter, q: e.target.value })}
               placeholder="Search merchant, source or category"
               aria-label="Search transactions"
-              style={{ borderRadius: 999, paddingLeft: 42, fontSize: 14 }}
+              style={{ borderRadius: 8, paddingLeft: 42, fontSize: 14 }}
             />
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
           <span aria-live="polite">
-            <strong style={{ color: C.textSoft, fontWeight: 700 }}>{rangeLabel}</strong> · {txs.length} {txs.length === 1 ? 'transaction' : 'transactions'} · {full(out)} spent{paidBack ? ` after ${full(paidBack)} reimbursed` : ''}{cardBills ? ` · ${full(cardBills)} card bills paid` : ''}
+            <strong style={{ color: C.textSoft, fontWeight: 600 }}>{rangeLabel}</strong> · {txs.length} {txs.length === 1 ? 'transaction' : 'transactions'} · {full(out)} spent{paidBack ? ` after ${full(paidBack)} reimbursed` : ''}{cardBills ? ` · ${full(cardBills)} card bills paid` : ''}
             {saved ? ` · ${full(saved)} saved` : ''}
             {invested ? ` · ${full(invested)} invested` : ''}
             {moved ? ` · ${full(moved)} moved between your accounts` : ''}
@@ -246,7 +246,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
               {removedHere.map(t => (
                 <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px', color: C.textMuted }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, textDecoration: 'line-through' }}>{t.title}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, textDecoration: 'line-through' }}>{t.title}</span>
                     <span style={{ fontSize: 13 }}>
                       {dayLabel(t.date)} · {t.cat} · {full(t.amount)}
                     </span>
@@ -267,19 +267,19 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
         </h2>
         {bills.length === 0 && <div style={{ padding: '8px 18px 12px', fontSize: 14, color: C.textMuted }}>No more bills due before payday.</div>}
         {bills.map(b => {
-          const ic = iconColors(b.category);
+          const ic = ICON_CHIP;
           const inDays = cycle.offsetOf(b.date) - cycle.dayIdx;
           return (
             <div key={b.title} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px' }}>
               <IconChip d={IC.calendar} bg={ic.bg} ink={ic.ink} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginRight: 'auto', minWidth: 0 }}>
-                <span style={{ fontSize: 15, fontWeight: 700 }}>{b.title}</span>
+                <span style={{ fontSize: 15, fontWeight: 600 }}>{b.title}</span>
                 <span style={{ fontSize: 13, color: C.textMuted }}>
                   {b.category} · {b.source}
                 </span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>- {full(b.amount)}</span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>- {full(b.amount)}</span>
                 <span style={{ fontSize: 13, color: C.textMuted }}>
                   Due {dayLabel(b.date)} · in {inDays} {inDays === 1 ? 'day' : 'days'}
                 </span>
@@ -331,7 +331,7 @@ type RowProps = {
 function TxRow({ t, onRecat, onLink, onShare, onRemove, onNewCategory, expenses, popover, setPopover }: RowProps) {
   const { full } = useSettings();
   const c = categoryByName(t.cat);
-  const ic = iconColors(t.cat);
+  const ic = ICON_CHIP;
   const row = useRef<HTMLDivElement>(null);
   const linked = t.reimbursesId ? expenses.find(e => e.id === t.reimbursesId) : undefined;
   const canLink = t.isIncome && !t.isSalary;
@@ -378,12 +378,12 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onNewCategory, expenses,
         <IconChip d={c ? c.icon : t.isCcPayment ? IC.card : t.isInvestment ? IC.trend : t.isSavings ? IC.piggy : t.isTransfer ? IC.transfer : IC.coins} bg={ic.bg} ink={ic.ink} />
       </span>
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
-        <span className={s.ellipsis} style={{ fontSize: 15, fontWeight: 700 }}>
+        <span className={s.ellipsis} style={{ fontSize: 15, fontWeight: 600 }}>
           {t.title}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, fontSize: 13, color: C.textMuted }}>
           {t.isCcPayment ? (
-            <span style={{ fontSize: 13, fontWeight: 700, color: C.text, background: C.divider, borderRadius: 999, padding: '4px 10px' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.text, background: C.divider, borderRadius: 999, padding: '4px 10px' }}>
               Transfer · {t.account} → {t.toAccount ?? 'card'}
             </span>
           ) : t.reimbursesId ? (
@@ -431,8 +431,8 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onNewCategory, expenses,
         )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>
-        <span style={{ fontSize: 15, fontWeight: 700, color: amount.ink }}>{amount.text}</span>
-        {amount.note && <span style={{ fontSize: 13, fontWeight: 700, color: C.accent800 }}>{amount.note}</span>}
+        <span style={{ fontSize: 15, fontWeight: 600, color: amount.ink }}>{amount.text}</span>
+        {amount.note && <span style={{ fontSize: 13, fontWeight: 600, color: C.accent800 }}>{amount.note}</span>}
         <span style={{ fontSize: 13, color: C.textMuted }}>{t.time}</span>
       </div>
       <div style={{ position: 'relative', flex: 'none' }}>
@@ -491,12 +491,12 @@ function Picker({ income, expenses, onPick }: { income: TxView; expenses: TxView
           <button key={e.id} type="button" className={s.pickRow + (e.id === income.reimbursesId ? ' ' + s.pickRowOn : '')} onClick={() => onPick(e.id)}>
             <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, marginRight: 'auto' }}>
               {e === suggested && <span className={s.pickSuggest}>Suggested · same amount</span>}
-              <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{e.title}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{e.title}</span>
               <span style={{ fontSize: 13, color: C.textMuted }}>
                 {dayMonth(e.date)} · {e.cat}
               </span>
             </span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, whiteSpace: 'nowrap' }}>{full(e.amount)}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, whiteSpace: 'nowrap' }}>{full(e.amount)}</span>
           </button>
         ))}
       </div>
@@ -538,10 +538,10 @@ function ShareEditor({ t, onSave }: { t: TxView; onSave: (ratio: number | null) 
         ))}
       </div>
       <label className={s.pickSearch}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: C.textMuted }}>My share</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.textMuted }}>My share</span>
         <input autoFocus inputMode="decimal" value={text} onChange={e => setText(e.target.value)} aria-label="My share" aria-invalid={!valid} />
       </label>
-      {!valid && <span style={{ fontSize: 13, fontWeight: 700, color: C.redInk }}>Enter an amount from 0 to {full(t.amount)}.</span>}
+      {!valid && <span style={{ fontSize: 13, fontWeight: 600, color: C.redInk }}>Enter an amount from 0 to {full(t.amount)}.</span>}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
         {t.share != null && (
           <button type="button" className={s.textBtnSm} onClick={() => onSave(null)} style={{ marginRight: 'auto' }}>
@@ -559,7 +559,6 @@ function ShareEditor({ t, onSave }: { t: TxView; onSave: (ratio: number | null) 
 /** Category pill on a row: tint background, ink text, colour outline. Opens the searchable menu. */
 function CategoryButton({ t, open, onToggle }: { t: TxView; open: boolean; onToggle: () => void }) {
   const c = categoryByName(t.cat);
-  const ic = iconColors(t.cat);
   return (
     <button
       type="button"
@@ -569,9 +568,9 @@ function CategoryButton({ t, open, onToggle }: { t: TxView; open: boolean; onTog
       aria-label={`Category for ${t.title}: ${t.cat}`}
       title={t.edited ? `Changed from ${categoryLabel(t.category)} · click to change` : 'Change category'}
       onClick={onToggle}
-      style={{ color: ic.ink, background: ic.bg, borderColor: c?.color ?? C.accent500 }}
     >
-      <span className={s.catPillText}>{c ? '● ' : ''}{categoryLabel(t.cat)}</span>
+      <span aria-hidden="true" style={{ flex: 'none', width: 7, height: 7, borderRadius: '50%', background: c?.color ?? C.textFaint, marginRight: 6 }} />
+      <span className={s.catPillText}>{categoryLabel(t.cat)}</span>
       <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: `translateY(-50%)${open ? ' rotate(180deg)' : ''}`, pointerEvents: 'none' }} />
     </button>
   );

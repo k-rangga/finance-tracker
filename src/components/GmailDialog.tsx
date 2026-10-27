@@ -78,8 +78,8 @@ export function GmailDialog({ onClose }: { onClose: () => void }) {
             'No label chosen yet.'
           )}
         </span>
-        {lastError && <span style={{ fontSize: 13, fontWeight: 700, color: C.redInk }}>Last sync failed: {lastError}</span>}
-        {partial && <span style={{ fontSize: 13, fontWeight: 700, color: C.amberInk }}>Import still running in the background. It continues every couple of minutes until done.</span>}
+        {lastError && <span style={{ fontSize: 13, fontWeight: 600, color: C.redInk }}>Last sync failed: {lastError}</span>}
+        {partial && <span style={{ fontSize: 13, fontWeight: 600, color: C.amberInk }}>Import still running in the background. It continues every couple of minutes until done.</span>}
       </div>
       <label className={s.field}>
         Label with your receipts

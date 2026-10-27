@@ -45,12 +45,12 @@ export function Review({ today, P, onOpenTrade }: { today: Date; P: Portfolio; o
                 type="button"
                 className={`${s.rowBtn} ${s.hoverRow}`}
                 onClick={() => onOpenTrade(t.id)}
-                style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10, padding: '18px 24px', borderBottom: `1.5px solid ${C.divider}` }}
+                style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10, padding: '18px 24px', borderBottom: `1px solid ${C.divider}` }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: '12px 16px', flexWrap: 'wrap' }}>
                   <Dot color={MK_COLOR[t.mk]} />
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: '1 1 220px', minWidth: 0 }}>
-                    <span style={{ fontSize: 16, fontWeight: 700 }}>
+                    <span style={{ fontSize: 16, fontWeight: 600 }}>
                       {t.tk} <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>{t.nm || t.mk}</span>
                     </span>
                     <span style={{ fontSize: 13, color: C.textMuted }}>
@@ -64,7 +64,7 @@ export function Review({ today, P, onOpenTrade }: { today: Date; P: Portfolio; o
                     Rating {t.ex!.rt ?? '—'} / 5
                   </span>
                   <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, minWidth: 120 }}>
-                    <span style={{ fontSize: 16, fontWeight: 800, color: ink }}>
+                    <span style={{ fontSize: 16, fontWeight: 600, color: ink }}>
                       {d.r == null ? '—' : fmtR(d.r)} · {fmtPct(d.ret)}
                     </span>
                     <span style={{ fontSize: 13, color: ink }}>Net {dS(d.net, true)}</span>

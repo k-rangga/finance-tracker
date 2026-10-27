@@ -1,27 +1,72 @@
+/* Warm, mostly neutral palette: one teal accent, colour kept for data and status. */
 :root {
-  --bg: #f3f7f6;
+  --bg: #f8f7f3;
   --surface: #ffffff;
-  --border: #e2e9e7;
-  --border-strong: #d8e1df;
-  --divider: #ecf1f0;
-  --text: #16201e;
-  --text-muted: #4b5855;
-  --text-soft: #3f4a44;
-  --accent-500: #14a08a;
-  --accent-600: #0b7a6a;
-  --accent-700: #0b6b5c;
-  --accent-800: #0b5c50;
-  --accent-900: #086052;
-  --accent-tint: #e3f6f2;
-  --accent-hover: #eef7f5;
-  --red: #c94a4a;
-  --red-ink: #a3302f;
-  --red-tint: #fdeceb;
-  --amber: #e59a1a;
-  --amber-ink: #8a5a06;
-  --amber-tint: #fff4de;
+  --border: #e8e6de;
+  --border-strong: #dcd9ce;
+  --divider: #efede6;
+  --hover: #f4f2ec;
+  --text: #1f1e1c;
+  --text-soft: #3d3c38;
+  --text-muted: #6b6a64;
+  --text-faint: #b3b0a6;
+  --accent-500: #2a9d86;
+  --accent-600: #1f7f6d;
+  --accent-700: #1b6e5f;
+  --accent-800: #175c50;
+  --accent-900: #124c42;
+  --accent-strong: #175c50;
+  --accent-tint: #e6f2ee;
+  --accent-hover: #f0f6f3;
+  --accent-soft: #eef5f2;
+  --on-accent: #ffffff;
+  --red: #c4553f;
+  --red-ink: #a33a2a;
+  --red-tint: #fbece7;
+  --red-row: #fdf7f5;
+  --amber: #d9952b;
+  --amber-ink: #8a5a0c;
+  --amber-tint: #fbf1dc;
+  --amber-row: #fdfaf2;
+  --shadow: 0 10px 30px rgba(31, 30, 28, 0.12);
   --font: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   color-scheme: light;
+}
+
+/* Dark mode follows the device setting; every colour above has a dark twin. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1f1e1c;
+    --surface: #2a2926;
+    --border: #3a3935;
+    --border-strong: #46443f;
+    --divider: #33322e;
+    --hover: #34332f;
+    --text: #f2f0ea;
+    --text-soft: #d6d3ca;
+    --text-muted: #a3a097;
+    --text-faint: #6c6a63;
+    --accent-500: #4cc0a6;
+    --accent-600: #5fc9b1;
+    --accent-700: #73d1bc;
+    --accent-800: #8fdcc9;
+    --accent-900: #a8e5d6;
+    --accent-strong: #1f5c50;
+    --accent-tint: #1d3a33;
+    --accent-hover: #243f39;
+    --accent-soft: #213a34;
+    --on-accent: #ffffff;
+    --red: #e07a66;
+    --red-ink: #f19a88;
+    --red-tint: #3f2620;
+    --red-row: #33241f;
+    --amber: #e5a842;
+    --amber-ink: #f0c06c;
+    --amber-tint: #3d321c;
+    --amber-row: #322b1d;
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    color-scheme: dark;
+  }
 }
 
 *,
@@ -51,6 +96,19 @@ textarea {
 
 button {
   cursor: pointer;
+}
+
+/* Small, quick feedback on everything you can press or type in. */
+button,
+a,
+input,
+select,
+textarea {
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
 }
 
 a {
@@ -83,7 +141,7 @@ h1,
 h2,
 h3 {
   margin: 0;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.02em;
 }
 

@@ -96,7 +96,7 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
         <div style={{ padding: '24px 28px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
           <h2 className={s.h2}>Holdings</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: stale ? C.amberInk : C.textMuted }}>{pxNote}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: stale ? C.amberInk : C.textMuted }}>{pxNote}</span>
             <button type="button" className={s.btnOutline} onClick={refresh.refresh} disabled={refresh.busy}>
               {refresh.busy ? 'Refreshing…' : 'Refresh prices'}
             </button>
@@ -157,7 +157,7 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
                   <span role="cell" className={s.hAsset} style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                     <Dot color={MK_COLOR[t.mk]} />
                     <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                      <span style={{ fontWeight: 700 }}>{t.tk}</span>
+                      <span style={{ fontWeight: 600 }}>{t.tk}</span>
                       <span style={{ fontSize: 13, color: C.textMuted }}>
                         {t.nm || t.mk}
                         {levTag(t) ? ' · ' + levTag(t) : ''}
@@ -173,11 +173,11 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
                     <span style={{ fontSize: 13, color: C.textMuted }}>avg {nat(t.px, t.mk)}</span>
                   </span>
                   <span role="cell" className={s.hValue} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontWeight: 700 }}>{dS(p.val)}</span>
+                    <span style={{ fontWeight: 600 }}>{dS(p.val)}</span>
                     <span style={{ fontSize: 13, color: C.textMuted }}>{Math.round((p.val / P.tot) * 100)}% of portfolio</span>
                   </span>
                   <span role="cell" className={s.hPl} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontWeight: 700, color: ink }}>{fmtPct(p.plp)}</span>
+                    <span style={{ fontWeight: 600, color: ink }}>{fmtPct(p.plp)}</span>
                     <span style={{ fontSize: 13, color: ink }}>{dS(p.pl, true)}</span>
                   </span>
                   <span role="cell" className={s.hPlan}>
@@ -210,7 +210,7 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
                     ) : t.sl ? (
                       <span style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13, color: C.textMuted }}>
                         <span style={{ whiteSpace: 'nowrap' }}>Stop {nat(t.sl, t.mk)} · no target</span>
-                        <span style={{ fontWeight: 700, color: toStop < 0 ? C.redInk : toStop <= 3 ? C.amberInk : C.textMuted }}>
+                        <span style={{ fontWeight: 600, color: toStop < 0 ? C.redInk : toStop <= 3 ? C.amberInk : C.textMuted }}>
                           {toStop < 0 ? 'Stop breached' : `${toStop.toFixed(1)}% above stop`}
                         </span>
                       </span>
