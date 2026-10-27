@@ -154,24 +154,16 @@ function reimbursements(all: Transaction[], recat: Record<string, string>, links
   return { valid, back };
 }
 
-export function computeBudget(args: {
-  transactions: Transaction[];
-  /** Last cycle's transactions, for the comparisons. */
-  prevTransactions: Transaction[];
-  prevCycle: Cycle;
-  bills: Bill[];
-  recat: Record<string, string>;
-  /** Reimbursements: { incomeId: expenseId }. */
-  links: Record<string, string>;
-  /** Your share of an expense as a fraction of its amount: { txId: 0–1 }. */
-  shares: Record<string, number>;
-  cycle: Cycle;
-  income: number;
-  warnAt: number;
-}): Budget {
-  const { transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, income, warnAt } = args;
-  const ofIncome = (p: number) => (p / 100) * income;
-  const { valid, back } = reimbursements([...transactions, ...prevTransactions], recat, links);
+/**
+ * Transactions as the screens show them: effective category, reimbursements and your share applied.
+ * `context` is every transaction a reimbursement may link across (at least `transactions` itself).
+ */
+export function txViews(
+  transactions: Transaction[],
+  context: Transaction[],
+  { recat, links, shares, cycle }: { recat: Record<string, string>; links: Record<string, string>; shares: Record<string, number>; cycle: Cycle },
+) {
+  const { valid, back } = reimbursements(context, recat, links);
   const shareOf = (t: Transaction) => (shares[t.id] == null ? undefined : Math.round(shares[t.id] * t.amount * 100) / 100);
   /** What counts as your spending: your share if you set one, less what others paid back. */
   const netOf = (t: Transaction) => Math.max(0, Math.min(shareOf(t) ?? t.amount, t.amount - (back.get(t.id)?.amount ?? 0)));
@@ -201,6 +193,27 @@ export function computeBudget(args: {
       };
     })
     .sort((a, b) => b.date.getTime() - a.date.getTime() || b.time.localeCompare(a.time));
+  return { txs, netOf };
+}
+
+export function computeBudget(args: {
+  transactions: Transaction[];
+  /** Last cycle's transactions, for the comparisons. */
+  prevTransactions: Transaction[];
+  prevCycle: Cycle;
+  bills: Bill[];
+  recat: Record<string, string>;
+  /** Reimbursements: { incomeId: expenseId }. */
+  links: Record<string, string>;
+  /** Your share of an expense as a fraction of its amount: { txId: 0–1 }. */
+  shares: Record<string, number>;
+  cycle: Cycle;
+  income: number;
+  warnAt: number;
+}): Budget {
+  const { transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, income, warnAt } = args;
+  const ofIncome = (p: number) => (p / 100) * income;
+  const { txs, netOf } = txViews(transactions, [...transactions, ...prevTransactions], { recat, links, shares, cycle });
 
   const weekFrac = Math.min(1, (cycle.dayIdx - cycle.weekIdx * 7 + 1) / 7);
   const cats: CatView[] = CATEGORIES.map(c => {

@@ -5,17 +5,20 @@ import { IC, Icon } from '../components/Icon';
 import { CategoryDialog } from '../components/CategoryDialog';
 import { dayAmount, dayTotalLabel, iconColors, inDayTotal, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { dayLabel, dayMonth } from '../lib/format';
+import { dayLabel, dayMonth, parseISO, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
 import { CATEGORIES, categoryByName, CC_PAYMENT_CATEGORY, OTHER_CATEGORIES } from '../data/categories';
 
-export type Range = 'today' | 'week' | 'last' | 'cycle';
-export type ActivityFilter = { range: Range; cat: string; q: string };
+export type Range = 'today' | 'week' | 'last' | 'cycle' | 'custom';
+/** `from` / `to` (YYYY-MM-DD, inclusive) are the dates picked for the `custom` range. */
+export type ActivityFilter = { range: Range; cat: string; q: string; from?: string; to?: string };
 
 type Props = {
   cycle: Cycle;
   budget: Budget;
+  /** Every synced transaction, not only this cycle's: what a picked date range lists. */
+  allTxs: TxView[];
   filter: ActivityFilter;
   setFilter: (f: ActivityFilter) => void;
   onRecat: (id: string, orig: string, cat: string) => void;
@@ -27,7 +30,7 @@ type Props = {
 
 type Popover = 'link' | 'share' | 'cat';
 
-export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink, onShare }: Props) {
+export function Activity({ cycle, budget, allTxs, filter, setFilter, onRecat, onLink, onShare }: Props) {
   const { full } = useSettings();
   /** The row with an open popover: an income's "paid back for" picker or an expense's "my share" editor. */
   const [open, setOpen] = useState<{ id: string; kind: Popover } | null>(null);
@@ -35,6 +38,13 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink, on
   const [creating, setCreating] = useState<{ name: string; tx: TxView } | null>(null);
   const expenses = budget.txs.filter(t => !t.isIncome && !t.isTransfer);
   const { range, cat, q } = filter;
+  const todayISO = toISO(cycle.today);
+  const earliestISO = allTxs.length ? toISO(allTxs[allTxs.length - 1].date) : toISO(cycle.start);
+  const from = filter.from ?? toISO(cycle.start);
+  const to = filter.to ?? todayISO;
+  // Keep the range the right way round: moving one end past the other moves both.
+  const setFrom = (v: string) => v && setFilter({ ...filter, range: 'custom', from: v, to: v > to ? v : to });
+  const setTo = (v: string) => v && setFilter({ ...filter, range: 'custom', from: v < from ? v : from, to: v });
   // Calendar weeks (Monday to Sunday), not weeks of the pay cycle, which start on payday's weekday.
   // Only this cycle's transactions are listed, so a week reaching back before payday starts at payday.
   const wStart = cycle.offsetOf(cycle.today) - ((cycle.today.getDay() + 6) % 7);
@@ -43,15 +53,16 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink, on
     week: [Math.max(0, wStart), cycle.dayIdx],
     last: [Math.max(0, wStart - 7), wStart - 1],
     cycle: [0, cycle.dayIdx],
+    custom: [cycle.offsetOf(parseISO(from)), cycle.offsetOf(parseISO(to))],
   };
   const [lo, hi] = bounds[range];
   const span = (a: number, b: number) => (a === b ? dayLabel(cycle.dateOf(a)) : `${dayLabel(cycle.dateOf(a))} – ${dayLabel(cycle.dateOf(b))}`);
   const rangeLabel =
     hi < lo
       ? 'Last week was before this pay cycle'
-      : span(lo, hi) + (range !== 'cycle' && range !== 'today' && lo === 0 && (range === 'last' ? wStart - 7 : wStart) < 0 ? ' (from payday)' : '');
+      : span(lo, hi) + ((range === 'week' || range === 'last') && lo === 0 && (range === 'last' ? wStart - 7 : wStart) < 0 ? ' (from payday)' : '');
   const needle = q.trim().toLowerCase();
-  const txs = budget.txs.filter(
+  const txs = (range === 'custom' ? allTxs : budget.txs).filter(
     t => t.offset >= lo && t.offset <= hi && (!cat || t.cat === cat) && (!needle || `${t.title} ${t.account} ${t.source} ${t.cat}`.toLowerCase().includes(needle)),
   );
 
@@ -78,10 +89,27 @@ export function Activity({ cycle, budget, filter, setFilter, onRecat, onLink, on
           ['week', 'This week'],
           ['last', 'Last week'],
           ['cycle', 'This cycle'],
+          ['custom', 'Pick dates'],
         ]}
         value={range}
-        onChange={r => setFilter({ ...filter, range: r })}
+        onChange={r => setFilter({ ...filter, range: r, from, to })}
       />
+      {range === 'custom' && (
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+          {(
+            [
+              ['From', from, setFrom],
+              ['To', to, setTo],
+            ] as const
+          ).map(([label, value, set]) => (
+            <label key={label} style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 140px', maxWidth: 220, minWidth: 0, fontSize: 13, fontWeight: 700, color: C.textMuted }}>
+              {label}
+              <input className={s.input} type="date" value={value} min={earliestISO} max={todayISO} onChange={e => set(e.target.value)} style={{ borderRadius: 999, fontSize: 14, padding: '10px 16px' }} />
+            </label>
+          ))}
+          <span style={{ fontSize: 12, color: C.textMuted, paddingBottom: 12 }}>Synced history starts {dayLabel(parseISO(earliestISO))}</span>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: '1 1 260px', minWidth: 0 }}>
           <Icon d={IC.search} size={16} color={C.textMuted} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />

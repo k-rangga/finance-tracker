@@ -7,7 +7,7 @@ import { CategoryDialog } from './components/CategoryDialog';
 import { GmailDialog, syncedAgo } from './components/GmailDialog';
 import { KEYS, storage } from './lib/storage';
 import { getCycle } from './lib/cycle';
-import { computeBudget } from './lib/budget';
+import { computeBudget, txViews } from './lib/budget';
 import { addDays, dayLabel, dayMonth, startOfToday } from './lib/format';
 import { useSettings } from './lib/settings';
 import { useData } from './lib/data';
@@ -58,6 +58,8 @@ export default function App() {
     () => computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, income: settings.income, warnAt: settings.warnAt }),
     [transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, settings.income, settings.warnAt, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
   );
+  /** Every synced transaction, for the Transactions screen's own date range. */
+  const allTxs = useMemo(() => txViews(all, all, { recat, links, shares, cycle }).txs, [all, recat, links, shares, cycle]);
   const ready = !!gmail.label_name;
   const syncLabel = !ready ? 'Connect Gmail' : gmail.last_sync_status?.startsWith('error') ? 'Gmail sync failed' : `Synced ${syncedAgo(gmail.last_synced_at)}`;
   const syncWarn = !ready || !!gmail.last_sync_status?.startsWith('error');
@@ -210,7 +212,7 @@ export default function App() {
           {tab === 'categories' && (
             <Categories cycle={cycle} budget={budget} open={openCat} setOpen={setOpenCat} onShowTransactions={showTransactions} onEditCategory={name => setCatDialog({ editing: name })} onNewCategory={() => setCatDialog({})} />
           )}
-          {tab === 'tx' && <Activity cycle={cycle} budget={budget} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} />}
+          {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} />}
           {tab === 'plan' && <SavingsPlan cycle={cycle} budget={budget} onOpenInvest={() => setTab('invest')} />}
           {tab === 'invest' && <Invest cycle={cycle} />}
         </div>
