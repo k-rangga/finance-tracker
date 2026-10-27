@@ -34,7 +34,7 @@ export default function App() {
     const t = storage.getRaw(KEYS.tab) as Tab | null;
     return t && TABS.some(x => x.key === t) ? t : 'summary';
   });
-  const { recat, links, shares, setOverride, setLink, setShare, saveError, dismissError, txRows, gmail, email } = useData();
+  const { recat, links, shares, removed, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email } = useData();
   const [txFilter, setTxFilter] = useState<ActivityFilter>({ range: 'week', cat: '', q: '' });
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -46,7 +46,10 @@ export default function App() {
   const today = useMemo(startOfToday, []);
   const cycle = useMemo(() => getCycle(today), [today]);
   const prevCycle = useMemo(() => getCycle(addDays(cycle.start, -1)), [cycle]);
-  const all = useMemo(() => txRows.map(r => toTransaction(r, settings.currency, settings.fxRate)), [txRows, settings.currency, settings.fxRate]);
+  const imported = useMemo(() => txRows.map(r => toTransaction(r, settings.currency, settings.fxRate)), [txRows, settings.currency, settings.fxRate]);
+  const removedIds = useMemo(() => new Set(removed), [removed]);
+  /** What every screen counts: imported transactions minus the ones you removed. */
+  const all = useMemo(() => imported.filter(t => !removedIds.has(t.id)), [imported, removedIds]);
   const transactions = useMemo(() => inCycle(all, cycle), [all, cycle]);
   const prevTransactions = useMemo(() => all.filter(t => t.date >= prevCycle.start && t.date < cycle.start), [all, prevCycle, cycle]);
   const bills = useMemo(
@@ -60,6 +63,10 @@ export default function App() {
   );
   /** Every synced transaction, for the Transactions screen's own date range. */
   const allTxs = useMemo(() => txViews(all, all, { recat, links, shares, cycle }).txs, [all, recat, links, shares, cycle]);
+  const removedTxs = useMemo(
+    () => txViews(imported.filter(t => removedIds.has(t.id)), imported, { recat, links, shares, cycle }).txs,
+    [imported, removedIds, recat, links, shares, cycle],
+  );
   const ready = !!gmail.label_name;
   const syncLabel = !ready ? 'Connect Gmail' : gmail.last_sync_status?.startsWith('error') ? 'Gmail sync failed' : `Synced ${syncedAgo(gmail.last_synced_at)}`;
   const syncWarn = !ready || !!gmail.last_sync_status?.startsWith('error');
@@ -212,7 +219,7 @@ export default function App() {
           {tab === 'categories' && (
             <Categories cycle={cycle} budget={budget} open={openCat} setOpen={setOpenCat} onShowTransactions={showTransactions} onEditCategory={name => setCatDialog({ editing: name })} onNewCategory={() => setCatDialog({})} />
           )}
-          {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} />}
+          {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} />}
           {tab === 'plan' && <SavingsPlan cycle={cycle} budget={budget} onOpenInvest={() => setTab('invest')} />}
           {tab === 'invest' && <Invest cycle={cycle} />}
         </div>

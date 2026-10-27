@@ -71,11 +71,11 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
       value: (t.isIncome ? '+ ' : '- ') + full(t.isIncome ? t.amount : t.net),
       // The section already says it's spending: only incomes get a colour.
       ink: t.isIncome ? C.accent800 : C.text,
-      icon: c ? c.icon : IC.coins,
+      icon: c ? c.icon : t.isSavings ? IC.piggy : t.isInvestment ? IC.trend : IC.coins,
       cat: t.cat,
       date: t.date,
-      // The Invested list totals what it shows (money moved out), though it isn't spending.
-      dayAmount: t.isInvestment ? -t.amount : dayAmount(t),
+      // The Savings list totals what it shows (money moved out), though it isn't spending.
+      dayAmount: t.isInvestment || t.isSavings ? -t.amount : dayAmount(t),
       struck: !t.isIncome && t.net !== t.amount ? full(t.amount) : undefined,
     };
   };
@@ -95,16 +95,24 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
   const fixedItems = b.txs.filter(t => typeOf(t.cat) === 'fixed').map(txItem);
   const varItems = b.txs.filter(t => typeOf(t.cat) === 'variable').map(txItem);
 
-  // Savings and investing are one pocket: the plan, what went to brokers, and what's left in savings.
+  // Savings and investing are one pocket. Only what you moved there counts ("Transfer (savings)" transactions),
+  // not the plan; investing comes out of it.
   const aboveInvestPlan = b.invested - investPlan;
-  const leftInSavings = savings - b.invested;
+  const leftInSavings = b.saved - b.invested;
   const savingsNote =
-    `Invested ${full(b.invested)}` +
-    (b.invested ? (aboveInvestPlan > 0 ? ` · ${full(aboveInvestPlan)} above plan` : ` of ${full(investPlan)} planned`) : '') +
+    `Saved ${full(b.saved)} of ${full(savings)} planned · Invested ${full(b.invested)}` +
     (leftInSavings >= 0 ? ` · ${full(leftInSavings)} left in savings` : ` · ${full(-leftInSavings)} more than you saved`);
   const savingsSummary = (
     <div style={{ display: 'flex', flexDirection: 'column', padding: '6px 0 4px' }}>
-      <BreakdownLine label={`Planned savings (${SAVINGS_TARGET_PCT}% of income)`} value={full(savings)} />
+      <BreakdownLine
+        label="Moved to savings this cycle"
+        sub={
+          `Plan ${full(savings)} (${SAVINGS_TARGET_PCT}% of income)` +
+          (b.saved >= savings ? ' · plan reached' : ` · ${full(savings - b.saved)} to go`) +
+          (b.saved ? '' : ' · set a transfer\'s category to Transfer (savings) to count it')
+        }
+        value={full(b.saved)}
+      />
       <BreakdownLine
         label="Invested this cycle"
         sub={`Plan ${full(investPlan)} (${settings.investPct}% of income)` + (aboveInvestPlan > 0 ? ` · ${full(aboveInvestPlan)} above plan` : '')}
@@ -125,8 +133,8 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
     {
       id: 'save',
       label: `Savings (${SAVINGS_TARGET_PCT}%)`,
-      value: full(savings),
-      items: b.txs.filter(t => t.isInvestment).map(txItem),
+      value: full(b.saved),
+      items: b.txs.filter(t => t.isSavings || t.isInvestment).map(txItem),
       note: savingsNote,
       summary: savingsSummary,
     },

@@ -981,3 +981,240 @@ textarea.input {
     color: var(--text-muted);
   }
 }
+
+/* ---------- Date range calendar ---------- */
+.calPop {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 30;
+  margin-top: 8px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  background: #fff;
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  padding: 16px 18px;
+  box-shadow: 0 10px 30px rgba(23, 32, 27, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.calMonths {
+  display: flex;
+  gap: 28px;
+}
+.calMonth {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 266px;
+}
+.calMonthPrev {
+  composes: calMonth;
+}
+.calHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  font-size: 15px;
+}
+.calNav {
+  display: flex;
+  min-width: 56px;
+}
+.calHead > .calNav:last-child {
+  justify-content: flex-end;
+}
+.calNav button {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  color: var(--text-soft);
+  font-size: 17px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.calNav button:hover:not(:disabled) {
+  background: var(--divider);
+}
+.calNav button:disabled {
+  color: #c9d1ce;
+  cursor: default;
+}
+.calNavPhone {
+  display: none;
+}
+.calGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 38px);
+  row-gap: 4px;
+}
+.calWeekday {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 0 6px;
+}
+.calDay {
+  height: 38px;
+  display: grid;
+  place-items: center;
+}
+.calDay button {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+.calDay button:hover:not(:disabled) {
+  background: var(--divider);
+}
+.calDay button:disabled {
+  color: #c2cbc8;
+  cursor: default;
+}
+.calIn {
+  background: var(--accent-hover);
+}
+.calInStart {
+  border-top-left-radius: 999px;
+  border-bottom-left-radius: 999px;
+}
+.calInEnd {
+  border-top-right-radius: 999px;
+  border-bottom-right-radius: 999px;
+}
+.calDay button.calDayEnd,
+.calDay button.calDayEnd:hover {
+  background: var(--accent-800);
+  color: #fff;
+  font-weight: 700;
+}
+.calFoot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--divider);
+  padding-top: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.calPresets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.calPreset {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.calPreset:hover {
+  background: var(--accent-hover);
+}
+.calPresetOn {
+  composes: calPreset;
+  border-color: var(--accent-500);
+  background: var(--accent-tint);
+  color: var(--accent-800);
+  font-weight: 700;
+}
+/* Phones: one month, with its own back arrow. */
+@media (max-width: 640px) {
+  .calMonthPrev {
+    display: none;
+  }
+  .calNavPhone {
+    display: flex;
+  }
+  .calPop {
+    padding: 14px;
+  }
+  .calMonth {
+    width: auto;
+  }
+  .calGrid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+}
+
+/* ---------- Remove a transaction ---------- */
+.rowRemove {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin-right: -8px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: 0;
+}
+.hoverRow:hover .rowRemove,
+.rowRemove:focus-visible {
+  opacity: 1;
+}
+.rowRemove:hover {
+  background: var(--red-tint);
+  color: var(--red-ink);
+}
+@media (hover: none) {
+  .rowRemove {
+    opacity: 1;
+  }
+}
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 60;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--text);
+  color: #fff;
+  font-size: 14px;
+  border-radius: 14px;
+  padding: 10px 10px 10px 18px;
+  box-shadow: 0 10px 30px rgba(23, 32, 27, 0.25);
+}
+.toastBtn {
+  flex: none;
+  border: none;
+  background: none;
+  color: #8fe3cf;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.toastBtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+/* Above the phone tab bar. */
+@media (max-width: 759px) {
+  .toast {
+    bottom: 104px;
+  }
+}

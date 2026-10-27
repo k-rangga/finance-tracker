@@ -40,6 +40,7 @@ type Dev = Record<string, unknown> & {
   overrides: Record<string, string>;
   links?: Record<string, string>;
   shares?: Record<string, number>;
+  removed?: string[];
   trades: Record<string, unknown>[];
   updates?: { id: string }[];
   snapshots: { day: string }[];
@@ -69,7 +70,7 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
   const gmail = { google_email: 'dev@localhost', label_name: (d.label as string) ?? null, last_synced_at: null, last_sync_status: null, last_sync_count: null };
   switch (action) {
     case 'getState':
-      return { email: 'dev@localhost', settings: d.settings ?? null, recat: d.overrides, links: d.links ?? {}, shares: d.shares ?? {}, trades: d.trades, updates: d.updates ?? [], prices: d.prices ?? null, snaps: d.snapshots, txRows: d.txRows ?? [], gmail };
+      return { email: 'dev@localhost', settings: d.settings ?? null, recat: d.overrides, links: d.links ?? {}, shares: d.shares ?? {}, removed: d.removed ?? [], trades: d.trades, updates: d.updates ?? [], prices: d.prices ?? null, snaps: d.snapshots, txRows: d.txRows ?? [], gmail };
     case 'getImports':
       return { txRows: d.txRows ?? [], gmail };
     case 'saveSettings':
@@ -89,6 +90,11 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       const shares = (d.shares ??= {});
       if (q.ratio == null) delete shares[q.txId as string];
       else shares[q.txId as string] = q.ratio as number;
+      return save();
+    }
+    case 'setRemoved': {
+      const rest = (d.removed ?? []).filter(id => id !== q.txId);
+      d.removed = q.removed ? [...rest, q.txId as string] : rest;
       return save();
     }
     case 'saveTrade': {

@@ -22,6 +22,8 @@ export type UserData = {
   links: Record<string, string>;
   /** Your share of an expense as a fraction of its amount: { txId: 0–1 }. */
   shares: Record<string, number>;
+  /** Ids of transactions you removed by hand. */
+  removed: string[];
   journal: Trade[];
   /** Avg up / avg down buys and notes on journal entries. */
   updates: TradeUpdate[];
@@ -43,6 +45,8 @@ export type Backend = {
   setLink(incomeId: string, expenseId: string | null): Promise<void>;
   /** `ratio: null` counts the full amount again. */
   setShare(txId: string, ratio: number | null): Promise<void>;
+  /** Hide a transaction everywhere (`true`) or bring it back. */
+  setRemoved(txId: string, removed: boolean): Promise<void>;
   saveTrade(t: Trade): Promise<void>;
   saveUpdate(u: TradeUpdate): Promise<void>;
   deleteUpdate(id: string): Promise<void>;
@@ -172,6 +176,7 @@ type State = {
   recat: Record<string, string>;
   links?: Record<string, string>;
   shares?: Record<string, number>;
+  removed?: string[];
   trades: TradeRow[];
   updates?: UpdateRow[];
   prices: Prices | null;
@@ -190,6 +195,7 @@ export const backend: Backend = {
       recat: s.recat,
       links: s.links ?? {},
       shares: s.shares ?? {},
+      removed: s.removed ?? [],
       journal: s.trades.map(toTrade).sort((a, b) => b.d.localeCompare(a.d)),
       updates: (s.updates ?? []).map(toUpdate),
       prices: s.prices ?? defaultPrices(),
@@ -203,6 +209,7 @@ export const backend: Backend = {
   setOverride: async (txId, category) => void (await run('setOverride', { txId, category })),
   setLink: async (incomeId, expenseId) => void (await run('setLink', { incomeId, expenseId })),
   setShare: async (txId, ratio) => void (await run('setShare', { txId, ratio })),
+  setRemoved: async (txId, removed) => void (await run('setRemoved', { txId, removed })),
   saveTrade: async t => void (await run('saveTrade', { trade: toRow(t) })),
   saveUpdate: async x => void (await run('saveTradeUpdate', { update: toUpdateRow(x) })),
   deleteUpdate: async id => void (await run('deleteTradeUpdate', { id })),

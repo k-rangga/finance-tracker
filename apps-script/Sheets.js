@@ -12,6 +12,8 @@ const TABLES = {
   links: ['income_id', 'expense_id', 'updated_at'],
   /** Your share of an expense you paid for others too, as a fraction of its amount (0–1). */
   shares: ['tx_id', 'ratio', 'updated_at'],
+  /** Transactions you removed by hand: hidden everywhere, and kept hidden when Gmail sync sees them again. */
+  removed: ['tx_id', 'removed_at'],
   trades: [
     'id', 'market', 'ticker', 'name', 'buy_date', 'price', 'quantity', 'fee', 'style', 'conviction', 'target', 'stop',
     'catalyst', 'catalyst_date', 'thesis', 'tags', 'leverage', 'direction',

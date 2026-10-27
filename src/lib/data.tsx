@@ -20,6 +20,8 @@ type Ctx = UserData & {
   setLink: (incomeId: string, expenseId: string | null) => void;
   /** Your share of an expense as a fraction (0–1); `null` counts the full amount. */
   setShare: (txId: string, ratio: number | null) => void;
+  /** Hide a transaction everywhere (`true`) or bring it back. */
+  setRemoved: (txId: string, removed: boolean) => void;
   saveTrade: (t: Trade) => void;
   saveUpdate: (u: TradeUpdate) => void;
   deleteUpdate: (id: string) => void;
@@ -96,6 +98,10 @@ export function DataProvider({ backend, children, loading, failed }: { backend: 
           return { ...d, shares };
         });
         write(backend.setShare(txId, ratio));
+      },
+      setRemoved: (txId, removed) => {
+        setData(d => d && { ...d, removed: removed ? [...d.removed.filter(id => id !== txId), txId] : d.removed.filter(id => id !== txId) });
+        write(backend.setRemoved(txId, removed));
       },
       saveTrade: t => {
         setData(d => d && { ...d, journal: d.journal.some(x => x.id === t.id) ? d.journal.map(x => (x.id === t.id ? t : x)) : [t, ...d.journal] });

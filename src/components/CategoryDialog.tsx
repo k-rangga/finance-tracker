@@ -7,6 +7,7 @@ import {
   CATEGORIES,
   CATEGORY_ICONS,
   categoryByName,
+  categoryLabel,
   HUES,
   isReservedName,
   nextHue,
@@ -289,7 +290,7 @@ function DeleteCategory({
             <select className={s.select} value={to} onChange={e => setTo(e.target.value)}>
               {targets.map(t => (
                 <option key={t} value={t}>
-                  {t === 'Transfer' ? 'Transfer (own accounts)' : t}
+                  {categoryLabel(t)}
                 </option>
               ))}
             </select>

@@ -1,4 +1,4 @@
-import { CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INVESTMENT_CATEGORY, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY, type Category } from '../data/categories';
+import { CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INVESTMENT_CATEGORY, SAVINGS_CATEGORY, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY, type Category } from '../data/categories';
 import { isCard, type Bill, type CardCycle, type Transaction } from '../data/transactions';
 import { weekOf, type Cycle } from './cycle';
 import { sum } from './format';
@@ -37,6 +37,8 @@ export type TxView = Transaction & {
   isTransfer: boolean;
   /** Moved to the Investing pocket (brokers): not spending. */
   isInvestment: boolean;
+  /** Moved to your savings account ("Transfer (savings)"): what counts as saved. */
+  isSavings: boolean;
   isCcPayment: boolean;
   /** Salary is never a reimbursement. */
   isSalary: boolean;
@@ -106,6 +108,8 @@ export type Budget = {
   cashOut: number;
   /** Moved to the Investing pocket this cycle. */
   invested: number;
+  /** Moved to savings this cycle: transactions you put in "Transfer (savings)". */
+  saved: number;
 };
 
 /** Budget categories (built-in and yours) count as spending. */
@@ -181,8 +185,9 @@ export function txViews(
         week: weekOf(offset),
         edited: cat !== t.category,
         isIncome: cat === INCOME_CATEGORY,
-        isTransfer: isCcPayment || cat === TRANSFER_CATEGORY || cat === INVESTMENT_CATEGORY,
+        isTransfer: isCcPayment || cat === TRANSFER_CATEGORY || cat === SAVINGS_CATEGORY || cat === INVESTMENT_CATEGORY,
         isInvestment: cat === INVESTMENT_CATEGORY,
+        isSavings: cat === SAVINGS_CATEGORY,
         isCcPayment,
         isSalary: isSalary(t),
         reimbursesId: valid.get(t.id),
@@ -268,6 +273,7 @@ export function computeBudget(args: {
     cardBillsPaid,
     cashOut: nonCardSpent + cardBillsPaid,
     invested: sum(txs.filter(t => t.isInvestment).map(t => t.amount)),
+    saved: sum(txs.filter(t => t.isSavings).map(t => t.amount)),
   };
 }
 

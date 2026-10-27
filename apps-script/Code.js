@@ -36,6 +36,7 @@ const ACTIONS = {
     recat: overrides_(),
     links: links_(),
     shares: shares_(),
+    removed: readTable_('removed').map(r => r.tx_id),
     trades: readTable_('trades'),
     updates: readTable_('trade_updates'),
     prices: props_('prices', null),
@@ -62,6 +63,11 @@ const ACTIONS = {
   setShare: p => {
     if (p.ratio == null) deleteRow_('shares', 'tx_id', p.txId);
     else upsertRow_('shares', 'tx_id', { tx_id: p.txId, ratio: p.ratio, updated_at: new Date().toISOString() });
+    return true;
+  },
+  setRemoved: p => {
+    if (p.removed) upsertRow_('removed', 'tx_id', { tx_id: p.txId, removed_at: new Date().toISOString() });
+    else deleteRow_('removed', 'tx_id', p.txId);
     return true;
   },
   saveTrade: p => {

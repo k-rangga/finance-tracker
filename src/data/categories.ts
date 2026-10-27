@@ -32,8 +32,12 @@ export const TRANSFER_CATEGORY = 'Transfer';
 export const CC_PAYMENT_CATEGORY = 'CC Payment';
 /** Money moved to your brokers: the Investing pocket. Like a transfer, never spending. */
 export const INVESTMENT_CATEGORY = 'Investment';
+/** Money you moved to your savings account: the only thing counted as saved. Like a transfer, never spending. */
+export const SAVINGS_CATEGORY = 'Savings';
 /** Categories a transaction can be moved to besides the budget ones. */
-export const OTHER_CATEGORIES = [TRANSFER_CATEGORY, INVESTMENT_CATEGORY, INCOME_CATEGORY];
+export const OTHER_CATEGORIES = [TRANSFER_CATEGORY, SAVINGS_CATEGORY, INVESTMENT_CATEGORY, INCOME_CATEGORY];
+/** How a non-budget category reads in menus. */
+export const categoryLabel = (name: string) => (name === TRANSFER_CATEGORY ? 'Transfer (own accounts)' : name === SAVINGS_CATEGORY ? 'Transfer (savings)' : name);
 export const SAVINGS_TARGET_PCT = 60;
 
 /** One hue per category, in order; a new category takes the first hue no category uses yet. */
