@@ -647,6 +647,15 @@ function CreditCards({ budget: b }: { budget: Budget }) {
   );
 }
 
+/**
+ * Treemap colours: one muted family per group (warm earth for variable spending, greens for fixed bills),
+ * biggest tile first, so the map reads as two families instead of a rainbow.
+ */
+const TREEMAP_FAMILIES: Record<string, string[]> = {
+  Variable: ['#c35f3d', '#d89a2c', '#b5431f', '#e8c47e', '#d98a68', '#a8721c', '#e0a87e', '#9c5a3c'],
+  'Fixed bills': ['#1f5e4a', '#5e9a83', '#3f7f67', '#9cbfb0', '#2d6e58', '#7fae9b'],
+};
+
 /** White or dark text, whichever reads better on `hex`. */
 function onColor(hex: string) {
   const n = parseInt(hex.slice(1), 16);
@@ -737,7 +746,8 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
         g.cats.map(c => c.spent),
         blocks[i],
       );
-      return g.cats.map((c, j) => ({ c, r: inner[j] }));
+      const family = TREEMAP_FAMILIES[g.name];
+      return g.cats.map((c, j) => ({ c, r: inner[j], color: family[j % family.length] }));
     });
   }, [groups, width, height]);
   const ranked = [...b.cats].sort((x, y) => x.status.rank - y.status.rank || y.used - x.used);
@@ -755,10 +765,10 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
       </div>
       <div ref={box} className={s.treemap} style={{ height: tiles.length ? height : 120 }} onMouseLeave={() => setHover(null)}>
         {!tiles.length && <span style={{ margin: 'auto', fontSize: 14, color: C.textMuted }}>Nothing spent yet this cycle.</span>}
-        {tiles.map(({ c, r }) => {
+        {tiles.map(({ c, r, color }) => {
           if (!r) return null;
           const pct = (c.spent / b.spent) * 100;
-          const ink = onColor(c.color);
+          const ink = onColor(color);
           // Label size follows the tile: big tiles read from across the room, small ones keep what fits.
           const side = Math.min(r.w, r.h);
           const big = r.w >= 220 && r.h >= 120;
@@ -780,7 +790,7 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
                 top: r.y,
                 width: r.w,
                 height: r.h,
-                background: c.color,
+                background: color,
                 color: ink,
                 opacity: hover && hover.name !== c.name ? 0.55 : 1,
                 padding: big ? '12px 14px' : '8px 10px',
@@ -788,10 +798,10 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
             >
               {(fits || tiny) && (
                 <>
-                  <span className={s.tileName} style={{ fontSize: big ? 20 : fits && side >= 70 ? 15 : 12 }}>
+                  <span className={s.tileName} style={{ fontSize: big ? 16 : fits && side >= 70 ? 14 : 12 }}>
                     {c.name}
                   </span>
-                  <span style={{ fontSize: big ? 26 : fits && side >= 70 ? 18 : 12, fontWeight: 800, lineHeight: 1.1 }}>{pct.toFixed(1)}%</span>
+                  <span style={{ fontSize: big ? 22 : fits && side >= 70 ? 16 : 12, fontWeight: 600, lineHeight: 1.15, opacity: 0.92 }}>{pct.toFixed(1)}%</span>
                 </>
               )}
             </button>
@@ -817,7 +827,7 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
         <span style={{ display: 'flex', gap: '6px 20px', flexWrap: 'wrap' }}>
           {groups.map(g => (
             <span key={g.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Dot color={g.cats[0].color} />
+              <Dot color={TREEMAP_FAMILIES[g.name][0]} />
               {g.name} {Math.round((g.total / b.spent) * 100)}%
             </span>
           ))}

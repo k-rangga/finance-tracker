@@ -1324,7 +1324,7 @@ textarea.input {
 .tileName {
   max-width: 100%;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
