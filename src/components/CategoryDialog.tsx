@@ -2,6 +2,7 @@ import { useState } from 'react';
 import s from '../styles/ui.module.css';
 import { IconChip, Modal, Options } from './ui';
 import { IC, Icon } from './Icon';
+import { Select } from './Select';
 import {
   builtInCategory,
   CATEGORIES,
@@ -289,13 +290,7 @@ function DeleteCategory({
           </span>
           <label className={s.field}>
             <span>Move {count === 1 ? 'it' : 'them'} to</span>
-            <select className={s.select} value={to} onChange={e => setTo(e.target.value)}>
-              {targets.map(t => (
-                <option key={t} value={t}>
-                  {categoryLabel(t)}
-                </option>
-              ))}
-            </select>
+            <Select value={to} onChange={setTo} ariaLabel="Move to" options={targets.map(t => ({ value: t, label: categoryLabel(t) }))} />
           </label>
         </>
       ) : (

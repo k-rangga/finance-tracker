@@ -38,7 +38,11 @@ export const SAVINGS_CATEGORY = 'Savings';
 export const OTHER_CATEGORIES = [TRANSFER_CATEGORY, SAVINGS_CATEGORY, INVESTMENT_CATEGORY, INCOME_CATEGORY];
 /** How a non-budget category reads in menus. */
 export const categoryLabel = (name: string) => (name === TRANSFER_CATEGORY ? 'Transfer (own accounts)' : name === SAVINGS_CATEGORY ? 'Transfer (savings)' : name);
-export const SAVINGS_TARGET_PCT = 60;
+/** Share of income you aim to move to savings each cycle; set from your settings (see SettingsProvider). */
+export let SAVINGS_TARGET_PCT = 60;
+export const setSavingsTarget = (pct: number) => {
+  SAVINGS_TARGET_PCT = pct;
+};
 
 /** One hue per category, in order; a new category takes the first hue no category uses yet. */
 export const HUES: Hue[] = [

@@ -4,6 +4,7 @@ import { IconChip } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
 import { CategoryDialog } from '../components/CategoryDialog';
 import { DateRangePicker } from '../components/DateRangePicker';
+import { Select } from '../components/Select';
 import { dayAmount, dayTotalLabel, iconColors, inDayTotal, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth, parseISO, toISO } from '../lib/format';
@@ -148,25 +149,18 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
             {from === to ? dayMonth(parseISO(from)) : `${dayMonth(parseISO(from))} – ${dayMonth(parseISO(to))}`}
             <Icon d={IC.chevDown} size={14} style={{ transform: calOpen ? 'rotate(180deg)' : undefined }} />
           </button>
-          <select
-            className={s.select}
+          <Select
             value={cat}
-            onChange={e => setFilter({ ...filter, cat: e.target.value })}
-            aria-label="Filter by category"
-            style={{ width: 'auto', minWidth: 0, maxWidth: 200, marginLeft: 'auto', borderRadius: 999, fontSize: 14, padding: '9px 40px 9px 16px', minHeight: 44 }}
-          >
-            <option value="">All categories</option>
-            {CATEGORIES.map(c => (
-              <option key={c.name} value={c.name}>
-                {c.name}
-              </option>
-            ))}
-            {[...OTHER_CATEGORIES, CC_PAYMENT_CATEGORY].map(c => (
-              <option key={c} value={c}>
-                {categoryLabel(c)}
-              </option>
-            ))}
-          </select>
+            onChange={v => setFilter({ ...filter, cat: v })}
+            ariaLabel="Filter by category"
+            align="right"
+            options={[
+              { value: '', label: 'All categories' },
+              ...CATEGORIES.map(c => ({ value: c.name, label: c.name, dot: c.color, group: 'Spending' })),
+              ...[...OTHER_CATEGORIES, CC_PAYMENT_CATEGORY].map(c => ({ value: c, label: categoryLabel(c), group: 'Not spending' })),
+            ]}
+            style={{ width: 'auto', minWidth: 0, maxWidth: 220, marginLeft: 'auto', borderRadius: 999, fontSize: 14, padding: '9px 40px 9px 16px', minHeight: 44 }}
+          />
           {calOpen && (
             <DateRangePicker
               from={from}

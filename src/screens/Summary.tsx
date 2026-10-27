@@ -1,4 +1,4 @@
-import { useMemo, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { Badge, Bar, Card, CardHead, Dot, IconChip } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
@@ -7,7 +7,7 @@ import type { Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth, pc, sum } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
-import { categoryByName, SAVINGS_TARGET_PCT } from '../data/categories';
+import { categoryByName, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY } from '../data/categories';
 
 type Props = { cycle: Cycle; budget: Budget; onOpenCategory: (name: string) => void };
 
@@ -27,13 +27,30 @@ type Item = {
   struck?: string;
 };
 
-export function Summary({ cycle, budget, onOpenCategory }: Props) {
+type SummaryProps = Props & {
+  onOpenSettings: () => void;
+  /** Open Transactions on a range, optionally filtered to one category. */
+  onShowTransactions: (range: 'today' | 'cycle', cat?: string) => void;
+};
+
+/** Wide screens: the cycle and breakdowns on the left, a pinned glance panel on the right. Phones: one column. */
+export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onShowTransactions }: SummaryProps) {
   return (
-    <div className={s.stack}>
-      <ThisCycle cycle={cycle} budget={budget} />
-      {budget.cards.length > 0 && <CreditCards budget={budget} />}
-      <WhereItWent cycle={cycle} budget={budget} onOpenCategory={onOpenCategory} />
-      <WeeklyPace cycle={cycle} budget={budget} />
+    <div className={s.summaryGrid}>
+      <div className={s.summaryCycle}>
+        <ThisCycle cycle={cycle} budget={budget} onOpenSettings={onOpenSettings} />
+      </div>
+      <aside className={s.summarySide} aria-label="At a glance">
+        <SavingsCard cycle={cycle} budget={budget} onMark={() => onShowTransactions('cycle', TRANSFER_CATEGORY)} />
+        <TodayCard cycle={cycle} budget={budget} onSeeAll={() => onShowTransactions('today')} />
+        <ComingUpCard cycle={cycle} budget={budget} />
+        <VsLastCycleCard cycle={cycle} budget={budget} />
+      </aside>
+      <div className={s.summaryRest}>
+        {budget.cards.length > 0 && <CreditCards budget={budget} />}
+        <WhereItWent cycle={cycle} budget={budget} onOpenCategory={onOpenCategory} />
+        <WeeklyPace cycle={cycle} budget={budget} />
+      </div>
     </div>
   );
 }
@@ -53,7 +70,7 @@ type Row = {
   quiet?: boolean;
 };
 
-function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
+function ThisCycle({ cycle, budget: b, onOpenSettings }: { cycle: Cycle; budget: Budget; onOpenSettings: () => void }) {
   const { full, short, ofIncome, settings } = useSettings();
   // Everything starts collapsed.
   const [open, setOpen] = useState<string | null>(null);
@@ -146,10 +163,9 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
     { id: 'left', label: 'Left to spend', value: full(b.budget - b.spent), items: [], strong: true },
   ].filter((r: Row) => r.quiet || r.strong || r.id === 'inc' || r.items.length > 0 || r.summary || r.value !== full(0));
 
-  // The ring counts only what you moved to savings ("Transfer (savings)"), not what's left unspent.
-  const ringDeg = Math.max(0, Math.min(100, b.savedPct)) * 3.6;
-  const onTarget = b.savedPct >= SAVINGS_TARGET_PCT;
-  const toGo = ofIncome(SAVINGS_TARGET_PCT) - b.saved;
+  // Budget and savings both come out of income: together they can't be more than all of it.
+  const plannedPct = budgetPct + SAVINGS_TARGET_PCT;
+  const overPace = b.spent - b.paceToday;
   const usedInk = b.spent > b.budget ? C.redInk : b.spent > b.paceToday ? C.amberInk : C.textMuted;
   // The bar is the spending budget, coloured by what it went on (largest first).
   const segs = b.cats.filter(c => c.spent > 0).sort((x, y) => y.spent - x.spent);
@@ -158,10 +174,20 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
 
   return (
     <Card style={{ gap: 24, overflow: 'hidden' }}>
-      <CardHead title="This cycle" caption="Tap a row to see its transactions" />
+      <CardHead title="This cycle" />
+      {plannedPct > 100 && (
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: '8px 12px', flexWrap: 'wrap', background: C.amberTint, color: C.amberInk, borderRadius: 14, padding: '10px 14px', fontSize: 14 }}>
+          <span style={{ marginRight: 'auto' }}>
+            Budget {budgetPct}% + savings {SAVINGS_TARGET_PCT}% = <strong>{plannedPct}% of income</strong>. Lower a category limit or the savings target so they fit.
+          </span>
+          <button type="button" className={s.btnOutline} onClick={onOpenSettings} style={{ flex: 'none' }}>
+            Adjust
+          </button>
+        </div>
+      )}
       {ending && <CycleWrapUp cycle={cycle} budget={b} />}
-      <div style={{ display: 'flex', gap: 32, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flex: 1, minWidth: 240 }}>
+      <div style={{ display: 'flex' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flex: 1, minWidth: 0 }}>
           {/* One number first: what you can spend today and stay on budget. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 14, color: C.textMuted }}>Safe to spend today</span>
@@ -191,7 +217,13 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
               <span style={{ color: usedInk, fontWeight: usedInk === C.textMuted ? 400 : 700 }}>
                 {Math.round((b.spent / b.budget) * 100)}% used{b.spent > b.budget ? ` · ${full(b.spent - b.budget)} over` : ''}
               </span>
-              <span>{ending ? `${full(Math.max(0, b.budget - b.spent))} left until payday` : `Pace target today ${short(b.paceToday)}`}</span>
+              {ending ? (
+                <span>{full(Math.max(0, b.budget - b.spent))} left until payday</span>
+              ) : (
+                <span title={`Pace target today ${full(b.paceToday)}`} style={{ fontWeight: 700, color: overPace > 0 ? C.redInk : C.accent800 }}>
+                  {overPace > 0 ? `${short(overPace)} over pace` : `${short(-overPace)} under pace`}
+                </span>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '6px 14px', flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
@@ -202,28 +234,6 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
             ))}
             {segs.length > 5 && <span>+{segs.length - 5} more</span>}
           </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, margin: '0 auto' }}>
-          <div
-            role="img"
-            aria-label={`Saved ${b.savedPct.toFixed(1)}% of income this cycle against a ${SAVINGS_TARGET_PCT}% target`}
-            style={{
-              width: 172,
-              height: 172,
-              borderRadius: '50%',
-              background: `conic-gradient(${onTarget ? C.mint[5] : C.amber} 0deg ${ringDeg}deg, ${C.divider} ${ringDeg}deg 360deg)`,
-              display: 'grid',
-              placeItems: 'center',
-            }}
-          >
-            <div style={{ width: 132, height: 132, borderRadius: '50%', background: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontWeight: 800, letterSpacing: '-0.02em', fontSize: 30, color: onTarget ? C.accent800 : C.amberInk }}>{b.savedPct.toFixed(1)}%</span>
-              <span style={{ fontSize: 13, color: C.textMuted }}>saved this cycle</span>
-            </div>
-          </div>
-          <span style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, textAlign: 'center' }}>
-            Target {SAVINGS_TARGET_PCT}% · {onTarget ? 'reached ✓' : `${short(toGo)} to go`}
-          </span>
         </div>
       </div>
       <div className={s.bleed}>
@@ -264,6 +274,141 @@ function ThisCycle({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
           );
         })}
       </div>
+    </Card>
+  );
+}
+
+/** Savings ring: what you moved with "Transfer (savings)" against the target. */
+function SavingsCard({ cycle, budget: b, onMark }: { cycle: Cycle; budget: Budget; onMark: () => void }) {
+  const { full, short, ofIncome } = useSettings();
+  const target = ofIncome(SAVINGS_TARGET_PCT);
+  const onTarget = b.saved >= target && target > 0;
+  const none = b.saved <= 0;
+  // Grey until something is saved; amber only when the cycle is nearly over and you're still short.
+  const ink = onTarget ? C.accent800 : none ? C.textMuted : cycle.daysLeft <= 7 ? C.amberInk : C.accent700;
+  const ring = onTarget ? C.mint[5] : cycle.daysLeft <= 7 && !none ? C.amber : C.accent600;
+  const deg = Math.max(0, Math.min(100, (b.saved / Math.max(1, target)) * 100)) * 3.6;
+  return (
+    <Card style={{ gap: 14, alignItems: 'center', textAlign: 'center' }}>
+      <div style={{ alignSelf: 'stretch', textAlign: 'left' }}>
+        <CardHead small title="Savings" caption={`Target ${SAVINGS_TARGET_PCT}% of income · ${full(target)}`} />
+      </div>
+      <div
+        role="img"
+        aria-label={`Saved ${b.savedPct.toFixed(1)}% of income this cycle against a ${SAVINGS_TARGET_PCT}% target`}
+        style={{ width: 148, height: 148, borderRadius: '50%', background: `conic-gradient(${ring} 0deg ${deg}deg, ${C.divider} ${deg}deg 360deg)`, display: 'grid', placeItems: 'center' }}
+      >
+        <div style={{ width: 114, height: 114, borderRadius: '50%', background: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontWeight: 800, letterSpacing: '-0.02em', fontSize: 26, color: ink }}>{none ? '0%' : b.savedPct.toFixed(1) + '%'}</span>
+          <span style={{ fontSize: 13, color: C.textMuted }}>of income saved</span>
+        </div>
+      </div>
+      {none ? (
+        <>
+          <span style={{ fontSize: 14, color: C.textSoft }}>No savings transfer yet this cycle.</span>
+          <button type="button" className={s.btnOutline} onClick={onMark}>
+            Mark your savings transfer
+          </button>
+        </>
+      ) : (
+        <span style={{ fontSize: 14, color: C.textSoft }}>
+          {full(b.saved)} saved · {onTarget ? 'target reached ✓' : `${short(target - b.saved)} to go`}
+        </span>
+      )}
+    </Card>
+  );
+}
+
+/** Today's transactions, newest first. */
+function TodayCard({ cycle, budget: b, onSeeAll }: { cycle: Cycle; budget: Budget; onSeeAll: () => void }) {
+  const { full } = useSettings();
+  const today = b.txs.filter(t => t.offset === cycle.dayIdx);
+  const spent = today.filter(t => !t.isIncome && !t.isTransfer).reduce((a, t) => a + t.net, 0);
+  return (
+    <Card style={{ gap: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+        <CardHead small title="Today" caption={today.length ? `${full(spent)} spent` : undefined} />
+        {today.length > 0 && (
+          <button type="button" className={s.textBtnSm} onClick={onSeeAll}>
+            See all
+          </button>
+        )}
+      </div>
+      {today.length === 0 && <span style={{ fontSize: 14, color: C.textMuted }}>Nothing yet today.</span>}
+      {today.slice(0, 5).map(t => (
+        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <Dot color={categoryByName(t.cat)?.color ?? C.accent500} />
+          <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, marginRight: 'auto' }}>
+            <span className={s.ellipsis} style={{ fontSize: 14, fontWeight: 600 }}>
+              {t.title}
+            </span>
+            <span style={{ fontSize: 13, color: C.textMuted }}>
+              {t.cat} · {t.time}
+            </span>
+          </span>
+          <span style={{ fontSize: 14, fontWeight: 700, flex: 'none', color: t.isIncome ? C.accent800 : C.text }}>
+            {t.isIncome ? '+ ' + full(t.amount) : t.isTransfer ? full(t.amount) : '- ' + full(t.net)}
+          </span>
+        </div>
+      ))}
+      {today.length > 5 && <span style={{ fontSize: 13, color: C.textMuted }}>+{today.length - 5} more</span>}
+    </Card>
+  );
+}
+
+/** Fixed bills expected before payday, soonest first. */
+function ComingUpCard({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
+  const { full } = useSettings();
+  const bills = [...b.bills].sort((x, y) => x.date.getTime() - y.date.getTime());
+  return (
+    <Card style={{ gap: 10 }}>
+      <CardHead small title="Coming up" caption={bills.length ? `${full(b.fixedDue)} in bills before payday` : undefined} />
+      {bills.length === 0 && <span style={{ fontSize: 14, color: C.textMuted }}>No more bills before payday.</span>}
+      {bills.slice(0, 4).map(bill => {
+        const inDays = cycle.offsetOf(bill.date) - cycle.dayIdx;
+        return (
+          <div key={bill.title} style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <Icon d={IC.calendar} size={16} color={C.textMuted} />
+            <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, marginRight: 'auto' }}>
+              <span className={s.ellipsis} style={{ fontSize: 14, fontWeight: 600 }}>
+                {bill.title}
+              </span>
+              <span style={{ fontSize: 13, color: C.textMuted }}>
+                {dayMonth(bill.date)} · {inDays === 0 ? 'today' : inDays === 1 ? 'tomorrow' : `in ${inDays} days`}
+              </span>
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 700, flex: 'none' }}>{full(bill.amount)}</span>
+          </div>
+        );
+      })}
+      {bills.length > 4 && <span style={{ fontSize: 13, color: C.textMuted }}>+{bills.length - 4} more</span>}
+    </Card>
+  );
+}
+
+/** Variable spending so far against last cycle's by the same day. */
+function VsLastCycleCard({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
+  const { full } = useSettings();
+  const vari = b.cats.filter(c => c.type === 'variable');
+  const cur = sum(vari.map(c => c.spent));
+  const last = sum(vari.map(c => c.lastSameDays));
+  const ch = changeBadge(cur, last);
+  return (
+    <Card style={{ gap: 10 }}>
+      <CardHead small title="vs last cycle" caption={`Variable spending by day ${cycle.dayN}`} />
+      {last <= 0 ? (
+        <span style={{ fontSize: 14, color: C.textMuted }}>No spending from last cycle to compare yet.</span>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto' }}>
+            <span style={{ fontSize: 20, fontWeight: 800 }}>{full(cur)}</span>
+            <span style={{ fontSize: 13, color: C.textMuted }}>Last cycle {full(last)}</span>
+          </span>
+          <Badge bg={ch.bg} ink={ch.ink}>
+            {ch.label}
+          </Badge>
+        </div>
+      )}
     </Card>
   );
 }
@@ -464,109 +609,182 @@ function CreditCards({ budget: b }: { budget: Budget }) {
   );
 }
 
-function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
-  const { full, short } = useSettings();
-  const [hover, setHover] = useState<number | null>(null);
+/** White or dark text, whichever reads better on `hex`. */
+function onColor(hex: string) {
+  const n = parseInt(hex.slice(1), 16);
+  const lin = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  const L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  return L > 0.22 ? '#16201e' : '#ffffff';
+}
 
-  const dCats = useMemo(() => b.cats.filter(c => c.spent > 0).sort((x, y) => y.spent - x.spent), [b.cats]);
-  const stops = useMemo(() => {
-    let acc = 0;
-    return dCats.map(c => {
-      const from = acc;
-      acc += c.spent / b.spent;
-      return { from, to: acc };
-    });
-  }, [dCats, b.spent]);
+type Rect = { x: number; y: number; w: number; h: number };
 
-  const onMove = (e: MouseEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - r.left - r.width / 2;
-    const y = e.clientY - r.top - r.height / 2;
-    const dist = Math.hypot(x, y) / (r.width / 2);
-    let idx: number | null = null;
-    if (dist >= 0.6 && dist <= 1) {
-      let a = Math.atan2(x, -y) / (2 * Math.PI);
-      if (a < 0) a += 1;
-      const i = stops.findIndex(st => a >= st.from && a < st.to);
-      idx = i < 0 ? null : i;
-    }
-    if (idx !== hover) setHover(idx);
+/** Squarified treemap: tiles for `values` (largest first) in `r`, kept as close to square as the space allows. */
+function squarify(values: number[], r: Rect): Rect[] {
+  const total = sum(values);
+  if (!total) return [];
+  const areas = values.map(v => (v / total) * r.w * r.h);
+  const out: Rect[] = [];
+  let rest = { ...r };
+  let row: number[] = [];
+  // Worst aspect ratio of a row laid along a side of this length.
+  const worst = (xs: number[], side: number) => {
+    const s = sum(xs);
+    return Math.max((side * side * Math.max(...xs)) / (s * s), (s * s) / (side * side * Math.min(...xs)));
   };
+  const place = (xs: number[]) => {
+    const s = sum(xs);
+    if (rest.w >= rest.h) {
+      // A column on the left.
+      const w = s / rest.h;
+      let y = rest.y;
+      for (const a of xs) out.push({ x: rest.x, y, w, h: a / w }), (y += a / w);
+      rest = { x: rest.x + w, y: rest.y, w: rest.w - w, h: rest.h };
+    } else {
+      // A row along the top.
+      const h = s / rest.w;
+      let x = rest.x;
+      for (const a of xs) out.push({ x, y: rest.y, w: a / h, h }), (x += a / h);
+      rest = { x: rest.x, y: rest.y + h, w: rest.w, h: rest.h - h };
+    }
+  };
+  for (let i = 0; i < areas.length; ) {
+    const side = Math.min(rest.w, rest.h);
+    if (!row.length || worst([...row, areas[i]], side) <= worst(row, side)) row.push(areas[i++]);
+    else {
+      place(row);
+      row = [];
+    }
+  }
+  if (row.length) place(row);
+  return out;
+}
 
-  const bg = !dCats.length
-    ? C.divider
-    : 'conic-gradient(' +
-    dCats.map((c, i) => `${hover === null || hover === i ? c.color : C.borderStrong} ${(stops[i].from * 360).toFixed(2)}deg ${(stops[i].to * 360).toFixed(2)}deg`).join(', ') +
-    ')';
-  const sel = hover === null ? null : dCats[hover];
+function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
+  const { full } = useSettings();
+  const box = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(600);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // Phones get a taller box so narrow tiles still have room for a name.
+  const height = width < 520 ? 360 : 340;
+  /** Hovered tile and where the pointer is, for the details tooltip. */
+  const [hover, setHover] = useState<{ name: string; x: number; y: number } | null>(null);
+
+  // Tiles are grouped by type (variable, fixed), like families: each group's block first, then its categories inside.
+  const groups = useMemo(() => {
+    const spent = b.cats.filter(c => c.spent > 0);
+    return (
+      [
+        ['Variable', spent.filter(c => c.type === 'variable')],
+        ['Fixed bills', spent.filter(c => c.type === 'fixed')],
+      ] as const
+    )
+      .map(([name, cats]) => ({ name, cats: [...cats].sort((x, y) => y.spent - x.spent), total: sum(cats.map(c => c.spent)) }))
+      .filter(g => g.total > 0)
+      .sort((x, y) => y.total - x.total);
+  }, [b.cats]);
+  const tiles = useMemo(() => {
+    const blocks = squarify(
+      groups.map(g => g.total),
+      { x: 0, y: 0, w: width, h: height },
+    );
+    return groups.flatMap((g, i) => {
+      const inner = squarify(
+        g.cats.map(c => c.spent),
+        blocks[i],
+      );
+      return g.cats.map((c, j) => ({ c, r: inner[j] }));
+    });
+  }, [groups, width, height]);
   const ranked = [...b.cats].sort((x, y) => x.status.rank - y.status.rank || y.used - x.used);
+  const hovered = hover ? b.cats.find(c => c.name === hover.name) : undefined;
 
   return (
     <Card>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <h2 className={s.h2}>Where it went</h2>
-        <span className={s.caption}>Click a segment or category to open it in Categories</span>
-      </div>
-      <div style={{ display: 'flex', gap: 32, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div
-          onMouseMove={onMove}
-          onMouseLeave={() => setHover(null)}
-          onClick={() => sel && onOpenCategory(sel.name)}
-          role="img"
-          aria-label={'Spend by category: ' + dCats.map(c => `${c.name} ${Math.round((c.spent / b.spent) * 100)}%`).join(', ')}
-          style={{ position: 'relative', width: 200, height: 200, flex: 'none', borderRadius: '50%', background: bg, cursor: sel ? 'pointer' : 'default', margin: '0 auto' }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              inset: '20%',
-              borderRadius: '50%',
-              background: '#fff',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textAlign: 'center',
-              pointerEvents: 'none',
-              padding: 6,
-            }}
-          >
-            <span style={{ fontSize: 13, color: C.textMuted }}>{sel ? sel.name : 'Spent so far'}</span>
-            <span style={{ fontWeight: 800, letterSpacing: '-0.02em', fontSize: 22 }}>{short(sel ? sel.spent : b.spent)}</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: C.accent600 }}>
-              {sel ? Math.round((sel.spent / b.spent) * 100) + '% of spend' : `Day ${cycle.dayN} of ${cycle.cycleDays}`}
-            </span>
-          </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '4px 16px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <h2 className={s.h2}>Where it went</h2>
+          <span className={s.caption}>
+            Spent {full(b.spent)} · day {cycle.dayN} of {cycle.cycleDays}
+          </span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '2px 12px', flex: 1, minWidth: 200 }}>
-          {dCats.map((c, i) => (
+      </div>
+      <div ref={box} className={s.treemap} style={{ height: tiles.length ? height : 120 }} onMouseLeave={() => setHover(null)}>
+        {!tiles.length && <span style={{ margin: 'auto', fontSize: 14, color: C.textMuted }}>Nothing spent yet this cycle.</span>}
+        {tiles.map(({ c, r }) => {
+          if (!r) return null;
+          const pct = (c.spent / b.spent) * 100;
+          const ink = onColor(c.color);
+          // Label size follows the tile: big tiles read from across the room, small ones keep what fits.
+          const side = Math.min(r.w, r.h);
+          const big = r.w >= 220 && r.h >= 120;
+          const fits = r.w >= 70 && r.h >= 40;
+          const tiny = !fits && side >= 24 && r.w >= 44;
+          return (
             <button
               key={c.name}
               type="button"
-              onMouseEnter={() => setHover(i)}
-              onMouseLeave={() => setHover(null)}
-              onFocus={() => setHover(i)}
-              onBlur={() => setHover(null)}
+              className={s.tile}
               onClick={() => onOpenCategory(c.name)}
+              onMouseMove={e => {
+                const box2 = box.current!.getBoundingClientRect();
+                setHover({ name: c.name, x: e.clientX - box2.left, y: e.clientY - box2.top });
+              }}
+              aria-label={`${c.name}: ${full(c.spent)}, ${pct.toFixed(1)}% of spending. Open in Categories`}
               style={{
-                border: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 13,
-                padding: '6px 12px',
-                minHeight: 36,
-                borderRadius: 999,
-                textAlign: 'left',
-                background: hover === i ? C.divider : 'transparent',
+                left: r.x,
+                top: r.y,
+                width: r.w,
+                height: r.h,
+                background: c.color,
+                color: ink,
+                opacity: hover && hover.name !== c.name ? 0.55 : 1,
+                padding: big ? '12px 14px' : '8px 10px',
               }}
             >
-              <Dot color={c.color} />
-              <span style={{ marginRight: 'auto' }}>{c.name}</span>
-              <span style={{ fontWeight: 700 }}>{Math.round((c.spent / b.spent) * 100)}%</span>
+              {(fits || tiny) && (
+                <>
+                  <span className={s.tileName} style={{ fontSize: big ? 20 : fits && side >= 70 ? 15 : 12 }}>
+                    {c.name}
+                  </span>
+                  <span style={{ fontSize: big ? 26 : fits && side >= 70 ? 18 : 12, fontWeight: 800, lineHeight: 1.1 }}>{pct.toFixed(1)}%</span>
+                </>
+              )}
             </button>
+          );
+        })}
+        {hover && hovered && (
+          <div
+            className={s.tileTip}
+            role="tooltip"
+            style={{ left: Math.min(hover.x + 14, width - 220), top: Math.min(hover.y + 14, height - 96) }}
+          >
+            <strong style={{ fontSize: 14 }}>{hovered.name}</strong>
+            <span>
+              {full(hovered.spent)} · {((hovered.spent / b.spent) * 100).toFixed(1)}% of spending
+            </span>
+            <span style={{ color: C.textMuted }}>
+              {Math.round(hovered.used)}% of its {full(hovered.limit)} limit
+            </span>
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px 20px', flexWrap: 'wrap', fontSize: 14, color: C.textSoft }}>
+        <span style={{ display: 'flex', gap: '6px 20px', flexWrap: 'wrap' }}>
+          {groups.map(g => (
+            <span key={g.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Dot color={g.cats[0].color} />
+              {g.name} {Math.round((g.total / b.spent) * 100)}%
+            </span>
           ))}
-        </div>
+        </span>
+        <span style={{ color: C.textMuted }}>Tile size = share of spending · hover for details · click to open</span>
       </div>
       <div className={s.bleed} style={{ marginTop: 4 }}>
         {ranked.map(c => {

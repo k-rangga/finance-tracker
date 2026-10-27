@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import s from '../styles/ui.module.css';
 import { IconChip, Modal, Options } from './ui';
-import { toCategory } from '../data/categories';
+import { CATEGORIES, toCategory } from '../data/categories';
+import { sum } from '../lib/format';
 import { DEFAULT_INCOME, useSettings, type Settings } from '../lib/settings';
 import type { Currency } from '../lib/format';
 
-type NumKey = 'income' | 'investPct' | 'idxCap' | 'usCap' | 'cryptoCap' | 'fxRate';
+type NumKey = 'income' | 'savingsPct' | 'investPct' | 'idxCap' | 'usCap' | 'cryptoCap' | 'fxRate';
 
 export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: () => void; email: string | null; onEditCategory: (name: string) => void }) {
   const { settings, update, full } = useSettings();
   const [d, setD] = useState<Settings>(settings);
   const [txt, setTxt] = useState<Record<NumKey, string>>(() => ({
     income: String(settings.income),
+    savingsPct: String(settings.savingsPct),
     investPct: String(settings.investPct),
     idxCap: String(settings.idxCap),
     usCap: String(settings.usCap),
@@ -28,10 +30,10 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
 
   const save = () => {
     const n = (k: NumKey) => Number(txt[k].replace(/[^\d.]/g, ''));
-    const next: Settings = { ...d, income: n('income'), investPct: n('investPct'), idxCap: n('idxCap'), usCap: n('usCap'), cryptoCap: n('cryptoCap'), fxRate: n('fxRate') };
+    const next: Settings = { ...d, income: n('income'), savingsPct: n('savingsPct'), investPct: n('investPct'), idxCap: n('idxCap'), usCap: n('usCap'), cryptoCap: n('cryptoCap'), fxRate: n('fxRate') };
     if (!(next.income > 0)) return setErr('Enter your monthly income.');
     if (!(next.fxRate > 0)) return setErr('Enter the USD exchange rate.');
-    if ([next.investPct, next.idxCap, next.usCap, next.cryptoCap].some(v => !(v >= 0 && v <= 100))) return setErr('Percentages must be between 0 and 100.');
+    if ([next.savingsPct, next.investPct, next.idxCap, next.usCap, next.cryptoCap].some(v => !(v >= 0 && v <= 100))) return setErr('Percentages must be between 0 and 100.');
     // Categories are edited in their own dialog; don't write back this dialog's (possibly stale) copies.
     const { customCategories: _c, limitOverrides: _l, colorOverrides: _o, ...rest } = next;
     update(rest);
@@ -67,8 +69,21 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
         {num('income', 'Monthly income', d.currency)}
+        {num('savingsPct', 'Savings target', '% of income')}
         {num('investPct', 'Invest each payday', '% of income')}
       </div>
+      {(() => {
+        // Category limits are your spending budget; with the savings target they must fit in your income.
+        const budgetPct = Math.round(sum(CATEGORIES.map(c => c.limitPct)));
+        const savePct = Number(txt.savingsPct.replace(/[^\d.]/g, '')) || 0;
+        const total = budgetPct + savePct;
+        return (
+          <span style={{ fontSize: 13, fontWeight: total > 100 ? 700 : 500, color: total > 100 ? 'var(--amber-ink)' : 'var(--text-muted)' }}>
+            Category limits {budgetPct}% + savings {savePct}% = {total}% of income
+            {total > 100 ? ' · over 100%: lower the savings target or a category limit.' : total < 100 ? ` · ${100 - total}% unplanned` : ' ✓'}
+          </span>
+        );
+      })()}
       <label className={s.field}>
         <span>
           Warn when a category reaches <strong style={{ color: 'var(--text)' }}>{d.warnAt}%</strong> of its limit

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import s from '../styles/ui.module.css';
 import { Modal } from './ui';
+import { Select } from './Select';
 import { useData } from '../lib/data';
 import { chooseLabel, disconnectGmail, listLabels, reimportGmail, syncNow, syncRange, type SyncResult } from '../lib/gmail';
 import { C } from '../lib/tokens';
@@ -82,14 +83,14 @@ export function GmailDialog({ onClose }: { onClose: () => void }) {
       </div>
       <label className={s.field}>
         Label with your receipts
-        <select className={s.select} value={pick} onChange={e => setPick(e.target.value)} disabled={!labels}>
-          <option value="">{!labels ? 'Loading labels…' : labels.length ? 'Choose a label' : 'No labels yet. Create one in Gmail.'}</option>
-          {labels?.map(l => (
-            <option key={l} value={l}>
-              {l}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={pick}
+          onChange={setPick}
+          ariaLabel="Gmail label"
+          disabled={!labels || !labels.length}
+          placeholder={!labels ? 'Loading labels…' : labels.length ? 'Choose a label' : 'No labels yet. Create one in Gmail.'}
+          options={(labels ?? []).map(l => ({ value: l, label: l }))}
+        />
       </label>
       <span className={s.caption}>Tip: add Gmail filters that put receipts from your bank, e-wallets, ride and shopping apps under this label.</span>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

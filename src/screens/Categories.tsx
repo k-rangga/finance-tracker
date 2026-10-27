@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import s from '../styles/ui.module.css';
 import { Badge, IconChip, Pills } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
+import { Select } from '../components/Select';
 import { categoryStatus, changeBadge, iconColors, type Budget, type CatView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { pc } from '../lib/format';
@@ -73,11 +74,18 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
         <button type="button" className={s.btnOutline} onClick={onNewCategory} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <Icon d={IC.plus} size={16} /> New category
         </button>
-        <select className={s.select} style={{ width: 'auto', borderRadius: 999, fontSize: 14, padding: '10px 44px 10px 18px' }} value={group} onChange={e => setGroup(e.target.value as Group)} aria-label="Filter categories">
-          <option value="all">All categories</option>
-          <option value="fixed">Fixed bills</option>
-          <option value="variable">Variable</option>
-        </select>
+        <Select<Group>
+          value={group}
+          onChange={setGroup}
+          ariaLabel="Filter categories"
+          align="right"
+          options={[
+            { value: 'all', label: 'All categories' },
+            { value: 'fixed', label: 'Fixed bills' },
+            { value: 'variable', label: 'Variable' },
+          ]}
+          style={{ width: 'auto', borderRadius: 999, fontSize: 14, padding: '10px 44px 10px 18px' }}
+        />
       </div>
       <span style={{ fontSize: 13, color: C.textMuted }}>{caption}</span>
       {sections.length === 0 && (

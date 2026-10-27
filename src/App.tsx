@@ -61,7 +61,7 @@ export default function App() {
   );
   const budget = useMemo(
     () => computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, income: settings.income, warnAt: settings.warnAt }),
-    [transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, settings.income, settings.warnAt, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
+    [transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, settings.income, settings.warnAt, settings.savingsPct, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
   );
   /** Every synced transaction, for the Transactions screen's own date range. */
   const allTxs = useMemo(() => txViews(all, all, { recat, links, shares, cycle }).txs, [all, recat, links, shares, cycle]);
@@ -157,7 +157,7 @@ export default function App() {
 
       <nav className={s.bottomNav} aria-label="Main navigation">
         {TABS.map(t => (
-          <button key={t.key} type="button" className={tab === t.key ? s.bottomBtnActive : s.bottomBtn} aria-current={tab === t.key ? 'page' : undefined} onClick={() => setTab(t.key)}>
+          <button key={t.key} type="button" className={tab === t.key ? s.bottomBtnActive : s.bottomBtn} aria-label={t.label} aria-current={tab === t.key ? 'page' : undefined} onClick={() => setTab(t.key)}>
             <Icon d={t.icon} size={20} />
             <span>{t.short}</span>
           </button>
@@ -165,7 +165,7 @@ export default function App() {
       </nav>
 
       <main className={s.main}>
-        <div className={s.content}>
+        <div className={tab === 'summary' ? `${s.content} ${s.contentWide}` : s.content}>
           <header className={s.header}>
             <div className={s.headerTitle}>
               <span className={s.mobileOnly} style={{ fontWeight: 600, fontSize: 14 }}>
@@ -175,6 +175,9 @@ export default function App() {
                 Cycle {dayMonth(cycle.start)} – {dayMonth(cycle.end)} · Day {cycle.dayN} of {cycle.cycleDays}
               </span>
               <h1 className={s.h1}>{current.label}</h1>
+              <span className={s.cycleProgress} role="progressbar" aria-label="Pay cycle" aria-valuemin={1} aria-valuemax={cycle.cycleDays} aria-valuenow={cycle.dayN}>
+                <span style={{ width: `${(cycle.dayN / cycle.cycleDays) * 100}%` }} />
+              </span>
             </div>
             <span className={s.badgeAccent}>
               Next payday {dayLabel(cycle.next)}
@@ -217,7 +220,18 @@ export default function App() {
             </div>
           )}
 
-          {tab === 'summary' && <Summary cycle={cycle} budget={budget} onOpenCategory={showCategory} />}
+          {tab === 'summary' && (
+            <Summary
+              cycle={cycle}
+              budget={budget}
+              onOpenCategory={showCategory}
+              onOpenSettings={() => setSettingsOpen(true)}
+              onShowTransactions={(range, cat = '') => {
+                setTxFilter({ range, cat, q: '' });
+                setTab('tx');
+              }}
+            />
+          )}
           {tab === 'categories' && (
             <Categories cycle={cycle} budget={budget} open={openCat} setOpen={setOpenCat} onShowTransactions={showTransactions} onEditCategory={name => setCatDialog({ editing: name })} onNewCategory={() => setCatDialog({})} />
           )}

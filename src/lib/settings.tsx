@@ -1,13 +1,15 @@
 import { createContext, useContext, useMemo, useRef, type ReactNode } from 'react';
 import { fmtFull, fmtShort, type Currency } from './format';
 import { useData } from './data';
-import { applyCategorySettings, type CustomCategory } from '../data/categories';
+import { applyCategorySettings, setSavingsTarget, type CustomCategory } from '../data/categories';
 
 export type Settings = {
   income: number;
   currency: Currency;
   /** Warn when a variable category reaches this % of its limit (60–95). */
   warnAt: number;
+  /** Share of income you aim to save each cycle (the savings target). */
+  savingsPct: number;
   /** Share of income moved to brokers each payday. */
   investPct: number;
   idxCap: number;
@@ -31,6 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
   income: DEFAULT_INCOME.IDR,
   currency: 'IDR',
   warnAt: 80,
+  savingsPct: 60,
   investPct: 20,
   idxCap: 60,
   usCap: 35,
@@ -62,6 +65,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const merged = { ...DEFAULT_SETTINGS, ...stored };
     // Before children render, so every screen sees the same category list.
     applyCategorySettings(merged.customCategories, merged);
+    setSavingsTarget(merged.savingsPct);
     latest.current = merged;
     return merged;
   }, [stored]);
