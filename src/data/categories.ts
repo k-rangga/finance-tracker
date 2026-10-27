@@ -34,6 +34,10 @@ export const CC_PAYMENT_CATEGORY = 'CC Payment';
 export const INVESTMENT_CATEGORY = 'Investment';
 /** Money you moved to your savings account: the only thing counted as saved. Like a transfer, never spending. */
 export const SAVINGS_CATEGORY = 'Savings';
+/** A card purchase paid in installments: the purchase itself isn't spending, its monthly payments are. */
+export const INSTALLMENT_CATEGORY = 'Installment';
+/** Where each installment payment's interest goes. */
+export const INTEREST_CATEGORY = 'Interest & fees';
 /** Categories a transaction can be moved to besides the budget ones. */
 export const OTHER_CATEGORIES = [TRANSFER_CATEGORY, SAVINGS_CATEGORY, INVESTMENT_CATEGORY, INCOME_CATEGORY];
 /** How a non-budget category reads in menus. */
@@ -55,7 +59,7 @@ export const HUES: Hue[] = [
   { color: '#1f97b8', tint: '#e2f3f8', ink: '#0f6680' }, // cyan
   { color: '#c4507e', tint: '#fbe9f0', ink: '#8f2f56' }, // pink
   { color: '#7d8a87', tint: '#eef1f0', ink: '#46524f' }, // grey
-  // Extra hues for categories you add (brown and gold are taken by Cafe and Take out).
+  // Extra hues for categories you add (brown, gold and slate are taken by Cafe, Take out and Interest & fees).
   { color: '#5560d0', tint: '#ebedfb', ink: '#3a43a0' }, // indigo
   { color: '#8a9a1f', tint: '#f2f5df', ink: '#566210' }, // olive
   { color: '#a0703c', tint: '#f6ede3', ink: '#6e4a22' }, // brown
@@ -83,7 +87,9 @@ const BUILT_IN: Category[] = [
   { name: 'Take out', type: 'variable', limitPct: 1, ...HUES[14], icon: IC.takeout },
   { name: 'Transport', type: 'variable', limitPct: 4, ...HUES[6], icon: IC.nav },
   { name: 'Shopping', type: 'variable', limitPct: 3, ...HUES[7], icon: IC.bag },
-  { name: 'Buffer', type: 'variable', limitPct: 2, ...HUES[8], icon: IC.wallet },
+  { name: 'Buffer', type: 'variable', limitPct: 1.5, ...HUES[8], icon: IC.wallet },
+  // Installment interest and card fees, kept apart so they don't inflate what you bought.
+  { name: 'Interest & fees', type: 'variable', limitPct: 0.5, ...HUES[13], icon: IC.card },
 ];
 
 /**
@@ -118,6 +124,6 @@ export function applyCategorySettings(custom: CustomCategory[] = [], { limitOver
 }
 
 /** Names a new category can't take. */
-export const isReservedName = (n: string) => [...CATEGORIES.map(c => c.name), ...OTHER_CATEGORIES, CC_PAYMENT_CATEGORY].some(x => x.toLowerCase() === n.trim().toLowerCase());
+export const isReservedName = (n: string) => [...CATEGORIES.map(c => c.name), ...OTHER_CATEGORIES, CC_PAYMENT_CATEGORY, INSTALLMENT_CATEGORY].some(x => x.toLowerCase() === n.trim().toLowerCase());
 
 export const categoryByName = (n: string) => CATEGORIES.find(c => c.name === n);

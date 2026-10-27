@@ -265,23 +265,31 @@ function storeParsed_(parsed) {
 const CARD_MATCH_AFTER_MS = 2 * 3600e3;
 const CARD_MATCH_BEFORE_MS = 30 * 60e3;
 
+/** A merchant receipt may show the price before the admin fee the bank charged on top (e.g. Tokopedia bills). */
+const FEE_MAX_IDR = 10000;
+
 /**
- * Pairs of { card, receipt } rows that describe one purchase: a card alert ("Grab") and the merchant's
- * own receipt ("Tianlala – Oregon Square", Dining) with the same amount, the receipt within the window
- * around the alert, and the alert's merchant named in the receipt. Nearest pairs win; each row pairs once.
+ * Pairs of { card, receipt } rows that describe one purchase: an alert from the card or bank ("Grab",
+ * "Tokopedia") and the merchant's own receipt ("Tianlala – Oregon Square", "Tokopedia | Tagihan Listrik · …")
+ * with the same amount (or the receipt up to an admin fee less), the receipt within the window around the
+ * alert, and the alert's merchant named in the receipt. Nearest pairs win; each row pairs once.
  */
 function pairCardDuplicates_(rows) {
   const at = r => new Date(r.occurred_at).getTime();
   const brand = r => (String(r.title).toLowerCase().match(/[a-z0-9]+/) || [''])[0];
-  const cards = rows.filter(r => r.source === 'Card receipt' && r.kind !== 'transfer' && brand(r).length >= 3);
-  const receipts = rows.filter(r => rank_(r.source) === 3 && r.kind !== 'transfer');
+  const cards = rows.filter(r => (r.source === 'Card receipt' || r.source === 'Bank email' || r.source === 'E-wallet email') && brand(r).length >= 3);
+  // Card alerts only pair with purchases; a bank alert can also be a bill paid through the merchant (a card payment).
+  const receipts = rows.filter(r => rank_(r.source) === 3);
   const pairs = [];
   cards.forEach(c => {
     const b = brand(c);
     receipts.forEach(r => {
+      if (c.source === 'Card receipt' && (c.kind === 'transfer' || r.kind === 'transfer')) return;
       const dt = at(r) - at(c);
       if (dt < -CARD_MATCH_BEFORE_MS || dt > CARD_MATCH_AFTER_MS) return;
-      if (Math.abs(Number(r.amount) - Number(c.amount)) > 0.005 || r.currency !== c.currency) return;
+      const fee = Number(c.amount) - Number(r.amount);
+      const feeOk = c.source === 'Bank email' && r.currency === 'IDR' && fee > 0 && fee <= FEE_MAX_IDR;
+      if ((Math.abs(fee) > 0.005 && !feeOk) || r.currency !== c.currency) return;
       if ([r.sender, r.title, r.ref].join(' ').toLowerCase().indexOf(b) < 0) return;
       pairs.push({ card: c, receipt: r, gap: Math.abs(dt) });
     });
@@ -303,7 +311,11 @@ function pairCardDuplicates_(rows) {
 function mergeCardDuplicates_() {
   const pairs = pairCardDuplicates_(readTable_('transactions'));
   pairs.forEach(p => {
-    if (p.receipt.account !== p.card.account) upsertRow_('transactions', 'id', Object.assign({}, p.receipt, { account: p.card.account }));
+    // The receipt keeps its detail, on the alert's account and at the amount that actually left (fee included).
+    const fix = {};
+    if (p.receipt.account !== p.card.account && p.receipt.kind !== 'transfer') fix.account = p.card.account;
+    if (Number(p.receipt.amount) !== Number(p.card.amount)) fix.amount = p.card.amount;
+    if (Object.keys(fix).length) upsertRow_('transactions', 'id', Object.assign({}, p.receipt, fix));
   });
   return dropDuplicates_(pairs.map(p => ({ keep: p.receipt, drop: p.card })));
 }
@@ -319,6 +331,7 @@ function dropDuplicates_(pairs) {
   const shares = readTable_('shares');
   const links = readTable_('links');
   const removed = readTable_('removed');
+  const installments = readTable_('installments');
   pairs.forEach(p => {
     const from = p.drop.id;
     const to = p.keep.id;
@@ -329,6 +342,8 @@ function dropDuplicates_(pairs) {
     links.filter(l => l.expense_id === from).forEach(l => upsertRow_('links', 'income_id', { income_id: l.income_id, expense_id: to, updated_at: now }));
     links.filter(l => l.income_id === from).forEach(l => upsertRow_('links', 'income_id', { income_id: to, expense_id: l.expense_id, updated_at: now }));
     if (removed.some(x => x.tx_id === from) && !removed.some(x => x.tx_id === to)) upsertRow_('removed', 'tx_id', { tx_id: to, removed_at: now });
+    const plan = installments.filter(x => x.tx_id === from)[0];
+    if (plan && !installments.some(x => x.tx_id === to)) upsertRow_('installments', 'tx_id', Object.assign({}, plan, { tx_id: to, updated_at: now }));
   });
   const gone = pairs.map(p => p.drop.id);
   deleteWhere_('transactions', 'id', gone);
@@ -336,6 +351,7 @@ function dropDuplicates_(pairs) {
   deleteWhere_('shares', 'tx_id', gone);
   deleteWhere_('links', 'income_id', gone);
   deleteWhere_('removed', 'tx_id', gone);
+  deleteWhere_('installments', 'tx_id', gone);
   appendNew_('skipped', 'id', pairs.map(p => ({ id: p.drop.id, subject: String(p.drop.subject || '').slice(0, 300), seen_at: now, reason: 'duplicate of ' + p.keep.id })));
   return pairs.length;
 }

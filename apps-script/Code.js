@@ -37,6 +37,7 @@ const ACTIONS = {
     links: links_(),
     shares: shares_(),
     removed: readTable_('removed').map(r => r.tx_id),
+    installments: installments_(),
     trades: readTable_('trades'),
     updates: readTable_('trade_updates'),
     prices: props_('prices', null),
@@ -63,6 +64,11 @@ const ACTIONS = {
   setShare: p => {
     if (p.ratio == null) deleteRow_('shares', 'tx_id', p.txId);
     else upsertRow_('shares', 'tx_id', { tx_id: p.txId, ratio: p.ratio, updated_at: new Date().toISOString() });
+    return true;
+  },
+  setInstallment: p => {
+    if (!p.plan) deleteRow_('installments', 'tx_id', p.txId);
+    else upsertRow_('installments', 'tx_id', { tx_id: p.txId, start: p.plan.start, amounts: JSON.stringify(p.plan.amounts), updated_at: new Date().toISOString() });
     return true;
   },
   setRemoved: p => {
@@ -131,6 +137,19 @@ function links_() {
   const out = {};
   readTable_('links').forEach(r => {
     out[r.income_id] = r.expense_id;
+  });
+  return out;
+}
+
+/** { txId: { start, amounts } } */
+function installments_() {
+  const out = {};
+  readTable_('installments').forEach(r => {
+    try {
+      out[r.tx_id] = { start: String(r.start), amounts: JSON.parse(r.amounts).map(Number) };
+    } catch (e) {
+      // A row edited by hand into something unreadable is skipped rather than breaking the load.
+    }
   });
   return out;
 }

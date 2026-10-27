@@ -1529,3 +1529,23 @@ textarea.input {
   height: 100%;
   border-radius: 999px;
 }
+
+/* ---------- Installment schedule ---------- */
+.planList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+  gap: 8px 16px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.planRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  align-items: center;
+  gap: 10px;
+}
+.planRow input {
+  padding: 8px 10px;
+  font-size: 14px;
+}

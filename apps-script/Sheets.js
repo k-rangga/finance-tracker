@@ -14,6 +14,8 @@ const TABLES = {
   shares: ['tx_id', 'ratio', 'updated_at'],
   /** Transactions you removed by hand: hidden everywhere, and kept hidden when Gmail sync sees them again. */
   removed: ['tx_id', 'removed_at'],
+  /** Card purchases you turned into an installment: first payment date and each month's amount (JSON list). */
+  installments: ['tx_id', 'start', 'amounts', 'updated_at'],
   trades: [
     'id', 'market', 'ticker', 'name', 'buy_date', 'price', 'quantity', 'fee', 'style', 'conviction', 'target', 'stop',
     'catalyst', 'catalyst_date', 'thesis', 'tags', 'leverage', 'direction',

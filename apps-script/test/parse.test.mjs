@@ -289,6 +289,32 @@ for (const k of Object.keys(sheets)) delete sheets[k];
   }
 }
 
+// Tokopedia: the BCA virtual-account alert says only "Tokopedia"; Tokopedia's receipt says what it was.
+for (const k of Object.keys(sheets)) delete sheets[k];
+{
+  const va = (id, total) => msg(id, '2026-09-28T06:30:00Z', 'FW: Internet Transaction Journal', ME, fwd('BCA <bca@bca.co.id>', 'Internet Transaction Journal', `Hello BUDI SANTOSO,\n\nTransfer Type : Transfer to BCA Virtual Account\nBCA Virtual Account No. : 8077\nName : BUDI SANTOSO\nCompany/Product Name : TOKOPEDIA\nTotal Payment : IDR ${total}\nReference No. : 95271TKP${id}`));
+  const toped = (id, lines) => msg(id, '2026-09-28T06:31:00Z', 'FW: Transaksi Tagihan Listrik Berhasil', ME, fwd('Tokopedia <noreply@tokopedia.com>', 'Transaksi Tagihan Listrik Berhasil', `Halo Budi,\n\nSelamat, transaksi Tagihan Listrik kamu berhasil!\n\nDetail Transaksi\nNo. Invoice\nIVR/20260928/XXVI/IX/${id}\nSTRUK PEMBAYARAN TAGIHAN LISTRIK\nIDPEL\n538655489642\nNAMA\nKRISTI MARLISA\nTARIF/DAYA\nR2/000004400VA\n${lines}`));
+  const p = parse('FW: Transaksi Tagihan Listrik Berhasil', ME, fwd('Tokopedia <noreply@tokopedia.com>', 'Transaksi Tagihan Listrik Berhasil', 'Selamat, transaksi Tagihan Listrik kamu berhasil!\nNAMA\nKRISTI MARLISA\nRP TAG PLN\nRp1.807.739\nTotal Pembayaran\nRp1.812.000'));
+  const own = vm.runInContext('parseReceipt', ctx)({ subject: 'Internet Transaction Journal', from: 'BCA <bca@bca.co.id>', text: 'Hello BUDI SANTOSO,\nTransfer Type : Transfer to BCA Virtual Account\nName : BUDI SANTOSO\nCompany/Product Name : TOKOPEDIA\nTotal Payment : IDR 50,000.00\nReference No. : 1' });
+  // Total paid shown: exact match. Only the bill shown (Rp 1.807.739 of Rp 1.812.000 charged): matched as an admin fee.
+  store([va('v1', '1,812,000.00'), toped('r1', 'RP TAG PLN\nRp1.807.739\nBiaya Admin\nRp4.261\nTotal Pembayaran\nRp1.812.000')]);
+  store([{ ...va('v2', '1,737,000.00'), m: { ...va('v2', '1').m, internalDate: String(Date.parse('2026-10-18T06:30:00Z')) } }, { ...toped('r2', 'RP TAG PLN\nRp1.732.500'), m: { ...toped('r2', '').m, internalDate: String(Date.parse('2026-10-18T06:33:00Z')) } }]);
+  try {
+    assert.equal(p.title, 'Tokopedia | Tagihan Listrik · Kristi Marlisa');
+    assert.equal(p.category, 'Utilities');
+    assert.equal(p.amount, 1812000, 'total paid, not the bill before the admin fee');
+    assert.equal(own.kind, 'spend', 'a Tokopedia VA in your own name is a purchase, not a transfer to yourself');
+    assert.deepEqual(sheets.transactions.map(r => [r.id, r.title, r.amount, r.account]).sort(), [
+      ['r1', 'Tokopedia | Tagihan Listrik · Kristi Marlisa', 1812000, 'Bank'],
+      ['r2', 'Tokopedia | Tagihan Listrik · Kristi Marlisa', 1737000, 'Bank'],
+    ]);
+    console.log('ok   Tokopedia receipts name the bill and merge with the BCA virtual-account alert (admin fee included)');
+  } catch (e) {
+    failed++;
+    console.log('FAIL Tokopedia —', e.message, JSON.stringify(sheets.transactions?.map(r => [r.id, r.title, r.amount, r.account])));
+  }
+}
+
 // Receipts that replaced a card alert before accounts were carried over go back on the card; repeat forwards don't count.
 for (const k of Object.keys(sheets)) delete sheets[k];
 sheets.transactions = [

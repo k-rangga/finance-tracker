@@ -59,7 +59,7 @@ function parseReceipt(e) {
   const from = fwd.from;
   const text = fwd.text;
   const hay = subject + '\n' + from + '\n' + text;
-  const specific = parseBcaJournal_(subject, text) || parseBcaCard_(subject, text) || parseBlu_(subject, text) || parseGrab_(subject, from, text);
+  const specific = parseBcaJournal_(subject, text) || parseBcaCard_(subject, text) || parseBlu_(subject, text) || parseGrab_(subject, from, text) || parseTokopedia_(subject, from, text);
   const p = specific || parseGeneric_(subject, from, text);
   if (!p || !(p.amount > 0)) return null;
   const source = p.source || sourceOf_(hay);
@@ -166,7 +166,8 @@ function parseBcaJournal_(subject, text) {
     // e.g. "KLIRING KOMODITI INDONESIA PT / KKI-PLUANG" paid under your own name: money into your own
     // investment or e-wallet account, not spending. A VA in someone else's name is a bill.
     const company = f['company/product name'] || f['company name'] || f['product name'] || '';
-    const self = isSelf_(f['name'] || '', [holder_(text)]) || INVESTING.test(company);
+    // Marketplaces put your own name on the VA too, but paying one is a purchase (or a bill), not a transfer.
+    const self = !MARKETPLACES.test(company) && (isSelf_(f['name'] || '', [holder_(text)]) || INVESTING.test(company));
     return Object.assign(base, { kind: self ? 'transfer' : 'spend', title: vaTitle_(company) || type, category: self ? TRANSFER : categoryOfName_(company) });
   }
   if (/transfer/i.test(type)) {
@@ -177,6 +178,9 @@ function parseBcaJournal_(subject, text) {
     return Object.assign(base, { kind: 'transfer', title: 'Credit card payment', category: CC_PAYMENT, account: 'Bank', to_account: cardAccount_(to || 'BCA') });
   return Object.assign(base, { title: to || type, category: categoryOfName_(to) });
 }
+
+/** Marketplaces paid by virtual account: a purchase even when the VA carries your name. */
+const MARKETPLACES = /\b(tokopedia|shopee|lazada|blibli|bukalapak|zalora|traveloka|tiket\.com)\b/i;
 
 /** Brokers and investment apps: money paid in goes to the Investing pocket. */
 const BROKERS = /\b(pluang|bibit|ajaib|stockbit|ipot|indo ?premier|bareksa|tokocrypto|pintu|indodax|reku|mirae|sinarmas sekuritas|motion trade)\b/i;
@@ -281,6 +285,56 @@ function parseGrab_(subject, from, text) {
   if (tip) title = 'Grab tip';
   // Ref includes the amount: a tip reuses the order's booking code but is a separate charge.
   return { amount: amt.amount, currency: amt.currency, title: title, category: category, source: 'Ride app email', ref: booking ? 'grab:' + booking[0].toUpperCase() + ':' + amt.amount : '' };
+}
+
+// ---------------------------------------------------------------- Tokopedia
+
+/**
+ * The value under or beside a label in a receipt table: "NAMA\nKRISTI MARLISA" (label line, value line) or
+ * "NAMA : KRISTI MARLISA". First label that has a value wins.
+ */
+function labelled_(text, labels) {
+  const lines = text.split('\n').map(l => l.trim());
+  for (const label of labels) {
+    const re = new RegExp('^' + label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*:?\\s*(.*)$', 'i');
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(re);
+      if (!m) continue;
+      if (m[1]) return m[1].trim();
+      const next = lines.slice(i + 1).find(l => l);
+      if (next) return next;
+    }
+  }
+  return '';
+}
+
+const titleCase_ = s => String(s).toLowerCase().replace(/(^|[\s(/-])\S/g, c => c.toUpperCase());
+
+/**
+ * Tokopedia receipts ("Selamat, transaksi Tagihan Listrik kamu berhasil!"): the title says what was paid and
+ * for whom, e.g. "Tokopedia | Tagihan Listrik · Kristi Marlisa", and the category follows what it was
+ * (electricity → Utilities). Paying a credit card bill through Tokopedia is a card payment, not spending.
+ */
+function parseTokopedia_(subject, from, text) {
+  if (!/tokopedia/i.test(from + ' ' + subject + ' ' + text.slice(0, 600))) return null;
+  const what = (
+    (text.match(/transaksi\s+(.{3,60}?)\s+(?:kamu|anda)\s+berhasil/i) || [])[1] ||
+    (text.match(/pembayaran\s+(.{3,60}?)\s+(?:kamu|anda)?\s*berhasil/i) || [])[1] ||
+    ''
+  ).trim();
+  const amt =
+    money_(labelled_(text, ['total pembayaran', 'total bayar', 'total tagihan', 'total belanja', 'total harga', 'total'])) ||
+    money_(labelled_(text, ['rp tag pln', 'jumlah tagihan', 'tagihan', 'nominal', 'harga']));
+  if (!amt) return null;
+  const who = labelled_(text, ['nama pelanggan', 'nama']);
+  const invoice = (text.match(/\b(?:IVR|INV)\/[A-Z0-9/]+/i) || [])[0] || '';
+  const detail = [what && titleCase_(what), who && !/^\d+$/.test(who) && titleCase_(who)].filter(Boolean).join(' · ');
+  const base = { amount: amt.amount, currency: amt.currency, source: 'Marketplace email', ref: invoice ? 'tokopedia:' + invoice.toUpperCase() : '', title: detail ? 'Tokopedia | ' + detail : 'Tokopedia' };
+  const hay = what + ' ' + labelled_(text, ['struk pembayaran', 'produk', 'nama produk']) + ' ' + (text.match(/struk pembayaran[^\n]*/i) || [''])[0];
+  if (/kartu kredit|credit card/i.test(hay))
+    return Object.assign(base, { kind: 'transfer', category: CC_PAYMENT, account: 'Bank', to_account: cardAccount_(hay) });
+  const cat = categoryOfName_(hay);
+  return Object.assign(base, { kind: 'spend', category: cat === 'Buffer' ? 'Shopping' : cat });
 }
 
 // ---------------------------------------------------------------- generic fallback

@@ -5,13 +5,15 @@ import { IC, Icon } from '../components/Icon';
 import { CategoryDialog } from '../components/CategoryDialog';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { Select } from '../components/Select';
+import { InstallmentDialog } from '../components/InstallmentDialog';
+import { useData } from '../lib/data';
 import { dayAmount, dayTotalLabel, ICON_CHIP, inDayTotal, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth, parseISO, sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
 import { CATEGORIES, categoryByName, categoryLabel, CC_PAYMENT_CATEGORY, OTHER_CATEGORIES } from '../data/categories';
-import { merchantKey } from '../data/transactions';
+import { isCard, merchantKey } from '../data/transactions';
 
 export type Range = 'today' | 'week' | 'last' | 'cycle' | 'custom';
 /** `from` / `to` (YYYY-MM-DD, inclusive) are the dates picked for the `custom` range. */
@@ -44,6 +46,15 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   /** "New category" dialog, opened from a row's category menu; the new category is applied to that row. */
   const [creating, setCreating] = useState<{ name: string; tx: TxView } | null>(null);
   const [calOpen, setCalOpen] = useState(false);
+  const { installments, setInstallment } = useData();
+  /** The purchase whose installment plan is open in the dialog. */
+  const [planFor, setPlanFor] = useState<string | null>(null);
+  const planTx = planFor ? allTxs.find(x => x.id === planFor) : undefined;
+  const unplan = (id: string) => {
+    const before = installments[id];
+    setInstallment(id, null);
+    setToast({ text: 'Back to one purchase', action: 'Undo', run: () => before && setInstallment(id, before) });
+  };
   /** What just changed, with a way to take it back, for a few seconds. */
   const [toast, setToast] = useState<{ text: string; action: string; run: () => void } | null>(null);
   const [showRemoved, setShowRemoved] = useState(false);
@@ -129,11 +140,11 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   const out = spending.reduce((a, t) => a + t.net, 0);
   const paidBack = spending.reduce((a, t) => a + Math.min(t.reimbursed, t.amount), 0);
   const income = inRange.filter(t => t.isIncome && !t.reimbursesId).reduce((a, t) => a + t.amount, 0);
-  const moved = inRange.filter(t => t.isTransfer && !t.isCcPayment && !t.isInvestment && !t.isSavings).reduce((a, t) => a + t.amount, 0);
+  const moved = inRange.filter(t => t.isTransfer && !t.isCcPayment && !t.isInvestment && !t.isSavings && !t.isInstallment).reduce((a, t) => a + t.amount, 0);
   const saved = inRange.filter(t => t.isSavings).reduce((a, t) => a + t.amount, 0);
   const invested = inRange.filter(t => t.isInvestment).reduce((a, t) => a + t.amount, 0);
   const cardBills = inRange.filter(t => t.isCcPayment).reduce((a, t) => a + t.amount, 0);
-  const transferCount = inRange.length - spending.length - inRange.filter(t => t.isIncome).length;
+  const transferCount = inRange.filter(t => t.isTransfer && !t.isInstallment).length;
   /** Spending per category in the range, biggest first, for the recap. */
   const byCat = Object.entries(
     spending.reduce<Record<string, number>>((acc, t) => ({ ...acc, [t.cat]: (acc[t.cat] ?? 0) + t.net }), {}),
@@ -242,6 +253,8 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
                   onLink={onLink}
                   onShare={onShare}
                   onRemove={() => remove(t)}
+                  onPlan={setPlanFor}
+                  onUnplan={unplan}
                   expenses={expenses}
                   onNewCategory={name => {
                     setOpen(null);
@@ -339,6 +352,25 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
             {toast.action}
           </button>
         </div>
+      )}
+      {planTx && (
+        <InstallmentDialog
+          tx={planTx}
+          plan={installments[planTx.id]}
+          onClose={() => setPlanFor(null)}
+          onSave={plan => {
+            setInstallment(planTx.id, plan);
+            setPlanFor(null);
+          }}
+          onUndo={
+            installments[planTx.id]
+              ? () => {
+                  unplan(planTx.id);
+                  setPlanFor(null);
+                }
+              : undefined
+          }
+        />
       )}
       {creating && (
         <CategoryDialog
@@ -446,6 +478,10 @@ type RowProps = {
   onLink: Props['onLink'];
   onShare: Props['onShare'];
   onRemove: () => void;
+  /** Open the installment dialog for a purchase (by id). */
+  onPlan: (purchaseId: string) => void;
+  /** Make an installment purchase one purchase again. */
+  onUnplan: (purchaseId: string) => void;
   /** Open the "New category" dialog, prefilled with what was typed in the category search. */
   onNewCategory: (name: string) => void;
   /** This cycle's expenses, newest first: what an income can pay back. */
@@ -454,7 +490,8 @@ type RowProps = {
   setPopover: (kind: Popover | null) => void;
 };
 
-function TxRow({ t, onRecat, onLink, onShare, onRemove, onNewCategory, expenses, popover, setPopover }: RowProps) {
+function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewCategory, expenses, popover, setPopover }: RowProps) {
+  const { installments } = useData();
   const { full } = useSettings();
   const c = categoryByName(t.cat);
   const ic = ICON_CHIP;
@@ -482,7 +519,9 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onNewCategory, expenses,
   const shareNote = t.share != null ? `your share of ${full(t.amount)}` : '';
   const amount = t.isIncome
     ? { text: '+ ' + full(t.amount), ink: t.reimbursesId ? C.textMuted : C.accent800 }
-    : t.isTransfer
+    : t.isInstallment
+      ? { text: full(t.amount), ink: C.textMuted, note: `in ${installments[t.id]?.amounts.length ?? '?'} payments` }
+      : t.isTransfer
       ? { text: full(t.amount), ink: C.textMuted }
       : t.reimbursed && t.net === 0
         ? { text: full(0), ink: C.textMuted, note: 'paid back by ' + paidBy }
@@ -492,16 +531,28 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onNewCategory, expenses,
             ? { text: t.net === 0 ? full(0) : '- ' + full(t.net), ink: t.net === 0 ? C.textMuted : C.text, note: shareNote }
             : { text: '- ' + full(t.amount), ink: C.text };
   /** Less-used actions, behind the row's ⋯ button. */
-  const more: [string, () => void][] = [
-    ...(isExpense ? [[t.share != null ? 'Edit my share' : 'My share…', () => setPopover('share')] as [string, () => void]] : []),
-    ...(canLink && !t.reimbursesId ? [['Paid back for…', () => setPicking(true)] as [string, () => void]] : []),
-    ['Remove transaction', onRemove],
+  /** The installment purchase this row belongs to: itself, or the purchase a monthly payment pays for. */
+  const planId = t.plan?.of ?? (t.isInstallment ? t.id : null);
+  type Item = [string, () => void];
+  const more: Item[] = [
+    ...(isExpense && !t.plan ? [[t.share != null ? 'Edit my share' : 'My share…', () => setPopover('share')] as Item] : []),
+    ...(canLink && !t.reimbursesId ? [['Paid back for…', () => setPicking(true)] as Item] : []),
+    ...(planId
+      ? ([
+          ['Edit installment…', () => onPlan(planId)],
+          ['Make it one purchase again', () => onUnplan(planId)],
+        ] as Item[])
+      : isExpense && isCard(t.account)
+        ? [['Pay in installments…', () => onPlan(t.id)] as Item]
+        : []),
+    // A monthly payment is part of its plan; it's removed by making the purchase one purchase again.
+    ...(t.plan ? [] : [['Remove transaction', onRemove] as Item]),
   ];
 
   return (
     <div ref={row} className={s.hoverRow} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px' }}>
       <span className={s.rowIcon}>
-        <IconChip d={c ? c.icon : t.isCcPayment ? IC.card : t.isInvestment ? IC.trend : t.isSavings ? IC.piggy : t.isTransfer ? IC.transfer : IC.coins} bg={ic.bg} ink={ic.ink} />
+        <IconChip d={c ? c.icon : t.isCcPayment || t.isInstallment ? IC.card : t.isInvestment ? IC.trend : t.isSavings ? IC.piggy : t.isTransfer ? IC.transfer : IC.coins} bg={ic.bg} ink={ic.ink} />
       </span>
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
         <span className={s.ellipsis} style={{ fontSize: 15, fontWeight: 600 }}>
@@ -521,6 +572,11 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onNewCategory, expenses,
                 <Icon d={IC.close} size={12} />
               </button>
             </span>
+          ) : t.isInstallment ? (
+            <button type="button" className={s.catPill} onClick={() => onPlan(t.id)} title="Edit the installment plan">
+              <span className={s.catPillText}>Installment · {installments[t.id]?.amounts.length} months</span>
+              <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+            </button>
           ) : (
             <CategoryButton t={t} open={popover === 'cat'} onToggle={() => setPopover(popover === 'cat' ? null : 'cat')} />
           )}

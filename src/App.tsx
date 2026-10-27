@@ -11,7 +11,8 @@ import { computeBudget, txViews } from './lib/budget';
 import { addDays, dayLabel, dayMonth, startOfToday } from './lib/format';
 import { useSettings } from './lib/settings';
 import { useData } from './lib/data';
-import { expectedBills, inCycle, toTransaction, withMerchantRules } from './data/transactions';
+import { expectedBills, inCycle, installmentBills, installmentPayments, toTransaction, withMerchantRules } from './data/transactions';
+import { INSTALLMENT_CATEGORY } from './data/categories';
 import { Summary } from './screens/Summary';
 import { Categories } from './screens/Categories';
 import { Activity, type ActivityFilter } from './screens/Activity';
@@ -34,7 +35,7 @@ export default function App() {
     const t = storage.getRaw(KEYS.tab) as Tab | null;
     return t && TABS.some(x => x.key === t) ? t : 'summary';
   });
-  const { recat: fixed, links, shares, removed, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email } = useData();
+  const { recat: fixed, links, shares, removed, installments, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email } = useData();
   const [txFilter, setTxFilter] = useState<ActivityFilter>({ range: 'week', cat: '', q: '' });
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -48,16 +49,25 @@ export default function App() {
   const prevCycle = useMemo(() => getCycle(addDays(cycle.start, -1)), [cycle]);
   const imported = useMemo(() => txRows.map(r => toTransaction(r, settings.currency, settings.fxRate)), [txRows, settings.currency, settings.fxRate]);
   const removedIds = useMemo(() => new Set(removed), [removed]);
-  /** What every screen counts: imported transactions minus the ones you removed. */
-  const all = useMemo(() => imported.filter(t => !removedIds.has(t.id)), [imported, removedIds]);
   /** Your fixes by hand, plus your merchant rules for every other transaction of those merchants. */
-  const recat = useMemo(() => withMerchantRules(imported, fixed, settings.merchantRules), [imported, fixed, settings.merchantRules]);
+  const fixedAndRules = useMemo(() => withMerchantRules(imported, fixed, settings.merchantRules), [imported, fixed, settings.merchantRules]);
+  const kept = useMemo(() => imported.filter(t => !removedIds.has(t.id)), [imported, removedIds]);
+  /** Installment purchases become monthly payments, each on its due date, in the purchase's category. */
+  const payments = useMemo(() => installmentPayments(kept, installments, t => fixedAndRules[t.id] ?? t.category), [kept, installments, fixedAndRules]);
+  /** What every screen counts: imported transactions you kept, plus installment payments. */
+  const all = useMemo(() => [...kept, ...payments], [kept, payments]);
+  /** Categories as every screen sees them; an installment purchase itself is marked Installment (not spending). */
+  const recat = useMemo(() => {
+    const out = { ...fixedAndRules };
+    for (const id of Object.keys(installments)) out[id] = INSTALLMENT_CATEGORY;
+    return out;
+  }, [fixedAndRules, installments]);
   const transactions = useMemo(() => inCycle(all, cycle), [all, cycle]);
   const prevTransactions = useMemo(() => all.filter(t => t.date >= prevCycle.start && t.date < cycle.start), [all, prevCycle, cycle]);
   const bills = useMemo(
-    () => expectedBills(prevTransactions, prevCycle, transactions, cycle, recat),
+    () => [...expectedBills(prevTransactions, prevCycle, transactions, cycle, recat), ...installmentBills(payments, cycle)].sort((x, y) => x.date.getTime() - y.date.getTime()),
     // Custom categories change which categories are fixed bills.
-    [prevTransactions, prevCycle, transactions, cycle, recat, settings.customCategories],
+    [prevTransactions, prevCycle, transactions, cycle, recat, payments, settings.customCategories],
   );
   const budget = useMemo(
     () => computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, income: settings.income, warnAt: settings.warnAt }),

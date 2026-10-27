@@ -1,6 +1,6 @@
 import type { Cycle } from '../lib/cycle';
-import type { Currency } from '../lib/format';
-import { CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INVESTMENT_CATEGORY, SAVINGS_CATEGORY, TRANSFER_CATEGORY } from './categories';
+import { parseISO, type Currency } from '../lib/format';
+import { CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INTEREST_CATEGORY, INVESTMENT_CATEGORY, SAVINGS_CATEGORY, TRANSFER_CATEGORY } from './categories';
 
 export type Transaction = {
   id: string;
@@ -17,7 +17,70 @@ export type Transaction = {
   type: 'expense' | 'income' | 'transfer';
   /** Transfers only, e.g. 'CC BCA' for a card bill payment. */
   toAccount?: string;
+  /** Installment payments only: the purchase it pays for, which month (1-based) of how many, and which part. */
+  plan?: { of: string; month: number; months: number; part: 'price' | 'interest' };
 };
+
+/** A card purchase paid in monthly installments: first payment date (YYYY-MM-DD) and each month's amount, interest included. */
+export type InstallmentPlan = { start: string; amounts: number[] };
+
+/** Same day `n` months later, kept inside the month: 31 Jan + 1 month is 28 (or 29) Feb. */
+export function addMonths(d: Date, n: number): Date {
+  const last = new Date(d.getFullYear(), d.getMonth() + n + 1, 0).getDate();
+  return new Date(d.getFullYear(), d.getMonth() + n, Math.min(d.getDate(), last));
+}
+
+/**
+ * Each month's share of the price: equal parts, the last one absorbing rounding so they add up exactly.
+ * Whole amounts (rupiah) split into whole amounts; others into cents.
+ */
+export function priceParts(price: number, months: number): number[] {
+  const unit = Number.isInteger(price) ? 1 : 0.01;
+  const each = Math.floor(price / months / unit) * unit;
+  const round = (v: number) => Math.round(v / unit) * unit;
+  return Array.from({ length: months }, (_, i) => round(i < months - 1 ? each : price - each * (months - 1)));
+}
+
+/**
+ * The monthly payments of each installment plan, as transactions on their due dates (on the same card), so each
+ * counts as spending in the cycle it's billed. A payment above its share of the price is split: the share stays
+ * in the purchase's category, the rest goes to Interest & fees. `cat` is the purchase's category after your fixes.
+ */
+export function installmentPayments(purchases: Transaction[], plans: Record<string, InstallmentPlan>, cat: (t: Transaction) => string): Transaction[] {
+  return purchases.flatMap(t => {
+    const p = plans[t.id];
+    if (!p || !p.amounts.length) return [];
+    const months = p.amounts.length;
+    const share = priceParts(t.amount, months);
+    const first = parseISO(p.start);
+    return p.amounts.flatMap((amount, i) => {
+      const price = Math.min(amount, share[i]);
+      const interest = Math.round((amount - price) * 100) / 100;
+      // Less than one rupiah (or cent) above the share is rounding, not interest.
+      const base = { date: addMonths(first, i), time: t.time, source: 'Installment', account: t.account, type: 'expense' as const };
+      const label = `${t.title} · ${i + 1}/${months}`;
+      const rows: Transaction[] = [
+        { ...base, id: `${t.id}~${i + 1}`, title: label, category: cat(t), amount: price, plan: { of: t.id, month: i + 1, months, part: 'price' } },
+      ];
+      if (interest >= (Number.isInteger(t.amount) ? 1 : 0.01))
+        rows.push({ ...base, id: `${t.id}~${i + 1}i`, title: `${label} interest`, category: INTEREST_CATEGORY, amount: interest, plan: { of: t.id, month: i + 1, months, part: 'interest' } });
+      return rows;
+    });
+  });
+}
+
+/** Installment payments due later this cycle, as bills (price and interest together), so they're planned for. */
+export function installmentBills(payments: Transaction[], cycle: Cycle): Bill[] {
+  const due = new Map<string, Bill>();
+  for (const t of payments) {
+    if (!t.plan || t.date <= cycle.today || t.date > cycle.end) continue;
+    const key = `${t.plan.of}~${t.plan.month}`;
+    const b = due.get(key);
+    if (b) b.amount += t.amount;
+    else due.set(key, { date: t.date, title: t.title.replace(/ interest$/, ''), category: t.category === INTEREST_CATEGORY ? INTEREST_CATEGORY : t.category, amount: t.amount, source: 'Installment' });
+  }
+  return [...due.values()];
+}
 
 /** Last cycle's spend on one credit card (the bill paid this cycle). */
 export type CardCycle = { account: string; prevCycleSpend: number };

@@ -353,7 +353,7 @@ function TodayCard({ cycle, budget: b, onSeeAll }: { cycle: Cycle; budget: Budge
   const { full } = useSettings();
   const all = b.txs.filter(t => t.offset === cycle.dayIdx);
   const today = all.filter(t => !t.isTransfer);
-  const transfers = all.length - today.length;
+  const transfers = all.filter(t => t.isTransfer && !t.isInstallment).length;
   const spent = today.filter(t => !t.isIncome).reduce((a, t) => a + t.net, 0);
   return (
     <section className={s.sideCard}>

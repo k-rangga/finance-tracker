@@ -2,7 +2,7 @@ import { run } from './gas';
 import { DEFAULT_SETTINGS, type Settings } from './settings';
 import { addDays, startOfToday, toISO } from './format';
 import type { Market, Prices, Snap, Trade, TradeUpdate } from '../screens/invest/model';
-import type { TxRow } from '../data/transactions';
+import type { InstallmentPlan, TxRow } from '../data/transactions';
 
 export type GmailConnection = {
   google_email: string | null;
@@ -24,6 +24,8 @@ export type UserData = {
   shares: Record<string, number>;
   /** Ids of transactions you removed by hand. */
   removed: string[];
+  /** Card purchases paid in installments, by transaction id. */
+  installments: Record<string, InstallmentPlan>;
   journal: Trade[];
   /** Avg up / avg down buys and notes on journal entries. */
   updates: TradeUpdate[];
@@ -47,6 +49,8 @@ export type Backend = {
   setShare(txId: string, ratio: number | null): Promise<void>;
   /** Hide a transaction everywhere (`true`) or bring it back. */
   setRemoved(txId: string, removed: boolean): Promise<void>;
+  /** Pay a purchase in installments; `null` makes it one purchase again. */
+  setInstallment(txId: string, plan: InstallmentPlan | null): Promise<void>;
   saveTrade(t: Trade): Promise<void>;
   saveUpdate(u: TradeUpdate): Promise<void>;
   deleteUpdate(id: string): Promise<void>;
@@ -177,6 +181,7 @@ type State = {
   links?: Record<string, string>;
   shares?: Record<string, number>;
   removed?: string[];
+  installments?: Record<string, InstallmentPlan>;
   trades: TradeRow[];
   updates?: UpdateRow[];
   prices: Prices | null;
@@ -196,6 +201,7 @@ export const backend: Backend = {
       links: s.links ?? {},
       shares: s.shares ?? {},
       removed: s.removed ?? [],
+      installments: s.installments ?? {},
       journal: s.trades.map(toTrade).sort((a, b) => b.d.localeCompare(a.d)),
       updates: (s.updates ?? []).map(toUpdate),
       prices: s.prices ?? defaultPrices(),
@@ -210,6 +216,7 @@ export const backend: Backend = {
   setLink: async (incomeId, expenseId) => void (await run('setLink', { incomeId, expenseId })),
   setShare: async (txId, ratio) => void (await run('setShare', { txId, ratio })),
   setRemoved: async (txId, removed) => void (await run('setRemoved', { txId, removed })),
+  setInstallment: async (txId, plan) => void (await run('setInstallment', { txId, plan })),
   saveTrade: async t => void (await run('saveTrade', { trade: toRow(t) })),
   saveUpdate: async x => void (await run('saveTradeUpdate', { update: toUpdateRow(x) })),
   deleteUpdate: async id => void (await run('deleteTradeUpdate', { id })),

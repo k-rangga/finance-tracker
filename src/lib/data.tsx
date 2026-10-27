@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { Backend, UserData } from './backend';
 import type { Settings } from './settings';
 import type { Prices, Snap, Trade, TradeUpdate } from '../screens/invest/model';
+import type { InstallmentPlan } from '../data/transactions';
 import { getCycle } from './cycle';
 import { addDays, startOfToday } from './format';
 
@@ -22,6 +23,8 @@ type Ctx = UserData & {
   setShare: (txId: string, ratio: number | null) => void;
   /** Hide a transaction everywhere (`true`) or bring it back. */
   setRemoved: (txId: string, removed: boolean) => void;
+  /** Pay a purchase in installments; `null` makes it one purchase again. */
+  setInstallment: (txId: string, plan: InstallmentPlan | null) => void;
   saveTrade: (t: Trade) => void;
   saveUpdate: (u: TradeUpdate) => void;
   deleteUpdate: (id: string) => void;
@@ -102,6 +105,16 @@ export function DataProvider({ backend, children, loading, failed }: { backend: 
       setRemoved: (txId, removed) => {
         setData(d => d && { ...d, removed: removed ? [...d.removed.filter(id => id !== txId), txId] : d.removed.filter(id => id !== txId) });
         write(backend.setRemoved(txId, removed));
+      },
+      setInstallment: (txId, plan) => {
+        setData(d => {
+          if (!d) return d;
+          const installments = { ...d.installments };
+          if (plan) installments[txId] = plan;
+          else delete installments[txId];
+          return { ...d, installments };
+        });
+        write(backend.setInstallment(txId, plan));
       },
       saveTrade: t => {
         setData(d => d && { ...d, journal: d.journal.some(x => x.id === t.id) ? d.journal.map(x => (x.id === t.id ? t : x)) : [t, ...d.journal] });

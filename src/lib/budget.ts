@@ -1,4 +1,4 @@
-import { CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INVESTMENT_CATEGORY, SAVINGS_CATEGORY, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY, type Category } from '../data/categories';
+import { CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INSTALLMENT_CATEGORY, INVESTMENT_CATEGORY, SAVINGS_CATEGORY, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY, type Category } from '../data/categories';
 import { isCard, type Bill, type CardCycle, type Transaction } from '../data/transactions';
 import { weekOf, type Cycle } from './cycle';
 import { sum } from './format';
@@ -39,6 +39,8 @@ export type TxView = Transaction & {
   isInvestment: boolean;
   /** Moved to your savings account ("Transfer (savings)"): what counts as saved. */
   isSavings: boolean;
+  /** A purchase paid in installments: not spending itself; its monthly payments are. */
+  isInstallment: boolean;
   isCcPayment: boolean;
   /** Salary is never a reimbursement. */
   isSalary: boolean;
@@ -187,7 +189,9 @@ export function txViews(
         week: weekOf(offset),
         edited: cat !== t.category,
         isIncome: cat === INCOME_CATEGORY,
-        isTransfer: isCcPayment || cat === TRANSFER_CATEGORY || cat === SAVINGS_CATEGORY || cat === INVESTMENT_CATEGORY,
+        // Installment purchases sit with transfers: kept out of spending, like money that hasn't really left yet.
+        isTransfer: isCcPayment || cat === TRANSFER_CATEGORY || cat === SAVINGS_CATEGORY || cat === INVESTMENT_CATEGORY || cat === INSTALLMENT_CATEGORY,
+        isInstallment: cat === INSTALLMENT_CATEGORY,
         isInvestment: cat === INVESTMENT_CATEGORY,
         isSavings: cat === SAVINGS_CATEGORY,
         isCcPayment,
