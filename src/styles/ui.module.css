@@ -1,0 +1,983 @@
+/* ---------- Layout shell ---------- */
+.shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+}
+
+.side {
+  flex: none;
+  position: sticky;
+  top: 16px;
+  margin: 16px 0 16px 16px;
+  height: calc(100vh - 32px);
+  background: var(--surface);
+  border-radius: 24px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.sideFull {
+  composes: side;
+  width: 232px;
+  padding: 24px 14px;
+  gap: 30px;
+  overflow-y: auto;
+}
+
+.sideRail {
+  composes: side;
+  width: 76px;
+  padding: 18px 12px;
+  align-items: center;
+  gap: 26px;
+  display: none;
+}
+
+.bottomNav {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 30;
+  background: var(--surface);
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(23, 32, 27, 0.12);
+  padding: 4px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+  display: none;
+}
+
+.mobileOnly {
+  display: none !important;
+}
+
+.expandOnly {
+  display: none !important;
+}
+
+.collapsed .sideFull {
+  display: none;
+}
+.collapsed .sideRail {
+  display: flex;
+}
+.collapsed .expandOnly {
+  display: grid !important;
+}
+
+@media (max-width: 1099px) {
+  .sideFull {
+    display: none;
+  }
+  .sideRail {
+    display: flex;
+  }
+  .collapsed .expandOnly {
+    display: none !important;
+  }
+}
+
+@media (max-width: 759px) {
+  .sideRail,
+  .collapsed .sideRail {
+    display: none;
+  }
+  .bottomNav {
+    display: grid;
+  }
+  .mobileOnly {
+    display: inline-flex !important;
+  }
+  .desktopOnly {
+    display: none !important;
+  }
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  padding: 40px 32px 96px;
+}
+
+@media (max-width: 759px) {
+  .main {
+    padding: 20px 16px 112px;
+  }
+}
+
+.content {
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.brandRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px 0 8px;
+}
+
+.brandText {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.navList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.navItem {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 16px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  width: 100%;
+}
+.navItem:hover,
+.railBtn:hover,
+.miniBtn:hover {
+  background: var(--accent-hover);
+  color: var(--accent-900);
+}
+.navItemActive {
+  composes: navItem;
+  color: var(--accent-600);
+  background: var(--accent-tint);
+  font-weight: 600;
+}
+
+.railBtn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+}
+.railBtnActive {
+  composes: railBtn;
+  color: var(--accent-600);
+  background: var(--accent-tint);
+}
+
+.miniBtn {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+}
+
+.bottomBtn {
+  min-height: 56px;
+  border: none;
+  border-radius: 999px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  padding: 0;
+  letter-spacing: -0.01em;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.bottomBtnActive {
+  composes: bottomBtn;
+  font-weight: 700;
+  color: var(--accent-800);
+  background: var(--accent-tint);
+}
+
+/* ---------- Header ---------- */
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 14px;
+}
+.headerTitle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-right: auto;
+}
+.h1 {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-size: clamp(30px, 4vw, 40px);
+  line-height: 1.1;
+}
+
+/* ---------- Cards & type ---------- */
+.card {
+  --pad: 28px;
+  background: var(--surface);
+  border-radius: 24px;
+  border: 1px solid var(--border);
+  padding: var(--pad);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.cardFlush {
+  background: var(--surface);
+  border-radius: 24px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+@media (max-width: 759px) {
+  .card {
+    --pad: 20px;
+  }
+}
+
+/* Full-bleed list at the bottom of a card */
+.bleed {
+  display: flex;
+  flex-direction: column;
+  margin: 0 calc(-1 * var(--pad)) calc(-1 * var(--pad));
+  border-top: 1.5px solid var(--divider);
+}
+
+.cardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.h2 {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.h2Sm {
+  composes: h2;
+  font-size: 22px;
+}
+.caption {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.eyebrow {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.muted {
+  color: var(--text-muted);
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ---------- Badges / chips ---------- */
+.badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.badgeAccent {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-800);
+  background: var(--accent-tint);
+  padding: 8px 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  background: transparent;
+  white-space: nowrap;
+}
+button.chip {
+  min-height: 36px;
+}
+button.chip:hover {
+  background: var(--accent-hover);
+  color: var(--accent-900);
+}
+
+.pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pill {
+  font-size: 14px;
+  font-weight: 500;
+  padding: 9px 18px;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  color: var(--text);
+  background: var(--surface);
+}
+.pill:hover {
+  background: var(--accent-hover);
+}
+.pillActive {
+  composes: pill;
+  border-color: var(--accent-500);
+  color: var(--accent-800);
+  background: var(--accent-tint);
+  font-weight: 700;
+}
+.pillActive:hover {
+  background: var(--accent-tint);
+}
+
+/* Segmented option (forms) */
+.opt {
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 18px;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-soft);
+}
+.opt:hover {
+  background: var(--accent-hover);
+}
+.optOn {
+  composes: opt;
+  border-color: var(--accent-800);
+  background: var(--accent-800);
+  color: #ffffff;
+}
+.optOn:hover {
+  background: var(--accent-800);
+}
+.optRound {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+
+/* ---------- Buttons ---------- */
+.btnPrimary {
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--accent-600);
+  border: none;
+  border-radius: 999px;
+  padding: 12px 22px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btnPrimary:hover {
+  background: var(--accent-900);
+}
+.btnDanger {
+  composes: btnPrimary;
+  background: var(--red, #c94a4a);
+}
+.btnDanger:hover {
+  background: #a3302f;
+}
+.btnOutline {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-600);
+  background: var(--surface);
+  border: 1.5px solid var(--accent-600);
+  border-radius: 999px;
+  padding: 9px 18px;
+  min-height: 44px;
+}
+.btnOutline:hover {
+  background: var(--accent-tint);
+}
+.btnGhost {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  padding: 12px 8px;
+  min-height: 44px;
+}
+.btnGhost:hover {
+  color: var(--text);
+}
+.btnSecondary {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 13px;
+  min-height: 44px;
+}
+.btnSecondary:hover {
+  background: var(--accent-hover);
+}
+.iconBtn {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-soft);
+  display: grid;
+  place-items: center;
+}
+.iconBtn:hover {
+  background: var(--accent-hover);
+}
+.linkBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent-600);
+  font-weight: 700;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+}
+.linkBtn:hover {
+  color: var(--accent-900);
+}
+
+/* Row that behaves like a button */
+.rowBtn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: inherit;
+}
+.rowBtn:hover:not(:disabled) {
+  background: var(--divider);
+}
+.rowBtn:disabled {
+  cursor: default;
+}
+.hoverRow:hover {
+  background: #f5f9f8;
+}
+
+/* ---------- Forms ---------- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.input {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--border-strong);
+  border-radius: 14px;
+  padding: 13px 14px;
+  width: 100%;
+  min-width: 0;
+}
+textarea.input {
+  resize: vertical;
+}
+.select {
+  composes: input;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 44px;
+  background: #ffffff
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235c6a67' stroke-width='2.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+    no-repeat right 16px center;
+  cursor: pointer;
+}
+.error {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--red-ink);
+}
+
+/* ---------- Bars ---------- */
+.track {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--divider);
+}
+.fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+}
+.tick {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--text);
+}
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+  display: inline-block;
+}
+.icChip {
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+
+/* ---------- Tiles ---------- */
+.stats {
+  display: grid;
+  /* Four across, or two by two: never three plus an orphan. */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px 32px;
+}
+@media (max-width: 1100px) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.statValue {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-size: 30px;
+  line-height: 1.1;
+  /* Values never wrap mid-number; the grid drops to fewer columns instead. */
+  white-space: nowrap;
+}
+.note {
+  background: var(--bg);
+  border-radius: 16px;
+  padding: 14px 18px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ---------- Modal ---------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(23, 32, 27, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px;
+  overflow-y: auto;
+}
+.dialog {
+  background: var(--surface);
+  border-radius: 24px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+@media (max-width: 759px) {
+  .dialog {
+    padding: 20px;
+  }
+}
+
+/* ---------- Underline sub-tabs ---------- */
+.subTabs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: inset 0 -1px 0 var(--border);
+  flex-wrap: wrap;
+}
+.subTabList {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin-right: auto;
+  max-width: 100%;
+}
+.subTab {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 14px 20px;
+  min-height: 44px;
+  white-space: nowrap;
+}
+.subTab:hover {
+  color: var(--accent-600);
+}
+.subTabActive {
+  composes: subTab;
+  color: var(--accent-600);
+  border-bottom-color: var(--accent-600);
+  font-weight: 600;
+}
+@media (max-width: 759px) {
+  .subTab {
+    padding: 12px 12px;
+    font-size: 15px;
+  }
+}
+
+/* Category pill on a transaction row; colours come from the category. Opens the category menu. */
+.catPill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 28px 4px 10px;
+  border: 1.5px solid;
+  border-radius: 999px;
+  min-height: 28px;
+  cursor: pointer;
+  text-align: left;
+}
+.catPill:focus-visible {
+  outline: 2px solid #14a08a;
+  outline-offset: 2px;
+}
+.catPillText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Reimbursements ---------- */
+.textBtnSm {
+  border: none;
+  background: none;
+  padding: 4px 2px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0b7a6a;
+  cursor: pointer;
+}
+.textBtnSm:hover {
+  text-decoration: underline;
+}
+/* "Paid back · Car body repair ×" on a linked income. */
+.paidChip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  background: #e3f6f2;
+  border: 1.5px solid #14a08a;
+  color: #0b5c50;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.paidChipLabel,
+.paidChipX {
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.paidChipLabel {
+  padding: 4px 4px 4px 10px;
+  min-width: 0;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.paidChipX {
+  display: grid;
+  place-items: center;
+  padding: 4px 8px 4px 4px;
+}
+.picker {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 30;
+  margin-top: 6px;
+  width: min(400px, 100vw - 48px);
+  background: #fff;
+  border: 1px solid #d8e1df;
+  border-radius: 14px;
+  padding: 8px;
+  box-shadow: 0 10px 30px rgba(23, 32, 27, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pickSearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1.5px solid #d8e1df;
+  border-radius: 10px;
+  padding: 0 10px;
+}
+.pickSearch:focus-within {
+  border-color: #14a08a;
+}
+.pickSearch input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  padding: 9px 0;
+  color: #16201e;
+}
+.pickList {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.pickRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.pickRow:hover {
+  background: #ecf1f0;
+}
+.pickRowOn,
+.pickRowOn:hover {
+  background: #e3f6f2;
+}
+.pickSuggest {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #0b7a6a;
+}
+@media (max-width: 480px) {
+  /* Start under the row icon so the popover fits the screen. */
+  .picker {
+    left: -52px;
+  }
+}
+
+/* ---------- My share ---------- */
+.btnPrimarySm {
+  composes: btnPrimary;
+  font-size: 13px;
+  padding: 8px 16px;
+  min-height: 34px;
+}
+.btnPrimarySm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.splitBtn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0b5c50;
+  background: #e3f6f2;
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.splitBtn:hover {
+  background: #cdeee6;
+}
+
+/* ---------- Category menu & new category ---------- */
+.menuGroup {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5c6a67;
+  padding: 10px 10px 4px;
+}
+.menuIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+.pickRowActive {
+  background: #ecf1f0;
+}
+.iconGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 6px;
+}
+.iconOpt {
+  display: grid;
+  place-items: center;
+  height: 40px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.iconOpt:hover {
+  background: #f5f9f8;
+}
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.swatch {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  .stats {
+    gap: 18px 16px;
+  }
+  .statValue {
+    font-size: 22px;
+  }
+}
+
+/* ---------- Holdings table: a table on wide screens, stacked rows below 1100px ---------- */
+.holdRow {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.3fr) 84px minmax(120px, 1fr) minmax(110px, 1fr) minmax(100px, 0.9fr) minmax(190px, 1.4fr);
+  grid-template-areas: 'asset qty last value pl plan';
+  align-items: center;
+  column-gap: 16px;
+  padding: 16px 28px;
+  border-top: 1px solid var(--border);
+  font-size: 15px;
+  text-align: left;
+}
+.holdHead {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.hAsset { grid-area: asset; }
+.hQty { grid-area: qty; white-space: nowrap; }
+.hLast { grid-area: last; white-space: nowrap; }
+.hValue { grid-area: value; text-align: right; align-items: flex-end; white-space: nowrap; }
+.hPl { grid-area: pl; text-align: right; align-items: flex-end; white-space: nowrap; }
+.hPlan { grid-area: plan; min-width: 0; }
+@media (max-width: 1100px) {
+  .holdHead {
+    display: none;
+  }
+  .holdRow {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'asset asset value'
+      'qty last pl'
+      'plan plan plan';
+    row-gap: 12px;
+    padding: 16px 20px;
+  }
+  .hQty {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+}

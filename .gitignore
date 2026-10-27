@@ -4,3 +4,7 @@ node_modules/
 .env.*
 .clasp.json
 .clasprc.json
+dist/
+.vercel
+.env*
+*.tsbuildinfo
