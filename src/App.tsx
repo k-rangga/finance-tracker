@@ -165,7 +165,7 @@ export default function App() {
       </nav>
 
       <main className={s.main}>
-        <div className={tab === 'summary' ? `${s.content} ${s.contentWide}` : s.content}>
+        <div className={s.content}>
           <header className={s.header}>
             <div className={s.headerTitle}>
               <span className={s.mobileOnly} style={{ fontWeight: 600, fontSize: 14 }}>

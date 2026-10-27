@@ -51,3 +51,7 @@ export function startOfToday(): Date {
   const n = new Date();
   return new Date(n.getFullYear(), n.getMonth(), n.getDate());
 }
+
+/** "KALAKA RANGGA S" → "Kalaka Rangga S"; names already in mixed case are left alone. */
+export const tidyName = (s: string) => (s === s.toUpperCase() && /[A-Z]/.test(s) ? s.toLowerCase().replace(/(^|[\s(/-])\p{L}/gu, c => c.toUpperCase()) : s);
+

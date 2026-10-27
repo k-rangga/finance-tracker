@@ -266,14 +266,23 @@ for (const k of Object.keys(sheets)) delete sheets[k];
     // Same name and amount, an hour later: a second transfer.
     tx('t5', '2026-10-27T14:10:00Z', 'KALAKA RANGGA S', 'blu:555'),
   ];
-  sheets.overrides = [{ tx_id: 't2', category: 'Savings', updated_at: 'x' }];
+  // A card bill payment told twice: the BCA journal and a Tokopedia purchase you moved to Transfer.
+  sheets.transactions.push(
+    { ...tx('cc1', '2026-10-26T16:30:00Z', 'Credit card payment', 'bca:666', 9127000), category: 'CC Payment', to_account: 'CC BCA' },
+    { ...tx('tk1', '2026-10-26T16:30:40Z', 'Tokopedia', 'bca:777', 9127000), kind: 'spend', category: 'Shopping' },
+  );
+  sheets.overrides = [
+    { tx_id: 't2', category: 'Savings', updated_at: 'x' },
+    { tx_id: 'tk1', category: 'Transfer', updated_at: 'x' },
+  ];
   const n = vm.runInContext('mergeTransferDuplicates_', ctx)();
   try {
-    assert.equal(n, 1);
-    assert.deepEqual(sheets.transactions.map(r => r.id).sort(), ['t1', 't3', 't4', 't5']);
-    assert.deepEqual(sheets.overrides.map(o => [o.tx_id, o.category]), [['t1', 'Savings']], 'category fix moves to the kept row');
+    assert.equal(n, 2);
+    assert.deepEqual(sheets.transactions.map(r => r.id).sort(), ['cc1', 't1', 't3', 't4', 't5']);
+    assert.ok(sheets.skipped.some(k => k.id === 'tk1' && k.reason === 'duplicate of cc1'), 'the card payment is kept');
+    assert.deepEqual(sheets.overrides.map(o => [o.tx_id, o.category]), [['t1', 'Savings']], 'category fix moves to the kept row; the dropped one goes');
     assert.ok(sheets.skipped.some(k => k.id === 't2' && k.reason === 'duplicate of t1'), 'dropped email is not imported again');
-    console.log('ok   both banks\' emails for one own transfer merge (punctuation ignored); separate transfers stay');
+    console.log('ok   both banks\' emails for one own transfer merge (punctuation ignored); card payment + same-amount transfer merge; separate transfers stay');
   } catch (e) {
     failed++;
     console.log('FAIL transfer merge —', e.message, JSON.stringify(sheets.transactions?.map(r => r.id)));

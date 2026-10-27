@@ -4,7 +4,7 @@ import { Badge, Bar, Card, CardHead, Dot, IconChip } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
 import { changeBadge, dayAmount, dayTotalLabel, ICON_CHIP, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { dayLabel, dayMonth, pc, sum } from '../lib/format';
+import { dayLabel, dayMonth, pc, sum, tidyName } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
 import { categoryByName, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY } from '../data/categories';
@@ -277,9 +277,6 @@ function ThisCycle({ cycle, budget: b, onOpenSettings }: { cycle: Cycle; budget:
     </Card>
   );
 }
-
-/** "KALAKA RANGGA S" → "Kalaka Rangga S"; names already in mixed case are left alone. */
-const tidyName = (s: string) => (s === s.toUpperCase() && /[A-Z]/.test(s) ? s.toLowerCase().replace(/(^|[\s(/-])\p{L}/gu, c => c.toUpperCase()) : s);
 
 /** Header shared by the side cards: title with an optional action on the right, one summary line below. */
 function SideHead({ title, sub, action }: { title: string; sub?: ReactNode; action?: ReactNode }) {

@@ -113,7 +113,8 @@
 }
 
 .content {
-  max-width: 960px;
+  /* One width for every page, so titles and cards line up when you switch tabs. */
+  max-width: 1240px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -1347,9 +1348,6 @@ textarea.input {
 }
 
 /* ---------- Summary: two columns on wide screens ---------- */
-.contentWide {
-  max-width: 1240px;
-}
 .summaryGrid {
   display: grid;
   gap: 24px;
@@ -1454,4 +1452,80 @@ textarea.input {
   .sideCard {
     padding: 16px;
   }
+}
+
+/* ---------- Transactions: list plus recap ---------- */
+.txGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.txMain {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+/* Narrow screens: the recap follows the list. */
+.txRecap {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-width: 0;
+}
+.txSummaryLine {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+@media (min-width: 1200px) {
+  .txGrid {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+  /* Wide screens: pinned beside the list, scrolling inside itself if the category list is long. */
+  .txRecap {
+    position: sticky;
+    top: 24px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+  }
+  .txSummaryLine {
+    display: none;
+  }
+}
+.recapRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  margin: 0 -10px;
+  width: calc(100% + 20px);
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.recapRow:hover {
+  background: var(--hover);
+}
+.recapRow[aria-pressed='true'] {
+  background: var(--accent-hover);
+}
+.recapTrack {
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--divider);
+  overflow: hidden;
+}
+.recapTrack > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
 }
