@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
-import { Badge, Bar, Card, CardHead, Dot, IconChip } from '../components/ui';
+import { Badge, Bar, Card, CardHead, Dot, DueChip, IconChip } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
-import { changeBadge, dayAmount, dayTotalLabel, ICON_CHIP, type Budget, type TxView } from '../lib/budget';
+import { Celebrate, useCountUp } from '../components/Delight';
+import { changeBadge, dayAmount, dayTotalLabel, iconChip, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { dayLabel, dayMonth, pc, sum, tidyName } from '../lib/format';
+import { dayLabel, dayMonth, pc, sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
 import { categoryByName, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY } from '../data/categories';
@@ -25,6 +26,8 @@ type Item = {
   dayAmount?: number;
   /** Gross amount, struck through under the net when part of it was paid back or isn't yours. */
   struck?: string;
+  /** Bills only: when it's due, shown as a chip. */
+  due?: { date: Date; inDays: number };
 };
 
 type SummaryProps = Props & {
@@ -35,22 +38,66 @@ type SummaryProps = Props & {
 
 /** Wide screens: the cycle and breakdowns on the left, a pinned glance panel on the right. Phones: one column. */
 export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onShowTransactions }: SummaryProps) {
+  const { ofIncome } = useSettings();
+  const target = ofIncome(SAVINGS_TARGET_PCT);
+  const id = toISO(cycle.start);
   return (
-    <div className={s.summaryGrid}>
-      <div className={s.summaryCycle}>
-        <ThisCycle cycle={cycle} budget={budget} onOpenSettings={onOpenSettings} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <Greeting cycle={cycle} budget={budget} />
+      {/* Small wins, once per cycle on this device. */}
+      <Celebrate id={id + '.saved'} when={target > 0 && budget.saved >= target} />
+      <Celebrate id={id + '.under'} when={cycle.daysLeft <= 1 && budget.spent <= budget.budget} />
+      <div className={s.summaryGrid}>
+        <div className={s.summaryCycle}>
+          <ThisCycle cycle={cycle} budget={budget} onOpenSettings={onOpenSettings} onShowCycle={() => onShowTransactions('cycle')} />
+        </div>
+        <aside className={s.summarySide} aria-label="At a glance">
+          <SavingsCard cycle={cycle} budget={budget} onMark={() => onShowTransactions('cycle', TRANSFER_CATEGORY)} />
+          <TodayCard cycle={cycle} budget={budget} onSeeAll={() => onShowTransactions('today')} />
+          <ComingUpCard cycle={cycle} budget={budget} />
+          <VsLastCycleCard cycle={cycle} budget={budget} />
+        </aside>
+        <div className={s.summaryRest}>
+          {budget.cards.length > 0 && <CreditCards budget={budget} />}
+          <WhereItWent cycle={cycle} budget={budget} onOpenCategory={onOpenCategory} />
+          <WeeklyPace cycle={cycle} budget={budget} />
+        </div>
       </div>
-      <aside className={s.summarySide} aria-label="At a glance">
-        <SavingsCard cycle={cycle} budget={budget} onMark={() => onShowTransactions('cycle', TRANSFER_CATEGORY)} />
-        <TodayCard cycle={cycle} budget={budget} onSeeAll={() => onShowTransactions('today')} />
-        <ComingUpCard cycle={cycle} budget={budget} />
-        <VsLastCycleCard cycle={cycle} budget={budget} />
-      </aside>
-      <div className={s.summaryRest}>
-        {budget.cards.length > 0 && <CreditCards budget={budget} />}
-        <WhereItWent cycle={cycle} budget={budget} onOpenCategory={onOpenCategory} />
-        <WeeklyPace cycle={cycle} budget={budget} />
-      </div>
+    </div>
+  );
+}
+
+/** Days in a row, back from today, where variable spending stayed within its even daily share. */
+export function underBudgetStreak(cycle: Cycle, b: Budget) {
+  const perDay = b.varBudget / cycle.cycleDays;
+  const byDay = new Map<number, number>();
+  for (const t of b.txs) if (categoryByName(t.cat)?.type === 'variable') byDay.set(t.offset, (byDay.get(t.offset) ?? 0) + t.net);
+  let days = 0;
+  for (let o = cycle.dayIdx; o >= 0 && (byDay.get(o) ?? 0) <= perDay; o--) days++;
+  return { days, perDay };
+}
+
+/** "Good evening, Rangga" with today's number and the streak: the first thing you read. */
+function Greeting({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
+  const { short, settings } = useSettings();
+  const hour = new Date().getHours();
+  const hello = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const name = settings.name.trim().split(/\s+/)[0];
+  const streak = underBudgetStreak(cycle, b);
+  return (
+    <div className="fade-in" style={{ display: 'flex', alignItems: 'baseline', gap: '6px 14px', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.01em' }}>
+        {hello}
+        {name ? `, ${name}` : ''}
+      </span>
+      <span style={{ fontSize: 15, color: C.textSoft }}>
+        <strong style={{ fontWeight: 600, color: b.safeDay > 0 ? C.accent800 : C.redInk }}>{short(b.safeDay)}</strong> safe to spend today
+      </span>
+      {streak.days >= 2 && (
+        <span className={s.streak} title={`Variable spending at or under ${short(streak.perDay)} a day`}>
+          🔥 {streak.days} days under your daily budget
+        </span>
+      )}
     </div>
   );
 }
@@ -70,7 +117,7 @@ type Row = {
   quiet?: boolean;
 };
 
-function ThisCycle({ cycle, budget: b, onOpenSettings }: { cycle: Cycle; budget: Budget; onOpenSettings: () => void }) {
+function ThisCycle({ cycle, budget: b, onOpenSettings, onShowCycle }: { cycle: Cycle; budget: Budget; onOpenSettings: () => void; onShowCycle: () => void }) {
   const { full, short, ofIncome, settings } = useSettings();
   // Everything starts collapsed.
   const [open, setOpen] = useState<string | null>(null);
@@ -80,9 +127,9 @@ function ThisCycle({ cycle, budget: b, onOpenSettings }: { cycle: Cycle; budget:
     const c = categoryByName(t.cat);
     return {
       key: t.id,
-      title: t.title,
+      title: tidyName(t.title),
       sub:
-        `${t.time} · ${t.cat} · ${t.source}` +
+        `${t.time} · ${t.cat}` +
         (t.reimbursed ? ` · ${full(t.reimbursed)} reimbursed` : '') +
         (t.share != null ? ` · your share of ${full(t.amount)}` : ''),
       value: (t.isIncome ? '+ ' : '- ') + full(t.isIncome ? t.amount : t.net),
@@ -99,8 +146,9 @@ function ThisCycle({ cycle, budget: b, onOpenSettings }: { cycle: Cycle; budget:
   const typeOf = (n: string) => categoryByName(n)?.type;
   const billItems: Item[] = b.bills.map(bill => ({
     key: bill.title,
-    title: bill.title,
-    sub: `Due ${dayLabel(bill.date)} · in ${cycle.offsetOf(bill.date) - cycle.dayIdx} days · ${bill.category} · ${bill.source}`,
+    title: tidyName(bill.title),
+    sub: bill.category,
+    due: { date: bill.date, inDays: cycle.offsetOf(bill.date) - cycle.dayIdx },
     value: '- ' + full(bill.amount),
     ink: C.text,
     icon: IC.calendar,
@@ -163,6 +211,7 @@ function ThisCycle({ cycle, budget: b, onOpenSettings }: { cycle: Cycle; budget:
     { id: 'left', label: 'Left to spend', value: full(b.budget - b.spent), items: [], strong: true },
   ].filter((r: Row) => r.quiet || r.strong || r.id === 'inc' || r.items.length > 0 || r.summary || r.value !== full(0));
 
+  const safeShown = useCountUp(b.safeDay);
   // Budget and savings both come out of income: together they can't be more than all of it.
   const plannedPct = budgetPct + SAVINGS_TARGET_PCT;
   const overPace = b.spent - b.paceToday;
@@ -191,14 +240,14 @@ function ThisCycle({ cycle, budget: b, onOpenSettings }: { cycle: Cycle; budget:
           {/* One number first: what you can spend today and stay on budget. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 14, color: C.textMuted }}>Safe to spend today</span>
-            <span style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: 36, lineHeight: 1.05, color: b.safeDay > 0 ? C.text : C.redInk }}>{full(b.safeDay)}</span>
+            <span style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: 36, lineHeight: 1.05, color: b.safeDay > 0 ? C.text : C.redInk }}>{full(safeShown)}</span>
             <span style={{ fontSize: 14, color: C.textSoft }}>
               {full(Math.max(0, b.budget - b.spent - b.fixedDue))} left after bills · {cycle.daysLeft} {cycle.daysLeft === 1 ? 'day' : 'days'} to payday
             </span>
           </div>
-          <span style={{ fontSize: 14, color: C.textMuted }}>
-            Spent <strong style={{ color: C.text }}>{full(b.spent)}</strong> of your {full(b.budget)} budget ({budgetPct}% of income)
-          </span>
+          <button type="button" className={s.textLink} onClick={onShowCycle} title="See this cycle's transactions">
+            Spent <strong style={{ color: C.text }}>{full(b.spent)}</strong> of your {full(b.budget)} budget ({budgetPct}% of income) <Icon d={IC.arrowRight} size={13} />
+          </button>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div
               className={s.track}
@@ -255,7 +304,7 @@ function ThisCycle({ cycle, budget: b, onOpenSettings }: { cycle: Cycle; budget:
                 disabled={!has}
                 aria-expanded={has ? isOpen : undefined}
                 onClick={() => has && setOpen(isOpen ? null : r.id)}
-                style={{ padding: '12px var(--pad)', fontWeight: r.strong ? 800 : 600, background: r.strong ? C.accentSoft : undefined, minHeight: 48 }}
+                style={{ padding: '12px var(--pad)', fontWeight: r.strong ? 600 : 500, background: r.strong ? 'color-mix(in srgb, var(--accent-500) 9%, transparent)' : undefined, minHeight: 48 }}
               >
                 <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
                   <span style={{ fontSize: 15 }}>{r.label}</span>
@@ -292,7 +341,7 @@ function SideHead({ title, sub, action }: { title: string; sub?: ReactNode; acti
 }
 
 /** One line in a side card: marker, name over a detail line, amount. */
-function SideRow({ mark, title, sub, value, ink = C.text }: { mark: ReactNode; title: string; sub: string; value: string; ink?: string }) {
+function SideRow({ mark, title, sub, value, ink = C.text }: { mark: ReactNode; title: string; sub: ReactNode; value: string; ink?: string }) {
   return (
     <div className={s.sideRow}>
       <span className={s.sideMark}>{mark}</span>
@@ -368,18 +417,19 @@ function TodayCard({ cycle, budget: b, onSeeAll }: { cycle: Cycle; budget: Budge
           )
         }
       />
-      {today.length === 0 && <span style={{ fontSize: 14, color: C.textMuted }}>No spending yet today.</span>}
+      {today.length === 0 && <span style={{ fontSize: 14, color: C.textMuted }}>No spending yet today — nice! 🌿</span>}
       {today.length > 0 && (
         <div className={s.sideList}>
           {today.slice(0, 5).map(t => (
-            <SideRow
-              key={t.id}
-              mark={<Dot color={categoryByName(t.cat)?.color ?? C.accent500} />}
-              title={tidyName(t.title)}
-              sub={`${t.cat} · ${t.time}`}
-              value={t.isIncome ? '+ ' + full(t.amount) : full(t.net)}
-              ink={t.isIncome ? C.accent800 : C.text}
-            />
+            <button key={t.id} type="button" className={s.recapRow} onClick={onSeeAll} title="See today's transactions">
+              <SideRow
+                mark={<Dot color={categoryByName(t.cat)?.color ?? C.accent500} />}
+                title={tidyName(t.title)}
+                sub={`${t.cat} · ${t.time}`}
+                value={t.isIncome ? '+ ' + full(t.amount) : full(t.net)}
+                ink={t.isIncome ? C.accent800 : C.text}
+              />
+            </button>
           ))}
         </div>
       )}
@@ -409,7 +459,7 @@ function ComingUpCard({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
                 key={bill.title}
                 mark={<Icon d={IC.calendar} size={15} color={C.textMuted} />}
                 title={tidyName(bill.title)}
-                sub={`${dayMonth(bill.date)} · ${inDays === 0 ? 'today' : inDays === 1 ? 'tomorrow' : `in ${inDays} days`}`}
+                sub={<DueChip date={bill.date} inDays={inDays} />}
                 value={full(bill.amount)}
               />
             );
@@ -531,7 +581,7 @@ function ByCategory({ items }: { items: Item[] }) {
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {groups.map(g => {
         const c = categoryByName(g.cat);
-        const ic = ICON_CHIP;
+        const ic = iconChip(g.cat);
         const isOpen = open.has(g.cat);
         return (
           <div key={g.cat} style={{ borderTop: `1px solid ${C.divider}` }}>
@@ -578,13 +628,16 @@ function groupByDay(items: Item[]) {
 }
 
 function CycleItem({ i }: { i: Item }) {
-  const ic = ICON_CHIP;
+  const ic = iconChip(i.cat);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: `1px solid ${C.divider}` }}>
       <IconChip d={i.icon} bg={ic.bg} ink={ic.ink} size={34} iconSize={16} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
         <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{i.title}</span>
-        <span style={{ fontSize: 13, color: C.textMuted }}>{i.sub}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
+          {i.due && <DueChip date={i.due.date} inDays={i.due.inDays} />}
+          {i.sub}
+        </span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flex: 'none' }}>
         <span style={{ fontSize: 14, fontWeight: 600, color: i.ink, whiteSpace: 'nowrap' }}>{i.value}</span>
@@ -761,7 +814,7 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
           </span>
         </div>
       </div>
-      <div ref={box} className={s.treemap} style={{ height: tiles.length ? height : 120 }} onMouseLeave={() => setHover(null)}>
+      <div ref={box} data-own-gestures className={s.treemap} style={{ height: tiles.length ? height : 120 }} onMouseLeave={() => setHover(null)}>
         {!tiles.length && <span style={{ margin: 'auto', fontSize: 14, color: C.textMuted }}>Nothing spent yet this cycle.</span>}
         {tiles.map(({ c, r, color }) => {
           if (!r) return null;
@@ -834,7 +887,7 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
       </div>
       <div className={s.bleed} style={{ marginTop: 4 }}>
         {ranked.map(c => {
-          const ic = ICON_CHIP;
+          const ic = iconChip(c.name);
           const ch = changeBadge(c.spent, c.lastSameDays);
           return (
             <button

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { IC, Icon } from './Icon';
-import { pc } from '../lib/format';
+import { dayMonth, pc } from '../lib/format';
 
 export function Card({ children, style, flush }: { children: ReactNode; style?: CSSProperties; flush?: boolean }) {
   return (
@@ -17,6 +17,16 @@ export function CardHead({ title, caption, small }: { title: ReactNode; caption?
       <h2 className={small ? s.h2Sm : s.h2}>{title}</h2>
       {caption && <span className={s.caption}>{caption}</span>}
     </div>
+  );
+}
+
+/** "12 Nov · in 15 days" as a small chip; amber when it's due within 3 days. */
+export function DueChip({ date, inDays }: { date: Date; inDays: number }) {
+  const when = inDays <= 0 ? 'today' : inDays === 1 ? 'tomorrow' : `in ${inDays} days`;
+  return (
+    <span className={inDays <= 3 ? s.dueChipSoon : s.dueChip}>
+      {dayMonth(date)} · {when}
+    </span>
   );
 }
 

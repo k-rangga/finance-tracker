@@ -4,6 +4,8 @@ import { useData } from './data';
 import { applyCategorySettings, setSavingsTarget, type CustomCategory } from '../data/categories';
 
 export type Settings = {
+  /** What the Summary greeting calls you; empty for a greeting without a name. */
+  name: string;
   income: number;
   currency: Currency;
   /** Warn when a variable category reaches this % of its limit (60–95). */
@@ -30,6 +32,7 @@ export type Settings = {
 export const DEFAULT_INCOME: Record<Currency, number> = { IDR: 30_000_000, USD: 6_500 };
 
 export const DEFAULT_SETTINGS: Settings = {
+  name: '',
   income: DEFAULT_INCOME.IDR,
   currency: 'IDR',
   warnAt: 80,

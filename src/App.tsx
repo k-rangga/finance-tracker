@@ -18,6 +18,8 @@ import { Categories } from './screens/Categories';
 import { Activity, type ActivityFilter } from './screens/Activity';
 import { SavingsPlan } from './screens/SavingsPlan';
 import { Invest } from './screens/invest/Invest';
+import { PULL_TO_SYNC, usePageGestures } from './lib/gestures';
+import { syncNow } from './lib/gmail';
 
 export type Tab = 'summary' | 'categories' | 'tx' | 'plan' | 'invest';
 
@@ -35,8 +37,13 @@ export default function App() {
     const t = storage.getRaw(KEYS.tab) as Tab | null;
     return t && TABS.some(x => x.key === t) ? t : 'summary';
   });
-  const { recat: fixed, links, shares, removed, installments, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email } = useData();
-  const [txFilter, setTxFilter] = useState<ActivityFilter>({ range: 'week', cat: '', q: '' });
+  const { recat: fixed, links, shares, removed, installments, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email, refreshImports } = useData();
+  // Transactions remembers your last dates, category and search on this device.
+  const [txFilter, setTxFilterState] = useState<ActivityFilter>(() => storage.get<ActivityFilter>(KEYS.txFilter, { range: 'week', cat: '', q: '' }));
+  const setTxFilter = useCallback((f: ActivityFilter) => {
+    storage.set(KEYS.txFilter, f);
+    setTxFilterState(f);
+  }, []);
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Create (no name) or edit one of your categories; opened from Settings or a Categories row. */
@@ -80,6 +87,28 @@ export default function App() {
     [imported, removedIds, recat, links, shares, cycle],
   );
   const ready = !!gmail.label_name;
+
+  // Phones: swipe sideways between tabs; pull down from the top to sync Gmail.
+  const [syncNote, setSyncNote] = useState<string | null>(null);
+  const pullSync = async () => {
+    if (!ready) return setGmailOpen(true);
+    setSyncNote('Syncing…');
+    try {
+      const r = await syncNow();
+      await refreshImports();
+      setSyncNote(r.busy ? 'A sync is already running' : r.imported ? `Synced · ${r.imported} new` : 'Synced · nothing new');
+    } catch {
+      setSyncNote("Couldn't sync. Try again from the Synced button.");
+    }
+    setTimeout(() => setSyncNote(null), 2200);
+  };
+  const { pull, handlers } = usePageGestures({
+    onSwipe: dir => {
+      const next = TABS[TABS.findIndex(x => x.key === tab) + dir];
+      if (next) setTab(next.key);
+    },
+    onPull: pullSync,
+  });
   const syncLabel = !ready ? 'Connect Gmail' : gmail.last_sync_status?.startsWith('error') ? 'Gmail sync failed' : `Synced ${syncedAgo(gmail.last_synced_at)}`;
   const syncWarn = !ready || !!gmail.last_sync_status?.startsWith('error');
 
@@ -174,7 +203,12 @@ export default function App() {
         ))}
       </nav>
 
-      <main className={s.main}>
+      <main className={s.main} {...handlers}>
+        {(pull > 0 || syncNote) && (
+          <div className={s.pullNote} role="status" style={{ transform: `translate(-50%, ${Math.min(pull / 2, 56)}px)` }}>
+            {syncNote ?? (pull >= PULL_TO_SYNC ? 'Release to sync' : 'Pull to sync')}
+          </div>
+        )}
         <div className={s.content}>
           <header className={s.header}>
             <div className={s.headerTitle}>
@@ -232,24 +266,27 @@ export default function App() {
             </div>
           )}
 
-          {tab === 'summary' && (
-            <Summary
-              cycle={cycle}
-              budget={budget}
-              onOpenCategory={showCategory}
-              onOpenSettings={() => setSettingsOpen(true)}
-              onShowTransactions={(range, cat = '') => {
-                setTxFilter({ range, cat, q: '' });
-                setTab('tx');
-              }}
-            />
-          )}
-          {tab === 'categories' && (
-            <Categories cycle={cycle} budget={budget} open={openCat} setOpen={setOpenCat} onShowTransactions={showTransactions} onEditCategory={name => setCatDialog({ editing: name })} onNewCategory={() => setCatDialog({})} />
-          )}
-          {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} />}
-          {tab === 'plan' && <SavingsPlan cycle={cycle} budget={budget} onOpenInvest={() => setTab('invest')} />}
-          {tab === 'invest' && <Invest cycle={cycle} />}
+          {/* Each tab fades in when you switch to it. */}
+          <div key={tab} className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
+            {tab === 'summary' && (
+              <Summary
+                cycle={cycle}
+                budget={budget}
+                onOpenCategory={showCategory}
+                onOpenSettings={() => setSettingsOpen(true)}
+                onShowTransactions={(range, cat = '') => {
+                  setTxFilter({ range, cat, q: '' });
+                  setTab('tx');
+                }}
+              />
+            )}
+            {tab === 'categories' && (
+              <Categories cycle={cycle} budget={budget} open={openCat} setOpen={setOpenCat} onShowTransactions={showTransactions} onEditCategory={name => setCatDialog({ editing: name })} onNewCategory={() => setCatDialog({})} />
+            )}
+            {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} />}
+            {tab === 'plan' && <SavingsPlan cycle={cycle} budget={budget} onOpenInvest={() => setTab('invest')} />}
+            {tab === 'invest' && <Invest cycle={cycle} />}
+          </div>
         </div>
       </main>
 

@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import s from '../styles/ui.module.css';
-import { IconChip } from '../components/ui';
+import { DueChip, IconChip } from '../components/ui';
+import { Logo } from '../components/Logo';
 import { IC, Icon } from '../components/Icon';
 import { CategoryDialog } from '../components/CategoryDialog';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { Select } from '../components/Select';
 import { InstallmentDialog } from '../components/InstallmentDialog';
 import { useData } from '../lib/data';
-import { dayAmount, dayTotalLabel, ICON_CHIP, inDayTotal, type Budget, type TxView } from '../lib/budget';
+import { dayAmount, dayTotalLabel, iconChip, inDayTotal, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth, parseISO, sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
@@ -155,8 +156,8 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   const removedHere = removedTxs.filter(t => t.offset >= lo && t.offset <= hi);
 
   return (
-    <div className={s.txGrid} style={{ ['--bar-h' as string]: barH + 'px' }}>
-      <div className={s.txMain}>
+    <div className={s.splitGrid} style={{ ['--bar-h' as string]: barH + 'px' }}>
+      <div className={s.splitMain}>
         {/* Dates, search and totals stay pinned while you scroll the list. */}
         <div ref={bar} className={s.stickyBar}>
           <div style={{ position: 'relative', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -231,7 +232,10 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
         <div className={s.cardFlush} style={{ padding: '4px 0 6px', overflow: 'visible' }}>
           {groups.length === 0 && (
             <div style={{ padding: '40px 24px', textAlign: 'center', fontSize: 14, color: C.textMuted, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-              <span>No transactions match these filters.</span>
+              <Logo size={44} />
+            <span>
+              {!cat && !needle && range === 'today' ? 'No spending yet today — nice!' : !cat && !needle ? 'Nothing here for these dates.' : 'No transactions match these filters.'}
+            </span>
               {(cat || needle || lo !== 0 || hi !== cycle.dayIdx) && (
                 <button type="button" className={s.btnOutline} onClick={() => setFilter({ range: 'cycle', cat: '', q: '' })}>
                   Show the whole cycle
@@ -299,22 +303,20 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
           </h2>
           {bills.length === 0 && <div style={{ padding: '8px 18px 12px', fontSize: 14, color: C.textMuted }}>No more bills due before payday.</div>}
           {bills.map(b => {
-            const ic = ICON_CHIP;
+            const ic = iconChip(b.category);
             const inDays = cycle.offsetOf(b.date) - cycle.dayIdx;
             return (
               <div key={b.title} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px' }}>
                 <IconChip d={IC.calendar} bg={ic.bg} ink={ic.ink} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginRight: 'auto', minWidth: 0 }}>
-                  <span style={{ fontSize: 15, fontWeight: 600 }}>{b.title}</span>
-                  <span style={{ fontSize: 13, color: C.textMuted }}>
-                    {b.category} · {b.source}
+                  <span className={s.ellipsis} style={{ fontSize: 15, fontWeight: 600 }}>
+                    {tidyName(b.title)}
                   </span>
+                  <span style={{ fontSize: 13, color: C.textMuted }}>{b.category}</span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>
                   <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>- {full(b.amount)}</span>
-                  <span style={{ fontSize: 13, color: C.textMuted }}>
-                    Due {dayLabel(b.date)} · in {inDays} {inDays === 1 ? 'day' : 'days'}
-                  </span>
+                  <DueChip date={b.date} inDays={inDays} />
                 </div>
               </div>
             );
@@ -409,7 +411,7 @@ function Recap({
   const { full } = useSettings();
   const total = sum(byCat.map(([, v]) => v));
   return (
-    <aside className={s.txRecap} aria-label="Recap of these dates">
+    <aside className={s.splitSide} aria-label="Recap of these dates">
       <section className={s.sideCard}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <h3 className={s.sideTitle}>Recap</h3>
@@ -494,7 +496,7 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
   const { installments } = useData();
   const { full } = useSettings();
   const c = categoryByName(t.cat);
-  const ic = ICON_CHIP;
+  const ic = iconChip(t.cat);
   const row = useRef<HTMLDivElement>(null);
   const linked = t.reimbursesId ? expenses.find(e => e.id === t.reimbursesId) : undefined;
   const canLink = t.isIncome && !t.isSalary;

@@ -5,6 +5,7 @@ import { CATEGORIES, toCategory } from '../data/categories';
 import { sum } from '../lib/format';
 import { DEFAULT_INCOME, useSettings, type Settings } from '../lib/settings';
 import type { Currency } from '../lib/format';
+import { applyTheme, getTheme, type Theme } from '../lib/theme';
 
 type NumKey = 'income' | 'savingsPct' | 'investPct' | 'idxCap' | 'usCap' | 'cryptoCap' | 'fxRate';
 
@@ -21,6 +22,9 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
     fxRate: String(settings.fxRate),
   }));
   const [err, setErr] = useState('');
+  // Appearance is per device and applies at once (not part of Save).
+  const [theme, setTheme] = useState<Theme>(getTheme);
+  const THEMES: Record<string, Theme> = { Auto: 'auto', Light: 'light', Dark: 'dark' };
 
   const setCurrency = (c: Currency) => {
     setD(p => ({ ...p, currency: c }));
@@ -64,9 +68,27 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
         {email ? `Signed in as ${email}` : 'Local preview'} · saved to your Google Drive spreadsheet
       </span>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span className={s.label}>Appearance · on this device</span>
+        <Options
+          label="Appearance"
+          items={['Auto', 'Light', 'Dark'] as const}
+          value={(Object.keys(THEMES) as ('Auto' | 'Light' | 'Dark')[]).find(k => THEMES[k] === theme) ?? 'Auto'}
+          onChange={k => {
+            setTheme(THEMES[k]);
+            applyTheme(THEMES[k]);
+          }}
+        />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span className={s.label}>Currency</span>
         <Options label="Currency" items={['IDR', 'USD'] as const} value={d.currency} onChange={setCurrency} />
       </div>
+      <label className={s.field}>
+        <span>
+          Your name <span style={{ fontWeight: 500 }}>(for the Summary greeting)</span>
+        </span>
+        <input className={s.input} value={d.name} onChange={e => setD(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Rangga" maxLength={40} />
+      </label>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
         {num('income', 'Monthly income', d.currency)}
         {num('savingsPct', 'Savings target', '% of income')}

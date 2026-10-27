@@ -1,7 +1,8 @@
-/** Per-device UI preferences (sidebar, last tab). User data lives in Supabase — see backend.ts. */
+/** Per-device UI preferences (sidebar, last tab, Transactions filters). User data lives in the spreadsheet — see backend.ts. */
 export const KEYS = {
   nav: 'moneyTracker.nav',
   tab: 'moneyTracker.tab',
+  txFilter: 'moneyTracker.txFilter',
 } as const;
 
 export const storage = {

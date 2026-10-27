@@ -303,5 +303,8 @@ export function changeBadge(cur: number, last: number) {
   return ch < 0 ? { label: '↓ ' + r + '%', bg: C.accentTint, ink: C.accent800 } : { label: '↑ ' + r + '%', bg: C.redTint, ink: C.redInk };
 }
 
-/** Icon chips are neutral grey: category colour is kept for dots, bars and charts, where it carries meaning. */
-export const ICON_CHIP = { bg: C.divider, ink: C.textSoft } as const;
+/** Icon chip colours: a faint wash of the category's colour; transfers, income and the like stay neutral grey. */
+export function iconChip(category?: string) {
+  const c = category ? categoryByName(category) : undefined;
+  return c ? { bg: `color-mix(in srgb, ${c.color} 15%, transparent)`, ink: c.color } : { bg: C.divider, ink: C.textSoft };
+}

@@ -33,40 +33,75 @@
   color-scheme: light;
 }
 
-/* Dark mode follows the device setting; every colour above has a dark twin. */
+/*
+ * Dark mode: a soft charcoal rather than near-black. It follows the device unless you pick Light or Dark in
+ * Settings (stored per device as data-theme on <html>, see lib/theme.ts).
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1f1e1c;
-    --surface: #2a2926;
-    --border: #3a3935;
-    --border-strong: #46443f;
-    --divider: #33322e;
-    --hover: #34332f;
-    --text: #f2f0ea;
-    --text-soft: #d6d3ca;
-    --text-muted: #a3a097;
-    --text-faint: #6c6a63;
+  :root:not([data-theme='light']) {
+    --bg: #262624;
+    --surface: #30302e;
+    --border: #3f3e3a;
+    --border-strong: #4b4a45;
+    --divider: #383733;
+    --hover: #3a3936;
+    --text: #ece9e1;
+    --text-soft: #d3d0c6;
+    --text-muted: #a8a59b;
+    --text-faint: #6f6d66;
     --accent-500: #4cc0a6;
     --accent-600: #5fc9b1;
     --accent-700: #73d1bc;
     --accent-800: #8fdcc9;
     --accent-900: #a8e5d6;
-    --accent-strong: #1f5c50;
-    --accent-tint: #1d3a33;
-    --accent-hover: #243f39;
-    --accent-soft: #213a34;
+    --accent-strong: #2b6b5e;
+    --accent-tint: #23413a;
+    --accent-hover: #2a4741;
+    --accent-soft: #26433c;
     --on-accent: #ffffff;
     --red: #e07a66;
     --red-ink: #f19a88;
-    --red-tint: #3f2620;
-    --red-row: #33241f;
+    --red-tint: #452b25;
+    --red-row: #3a2a25;
     --amber: #e5a842;
     --amber-ink: #f0c06c;
-    --amber-tint: #3d321c;
-    --amber-row: #322b1d;
-    --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    --amber-tint: #44381f;
+    --amber-row: #3a3122;
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
     color-scheme: dark;
   }
+}
+:root[data-theme='dark'] {
+  --bg: #262624;
+  --surface: #30302e;
+  --border: #3f3e3a;
+  --border-strong: #4b4a45;
+  --divider: #383733;
+  --hover: #3a3936;
+  --text: #ece9e1;
+  --text-soft: #d3d0c6;
+  --text-muted: #a8a59b;
+  --text-faint: #6f6d66;
+  --accent-500: #4cc0a6;
+  --accent-600: #5fc9b1;
+  --accent-700: #73d1bc;
+  --accent-800: #8fdcc9;
+  --accent-900: #a8e5d6;
+  --accent-strong: #2b6b5e;
+  --accent-tint: #23413a;
+  --accent-hover: #2a4741;
+  --accent-soft: #26433c;
+  --on-accent: #ffffff;
+  --red: #e07a66;
+  --red-ink: #f19a88;
+  --red-tint: #452b25;
+  --red-row: #3a2a25;
+  --amber: #e5a842;
+  --amber-ink: #f0c06c;
+  --amber-tint: #44381f;
+  --amber-row: #3a3122;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
 }
 
 *,

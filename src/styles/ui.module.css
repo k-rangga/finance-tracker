@@ -1454,21 +1454,21 @@ textarea.input {
   }
 }
 
-/* ---------- Transactions: list plus recap ---------- */
-.txGrid {
+/* ---------- Two columns: a list plus a pinned side panel (Transactions, Categories) ---------- */
+.splitGrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 24px;
   align-items: start;
 }
-.txMain {
+.splitMain {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
 }
 /* Narrow screens: the recap follows the list. */
-.txRecap {
+.splitSide {
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -1481,11 +1481,11 @@ textarea.input {
   color: var(--text-muted);
 }
 @media (min-width: 1200px) {
-  .txGrid {
+  .splitGrid {
     grid-template-columns: minmax(0, 1fr) 320px;
   }
   /* Wide screens: pinned beside the list, scrolling inside itself if the category list is long. */
-  .txRecap {
+  .splitSide {
     position: sticky;
     top: 24px;
     max-height: calc(100vh - 48px);
@@ -1548,4 +1548,289 @@ textarea.input {
 .planRow input {
   padding: 8px 10px;
   font-size: 14px;
+}
+
+/* ---------- Categories ---------- */
+.catSection {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0;
+  padding: 0 4px;
+}
+.catLegend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding-left: 6px;
+}
+.catLegendTick {
+  display: inline-block;
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--text);
+}
+.catLegendLast {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-left: 10px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--text-muted);
+}
+/* One line per category on wide screens; three short lines on phones. */
+.catRow {
+  display: grid;
+  grid-template-columns: 32px minmax(120px, 190px) minmax(80px, 1fr) auto 96px 112px 16px;
+  grid-template-areas: 'icon name bar amount status change chev';
+  align-items: center;
+  gap: 4px 14px;
+  width: 100%;
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.catRow:hover {
+  background: var(--hover);
+}
+.catIcon {
+  grid-area: icon;
+  display: flex;
+}
+.catName {
+  grid-area: name;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.catBar {
+  grid-area: bar;
+  min-width: 0;
+}
+.catAmount {
+  grid-area: amount;
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-align: right;
+}
+.catStatus {
+  grid-area: status;
+}
+.catChange {
+  grid-area: change;
+  text-align: right;
+}
+/* Last time's spend at the same point: a hollow dot on this time's bar. */
+.lastMark {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--text-muted);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+@media (max-width: 759px) {
+  .catRow {
+    grid-template-columns: 32px minmax(0, 1fr) auto 16px;
+    grid-template-areas:
+      'icon name change chev'
+      '. bar bar bar'
+      '. status amount amount';
+    padding: 10px 16px;
+  }
+}
+.catFold {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 20px;
+  border: none;
+  border-top: 1px solid var(--divider);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.catFold:hover {
+  background: var(--hover);
+}
+.billRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.billRow:hover {
+  background: var(--hover);
+}
+/* Checklist mark: filled when paid, calendar when due, empty when not seen yet. */
+.billCheck {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0 5px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+.billCheck[data-state='paid'] {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: var(--on-accent);
+}
+.billCheck[data-state='due'] {
+  border-color: var(--amber);
+  color: var(--amber-ink);
+}
+
+/* ---------- Due-date chip ---------- */
+.dueChip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: var(--text-soft);
+  background: var(--divider);
+}
+.dueChipSoon {
+  composes: dueChip;
+  color: var(--amber-ink);
+  background: var(--amber-tint);
+}
+
+/* ---------- Small wins ---------- */
+.streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--amber-ink);
+  background: var(--amber-tint);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.confetti {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+  overflow: hidden;
+}
+.confetti > span {
+  position: absolute;
+  top: -16px;
+  border-radius: 2px;
+  animation-name: confettiFall;
+  animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
+  animation-fill-mode: forwards;
+}
+@keyframes confettiFall {
+  to {
+    transform: translate3d(0, 105vh, 0) rotate(540deg);
+    opacity: 0.3;
+  }
+}
+
+/* ---------- Motion (skipped when the device asks for less) ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .fill,
+  .recapTrack > span,
+  .cycleProgress > span {
+    transition: width 0.6s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  .tile {
+    transition:
+      opacity 0.15s,
+      left 0.4s ease,
+      top 0.4s ease,
+      width 0.4s ease,
+      height 0.4s ease;
+  }
+}
+
+/* ---------- Loading placeholders ---------- */
+.skeleton {
+  background: var(--divider);
+  border-radius: 10px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton {
+    animation: skeletonPulse 1.2s ease-in-out infinite alternate;
+  }
+}
+@keyframes skeletonPulse {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* A line of text that leads somewhere: reads as text, shows it's a link on hover. */
+.textLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+.textLink:hover {
+  color: var(--accent-700);
+}
+
+/* ---------- Pull to sync (phones) ---------- */
+.pullNote {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  z-index: 70;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  white-space: nowrap;
 }
