@@ -6,7 +6,7 @@ export const C = {
   borderStrong: '#d8e1df',
   divider: '#ecf1f0',
   text: '#16201e',
-  textMuted: '#5c6a67',
+  textMuted: '#4b5855',
   textSoft: '#3f4a44',
   grey: '#b7c2bc',
   greyDark: '#8c9892',

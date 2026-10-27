@@ -31,7 +31,10 @@ const CATEGORY_RULES = [
   ['Utilities', /\b(pln|listrik|electricity|token listrik|pdam|water bill|indihome|biznet|first ?media|myrepublic|pulsa|paket data|gas bill|pgn|telkomsel)\b/i],
   ['Subscriptions', /\b(netflix|spotify|youtube premium|apple\.com\/bill|icloud|google (one|play)|disney|vidio|prime video|chatgpt|openai|anthropic|claude|subscription|langganan|membership)\b/i],
   ['Groceries', /\b(grabmart|supermarket|hypermart|superindo|alfamart|alfamidi|indomaret|ranch market|lotte mart|transmart|hero|sayurbox|segari|astro|grocer|groceries|fresh market|carrefour|aeon|lawson|family ?mart|circle ?k|buah|fruit|sayur|minimarket)\b/i],
-  ['Dining', /\b(grabfood|gofood|shopeefood|restaurant|restoran|resto|rm|cafe|caf[eé]|coffee|kopi|tuku|starbucks|mcdonald|kfc|bakery|patisserie|dining|warung|bakso|pentol|mie|bakmi|kwetiau|nasi|ayam|bebek|geprek|pecel|padang|sate|soto|martabak|kebab|roti|dimsum|sushi|ramen|pizza|burger|bowls?|boba|chatime|teh|tea|food ?court|food)\b/i],
+  // Food delivery apps: ordered in, not eaten out.
+  ['Take out', /\b(grabfood|gofood|shopeefood|take ?away|take ?out|bungkus)\b/i],
+  ['Cafe', /\b(cafe|caf[eé]|coffee|kopi|tuku|starbucks|janji jiwa|bakery|patisserie|boba|chatime|mixue|teh|tea)\b/i],
+  ['Dining', /\b(restaurant|restoran|resto|rm|mcdonald|kfc|dining|warung|bakso|pentol|mie|bakmi|kwetiau|nasi|ayam|bebek|geprek|pecel|padang|sate|soto|martabak|kebab|roti|dimsum|sushi|ramen|pizza|burger|bowls?|food ?court|food)\b/i],
   ['Transport', /\b(goride|gocar|grabbike|grabcar|bluebird|taxi|taksi|krl|mrt|lrt|stasiun|transjakarta|busway|bus|feeder|damri|commuter|pertamina|shell|spbu|bensin|fuel|bbm|parkir|parking|e-?toll|tol|flazz|e-?money|tapcash|brizzi|kai|tiket kereta|toyota|honda|bengkel|bodyrepai\w*)\b/i],
   ['Shopping', /\b(tokopedia|shopee|lazada|blibli|zalora|bukalapak|amazon|uniqlo|ikea|ace hardware|pesanan|order|grabexpress)\b/i],
 ];
@@ -269,7 +272,7 @@ function parseGrab_(subject, from, text) {
     category = 'Groceries';
     title = shop || 'GrabMart';
   } else if (/food/i.test(vehicle) || /food/i.test(firstLine) || shop || (/grabfood|menikmati makanan|enjoy your (food|meal)/i.test(text.slice(0, 2000)) && !/enjoyed your ride/i.test(text))) {
-    category = 'Dining';
+    category = 'Take out';
     title = shop || 'GrabFood';
   } else if (/grabexpress|express|delivery/i.test(firstLine)) {
     category = 'Shopping';

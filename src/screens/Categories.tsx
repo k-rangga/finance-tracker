@@ -116,7 +116,7 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
                       </Badge>
                       <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }} />
                     </span>
-                    <span style={{ display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr) auto', alignItems: 'center', gap: '8px 12px', fontSize: 12 }}>
+                    <span style={{ display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr) auto', alignItems: 'center', gap: '8px 12px', fontSize: 13 }}>
                       <span style={{ fontWeight: 700 }}>This</span>
                       <span className={s.track}>
                         <span className={s.fill} style={{ width: pc((cur / scale) * 100), background: st.bar }} />
@@ -130,7 +130,7 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
                       </span>
                       <span style={{ color: C.textMuted, minWidth: 96, textAlign: 'right' }}>{full(last)}</span>
                     </span>
-                    <span style={{ display: 'flex', gap: '4px 16px', flexWrap: 'wrap', fontSize: 12, color: C.textMuted }}>
+                    <span style={{ display: 'flex', gap: '4px 16px', flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
                       <span>
                         Limit <strong style={{ color: C.text }}>{full(lim)}</strong>
                       </span>
@@ -143,7 +143,7 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
                       </span>
                     </span>
                     {st.key !== 'ok' && (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: st.key === 'over' ? C.redInk : C.amberInk }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: st.key === 'over' ? C.redInk : C.amberInk }}>
                         <Icon d={IC.alert} size={16} />
                         {st.key === 'over' ? `Limit reached · ${short(cur - lim)} over` : `${settings.warnAt}% of limit used · ${short(lim - cur)} left`}
                       </span>
@@ -151,7 +151,7 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
                   </button>
                   {isOpen && (
                     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 24px 20px' }}>
-                      <span style={{ fontSize: 12, color: C.textMuted }}>Weekly · this cycle (colour) vs last cycle (grey) · limit {short(c.limit)}</span>
+                      <span style={{ fontSize: 13, color: C.textMuted }}>Weekly · this cycle (colour) vs last cycle (grey) · limit {short(c.limit)}</span>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, height: 90, alignItems: 'end', maxWidth: 420 }}>
                         {[0, 1, 2, 3].map(i => (
                           <div key={i} style={{ display: 'flex', gap: 4, alignItems: 'end', justifyContent: 'center', height: '100%' }} title={`W${i + 1}: ${full(c.cur[i])} vs ${full(c.prev[i])}`}>
@@ -160,7 +160,7 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
                           </div>
                         ))}
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, fontSize: 12, textAlign: 'center', color: C.textMuted, maxWidth: 420 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, fontSize: 13, textAlign: 'center', color: C.textMuted, maxWidth: 420 }}>
                         {[1, 2, 3, 4].map(i => (
                           <span key={i}>W{i}</span>
                         ))}

@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useRef, type ReactNode } from 'react';
 import { fmtFull, fmtShort, type Currency } from './format';
 import { useData } from './data';
 import { applyCategorySettings, type CustomCategory } from '../data/categories';
@@ -21,6 +21,8 @@ export type Settings = {
   limitOverrides: Record<string, number>;
   /** Your colours for built-in categories, by name. */
   colorOverrides: Record<string, string>;
+  /** Category you chose for a merchant, by `merchantKey`: applied to its other and future transactions. */
+  merchantRules: Record<string, string>;
 };
 
 export const DEFAULT_INCOME: Record<Currency, number> = { IDR: 30_000_000, USD: 6_500 };
@@ -37,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customCategories: [],
   limitOverrides: {},
   colorOverrides: {},
+  merchantRules: {},
 };
 
 type Ctx = {
@@ -53,16 +56,22 @@ const SettingsCtx = createContext<Ctx | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { settings: stored, saveSettings } = useData();
+  /** Settings as of the last update, so two updates in one click (a new category, then a merchant rule) both land. */
+  const latest = useRef<Settings>(DEFAULT_SETTINGS);
   const settings = useMemo(() => {
     const merged = { ...DEFAULT_SETTINGS, ...stored };
     // Before children render, so every screen sees the same category list.
     applyCategorySettings(merged.customCategories, merged);
+    latest.current = merged;
     return merged;
   }, [stored]);
   const value = useMemo<Ctx>(
     () => ({
       settings,
-      update: patch => saveSettings({ ...settings, ...patch }),
+      update: patch => {
+        latest.current = { ...latest.current, ...patch };
+        saveSettings(latest.current);
+      },
       full: (v, s) => fmtFull(v, settings.currency, s),
       short: (v, s) => fmtShort(v, settings.currency, s),
       ofIncome: pct => (pct / 100) * settings.income,

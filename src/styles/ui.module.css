@@ -203,7 +203,7 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-muted);
   background: transparent;
@@ -289,7 +289,7 @@
   font-size: 22px;
 }
 .caption {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 .label {
@@ -298,7 +298,7 @@
   color: var(--text-muted);
 }
 .eyebrow {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -314,7 +314,7 @@
 
 /* ---------- Badges / chips ---------- */
 .badge {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   padding: 4px 12px;
   border-radius: 999px;
@@ -708,7 +708,7 @@ textarea.input {
   max-width: 100%;
   min-width: 0;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   padding: 4px 28px 4px 10px;
   border: 1.5px solid;
@@ -733,7 +733,7 @@ textarea.input {
   background: none;
   padding: 4px 2px;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: #0b7a6a;
   cursor: pointer;
@@ -751,7 +751,7 @@ textarea.input {
   border: 1.5px solid #14a08a;
   color: #0b5c50;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }
 .paidChipLabel,
@@ -840,7 +840,7 @@ textarea.input {
   background: #e3f6f2;
 }
 .pickSuggest {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -866,7 +866,7 @@ textarea.input {
 }
 .splitBtn {
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: #0b5c50;
   background: #e3f6f2;
@@ -881,7 +881,7 @@ textarea.input {
 
 /* ---------- Category menu & new category ---------- */
 .menuGroup {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1057,7 +1057,7 @@ textarea.input {
 }
 .calWeekday {
   text-align: center;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
   padding: 4px 0 6px;
 }
@@ -1153,8 +1153,8 @@ textarea.input {
   }
 }
 
-/* ---------- Remove a transaction ---------- */
-.rowRemove {
+/* ---------- Row ⋯ menu ---------- */
+.rowMore {
   flex: none;
   width: 32px;
   height: 32px;
@@ -1166,20 +1166,15 @@ textarea.input {
   display: grid;
   place-items: center;
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.6;
 }
-.hoverRow:hover .rowRemove,
-.rowRemove:focus-visible {
+.hoverRow:hover .rowMore,
+.rowMore:focus-visible,
+.rowMore[aria-expanded='true'] {
   opacity: 1;
 }
-.rowRemove:hover {
-  background: var(--red-tint);
-  color: var(--red-ink);
-}
-@media (hover: none) {
-  .rowRemove {
-    opacity: 1;
-  }
+.rowMore:hover {
+  background: var(--divider);
 }
 .toast {
   position: fixed;
@@ -1216,5 +1211,47 @@ textarea.input {
 @media (max-width: 759px) {
   .toast {
     bottom: 104px;
+  }
+}
+
+/* ---------- Transactions: pinned bar and day headings ---------- */
+.stickyBar {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 -10px;
+  padding: 10px 10px 8px;
+  background: var(--bg);
+}
+.dayHead {
+  position: sticky;
+  top: var(--bar-h, 0px);
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0;
+  padding: 10px 18px 6px;
+  background: var(--surface);
+}
+.ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rowIcon {
+  display: contents;
+}
+/* Narrow phones: the category pill already carries the colour, so the round icon gives its room to the text. */
+@media (max-width: 480px) {
+  .rowIcon {
+    display: none;
   }
 }

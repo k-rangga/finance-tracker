@@ -110,6 +110,8 @@ export type Budget = {
   invested: number;
   /** Moved to savings this cycle: transactions you put in "Transfer (savings)". */
   saved: number;
+  /** `saved` as % of income: what the savings ring and plan show. */
+  savedPct: number;
 };
 
 /** Budget categories (built-in and yours) count as spending. */
@@ -274,6 +276,7 @@ export function computeBudget(args: {
     cashOut: nonCardSpent + cardBillsPaid,
     invested: sum(txs.filter(t => t.isInvestment).map(t => t.amount)),
     saved: sum(txs.filter(t => t.isSavings).map(t => t.amount)),
+    savedPct: (sum(txs.filter(t => t.isSavings).map(t => t.amount)) / income) * 100,
   };
 }
 

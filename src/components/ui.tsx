@@ -110,7 +110,7 @@ export function Stat({ label, value, sub, ink, subInk }: { label: string; value:
       <span className={s.statValue} style={{ color: ink }}>
         {value}
       </span>
-      {sub && <span style={{ fontSize: 12, color: subInk ?? 'var(--text-muted)' }}>{sub}</span>}
+      {sub && <span style={{ fontSize: 13, color: subInk ?? 'var(--text-muted)' }}>{sub}</span>}
     </div>
   );
 }

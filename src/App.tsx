@@ -11,7 +11,7 @@ import { computeBudget, txViews } from './lib/budget';
 import { addDays, dayLabel, dayMonth, startOfToday } from './lib/format';
 import { useSettings } from './lib/settings';
 import { useData } from './lib/data';
-import { expectedBills, inCycle, toTransaction } from './data/transactions';
+import { expectedBills, inCycle, toTransaction, withMerchantRules } from './data/transactions';
 import { Summary } from './screens/Summary';
 import { Categories } from './screens/Categories';
 import { Activity, type ActivityFilter } from './screens/Activity';
@@ -34,7 +34,7 @@ export default function App() {
     const t = storage.getRaw(KEYS.tab) as Tab | null;
     return t && TABS.some(x => x.key === t) ? t : 'summary';
   });
-  const { recat, links, shares, removed, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email } = useData();
+  const { recat: fixed, links, shares, removed, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email } = useData();
   const [txFilter, setTxFilter] = useState<ActivityFilter>({ range: 'week', cat: '', q: '' });
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -50,6 +50,8 @@ export default function App() {
   const removedIds = useMemo(() => new Set(removed), [removed]);
   /** What every screen counts: imported transactions minus the ones you removed. */
   const all = useMemo(() => imported.filter(t => !removedIds.has(t.id)), [imported, removedIds]);
+  /** Your fixes by hand, plus your merchant rules for every other transaction of those merchants. */
+  const recat = useMemo(() => withMerchantRules(imported, fixed, settings.merchantRules), [imported, fixed, settings.merchantRules]);
   const transactions = useMemo(() => inCycle(all, cycle), [all, cycle]);
   const prevTransactions = useMemo(() => all.filter(t => t.date >= prevCycle.start && t.date < cycle.start), [all, prevCycle, cycle]);
   const bills = useMemo(

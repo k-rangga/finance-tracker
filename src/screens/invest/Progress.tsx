@@ -128,7 +128,7 @@ export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0,1fr)', gap: '8px 12px' }}>
         <div style={{ position: 'relative', height: 300, minWidth: 56 }} aria-hidden="true">
           {[4, 3, 2, 1, 0].map(k => (
-            <span key={k} style={{ position: 'absolute', right: 0, top: pc(100 - k * 25), transform: 'translateY(-50%)', fontSize: 12, color: C.textMuted, whiteSpace: 'nowrap' }}>
+            <span key={k} style={{ position: 'absolute', right: 0, top: pc(100 - k * 25), transform: 'translateY(-50%)', fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>
               {k ? dS(step * k) : '0'}
             </span>
           ))}
@@ -180,7 +180,7 @@ export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
         <div />
         <div style={{ position: 'relative', height: 18 }} aria-hidden="true">
           {xTicks.map(t => (
-            <span key={t.label + t.left} style={{ position: 'absolute', left: t.left, transform: 'translateX(-50%)', fontSize: 12, color: C.textMuted, whiteSpace: 'nowrap' }}>
+            <span key={t.label + t.left} style={{ position: 'absolute', left: t.left, transform: 'translateX(-50%)', fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>
               {t.label}
             </span>
           ))}

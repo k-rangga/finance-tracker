@@ -22,7 +22,7 @@ const addLabel = (t: Trade, u: TradeUpdate) => '+' + lotsLabel(t, u.q!) + ' @ ' 
 export function KindBadge({ kind }: { kind: UpdateKind }) {
   const [bg, ink] = KIND_COLORS[kind];
   return (
-    <span className={s.badge} style={{ background: bg, color: ink, padding: '3px 10px', fontSize: 12 }}>
+    <span className={s.badge} style={{ background: bg, color: ink, padding: '3px 10px', fontSize: 13 }}>
       {UPDATE_LABEL[kind]}
     </span>
   );
@@ -40,7 +40,7 @@ export function UpdateTimeline({ t, updates, onOpen }: { t: Trade; updates: Trad
             <span style={{ width: 10, height: 10, marginTop: 6, flex: 'none', borderRadius: '50%', background: KIND_COLORS[u.kind][1] }} />
             <span style={{ display: 'flex', flexDirection: 'column', gap: 4, marginRight: 'auto', minWidth: 0, textAlign: 'left' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 12, color: C.textMuted }}>{fmtAt(u.at)}</span>
+                <span style={{ fontSize: 13, color: C.textMuted }}>{fmtAt(u.at)}</span>
                 <KindBadge kind={u.kind} />
               </span>
               {isAdd(u) && (
@@ -185,7 +185,7 @@ export function UpdateForm({ t, avg, last, editing, onClose, onSave }: {
           }}
           render={k => UPDATE_LABEL[k]}
         />
-        {add && <span style={{ fontSize: 12, color: C.textMuted }}>Current average {nat(avg, t.mk)}</span>}
+        {add && <span style={{ fontSize: 13, color: C.textMuted }}>Current average {nat(avg, t.mk)}</span>}
       </div>
       <label className={s.field}>
         Date and time

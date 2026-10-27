@@ -24,7 +24,7 @@ export function PriceModal({ P, onClose, onSave }: { P: Portfolio; onClose: () =
               <Dot color={MK_COLOR[t.mk]} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span style={{ fontSize: 15, fontWeight: 700 }}>{t.tk}</span>
-                <span style={{ fontSize: 12, color: C.textMuted }}>Was {nat(P.lastOf(t), t.mk)}</span>
+                <span style={{ fontSize: 13, color: C.textMuted }}>Was {nat(P.lastOf(t), t.mk)}</span>
               </div>
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: C.textSoft }}>

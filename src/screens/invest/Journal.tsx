@@ -165,7 +165,7 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
                   <span style={{ fontSize: 16, fontWeight: 700 }}>
                     {t.tk} <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>{t.nm || t.mk}</span>
                   </span>
-                  <span style={{ fontSize: 12, color: C.textMuted }}>
+                  <span style={{ fontSize: 13, color: C.textMuted }}>
                     {(cl ? `${fmtD(t.d)} → ${fmtD(t.ex!.d)}` : 'Bought ' + fmtD(t.d)) + ' · ' + qtyLabel(t) + ' @ ' + nat(t.px, t.mk)}
                   </span>
                   <span style={{ display: 'flex', gap: 3 }} aria-label={`Conviction ${t.cv} of 5`} role="img">
@@ -180,7 +180,7 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
                 </span>
                 <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, minWidth: 120 }}>
                   <span style={{ fontSize: 16, fontWeight: 800, color: plInk(ret) }}>{fmtPct(ret)}</span>
-                  <span style={{ fontSize: 12, color: C.textMuted, whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>
                     {cl ? 'Realised ' : 'Unrealised '}
                     {dS(pl, true)}
                   </span>
@@ -196,20 +196,20 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <span className={s.eyebrow}>Thesis</span>
                       <p style={{ fontSize: 14, lineHeight: 1.55 }}>{t.th || 'No thesis written.'}</p>
-                      {t.tags && <span style={{ fontSize: 12, color: C.textMuted }}>Tags: {t.tags}</span>}
+                      {t.tags && <span style={{ fontSize: 13, color: C.textMuted }}>Tags: {t.tags}</span>}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <span className={s.eyebrow}>Catalyst</span>
                       <span style={{ fontSize: 14, fontWeight: 700 }}>{t.cat || 'No catalyst set'}</span>
-                      <span style={{ fontSize: 12, color: C.textMuted }}>{catWhen}</span>
+                      <span style={{ fontSize: 13, color: C.textMuted }}>{catWhen}</span>
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
                     {plan.map(p => (
                       <div key={p.k} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <span style={{ fontSize: 12, color: C.textMuted }}>{p.k}</span>
+                        <span style={{ fontSize: 13, color: C.textMuted }}>{p.k}</span>
                         <span style={{ fontSize: 16, fontWeight: 800, color: p.ink }}>{p.v}</span>
-                        <span style={{ fontSize: 12, color: C.textMuted }}>{p.sub}</span>
+                        <span style={{ fontSize: 13, color: C.textMuted }}>{p.sub}</span>
                       </div>
                     ))}
                   </div>

@@ -51,7 +51,7 @@ export const HUES: Hue[] = [
   { color: '#1f97b8', tint: '#e2f3f8', ink: '#0f6680' }, // cyan
   { color: '#c4507e', tint: '#fbe9f0', ink: '#8f2f56' }, // pink
   { color: '#7d8a87', tint: '#eef1f0', ink: '#46524f' }, // grey
-  // Extra hues for categories you add (the first nine are taken by the built-in ones).
+  // Extra hues for categories you add (brown and gold are taken by Cafe and Take out).
   { color: '#5560d0', tint: '#ebedfb', ink: '#3a43a0' }, // indigo
   { color: '#8a9a1f', tint: '#f2f5df', ink: '#566210' }, // olive
   { color: '#a0703c', tint: '#f6ede3', ink: '#6e4a22' }, // brown
@@ -64,7 +64,7 @@ export const nextHue = (cats: Hue[]): Hue => HUES.find(h => !cats.some(c => c.co
 
 /** Icons you can pick for a new category (keys of `IC`). */
 export const CATEGORY_ICONS = [
-  'home', 'zap', 'shield', 'repeat', 'basket', 'utensils', 'coffee', 'nav', 'car', 'plane', 'bag', 'shirt', 'gift', 'heart', 'pill',
+  'home', 'zap', 'shield', 'repeat', 'basket', 'utensils', 'coffee', 'takeout', 'nav', 'car', 'plane', 'bag', 'shirt', 'gift', 'heart', 'pill',
   'dumbbell', 'book', 'graduation', 'film', 'music', 'gamepad', 'phone', 'wrench', 'card', 'coins', 'wallet', 'piggy', 'calendar',
 ] as const;
 
@@ -74,7 +74,9 @@ const BUILT_IN: Category[] = [
   { name: 'Insurance', type: 'fixed', limitPct: 2, ...HUES[2], icon: IC.shield },
   { name: 'Subscriptions', type: 'fixed', limitPct: 1, ...HUES[3], icon: IC.repeat },
   { name: 'Groceries', type: 'variable', limitPct: 7, ...HUES[4], icon: IC.basket },
-  { name: 'Dining', type: 'variable', limitPct: 4, ...HUES[5], icon: IC.utensils },
+  { name: 'Dining', type: 'variable', limitPct: 2, ...HUES[5], icon: IC.utensils },
+  { name: 'Cafe', type: 'variable', limitPct: 1, ...HUES[11], icon: IC.coffee },
+  { name: 'Take out', type: 'variable', limitPct: 1, ...HUES[14], icon: IC.takeout },
   { name: 'Transport', type: 'variable', limitPct: 4, ...HUES[6], icon: IC.nav },
   { name: 'Shopping', type: 'variable', limitPct: 3, ...HUES[7], icon: IC.bag },
   { name: 'Buffer', type: 'variable', limitPct: 2, ...HUES[8], icon: IC.wallet },
@@ -107,7 +109,8 @@ export function applyCategorySettings(custom: CustomCategory[] = [], { limitOver
     const hue = HUES.find(h => h.color === colorOverrides[c.name]);
     return { ...c, ...(hue ?? {}), limitPct: limitOverrides[c.name] ?? c.limitPct, defaultLimitPct: c.limitPct };
   });
-  CATEGORIES = [...builtIn, ...custom.map(toCategory)];
+  // A category you made before it became built in (e.g. your own "Cafe") is now the built-in one.
+  CATEGORIES = [...builtIn, ...custom.filter(c => !isBuiltIn(c.name)).map(toCategory)];
 }
 
 /** Names a new category can't take. */

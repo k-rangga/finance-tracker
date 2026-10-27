@@ -105,11 +105,11 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
             </button>
           </div>
           {refresh.msg && (
-            <span role="status" style={{ flexBasis: '100%', fontSize: 12, color: C.textMuted }}>
+            <span role="status" style={{ flexBasis: '100%', fontSize: 13, color: C.textMuted }}>
               {refresh.msg}
             </span>
           )}
-          <span style={{ flexBasis: '100%', fontSize: 12, color: C.textMuted }}>Grey tick = entry, dot = last price · tap a row for its journal entry</span>
+          <span style={{ flexBasis: '100%', fontSize: 13, color: C.textMuted }}>Grey tick = entry, dot = last price · tap a row for its journal entry</span>
         </div>
         <div>
           <div style={{ display: 'flex', flexDirection: 'column' }} role="table" aria-label="Holdings">
@@ -158,7 +158,7 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
                     <Dot color={MK_COLOR[t.mk]} />
                     <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                       <span style={{ fontWeight: 700 }}>{t.tk}</span>
-                      <span style={{ fontSize: 12, color: C.textMuted }}>
+                      <span style={{ fontSize: 13, color: C.textMuted }}>
                         {t.nm || t.mk}
                         {levTag(t) ? ' · ' + levTag(t) : ''}
                       </span>
@@ -170,15 +170,15 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
                       {nat(p.last, t.mk)}
                       {!P.hasPrice(t) ? ' · no price' : prices.auto?.[t.tk] ? '' : ' · manual'}
                     </span>
-                    <span style={{ fontSize: 12, color: C.textMuted }}>avg {nat(t.px, t.mk)}</span>
+                    <span style={{ fontSize: 13, color: C.textMuted }}>avg {nat(t.px, t.mk)}</span>
                   </span>
                   <span role="cell" className={s.hValue} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <span style={{ fontWeight: 700 }}>{dS(p.val)}</span>
-                    <span style={{ fontSize: 12, color: C.textMuted }}>{Math.round((p.val / P.tot) * 100)}% of portfolio</span>
+                    <span style={{ fontSize: 13, color: C.textMuted }}>{Math.round((p.val / P.tot) * 100)}% of portfolio</span>
                   </span>
                   <span role="cell" className={s.hPl} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <span style={{ fontWeight: 700, color: ink }}>{fmtPct(p.plp)}</span>
-                    <span style={{ fontSize: 12, color: ink }}>{dS(p.pl, true)}</span>
+                    <span style={{ fontSize: 13, color: ink }}>{dS(p.pl, true)}</span>
                   </span>
                   <span role="cell" className={s.hPlan}>
                     {hasPlan ? (
@@ -202,20 +202,20 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
                             }}
                           />
                         </span>
-                        <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, color: C.textMuted, whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>
                           <span>Stop {nat(t.sl!, t.mk)}</span>
                           <span>Target {nat(t.tg!, t.mk)}</span>
                         </span>
                       </span>
                     ) : t.sl ? (
-                      <span style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12, color: C.textMuted }}>
+                      <span style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13, color: C.textMuted }}>
                         <span style={{ whiteSpace: 'nowrap' }}>Stop {nat(t.sl, t.mk)} · no target</span>
                         <span style={{ fontWeight: 700, color: toStop < 0 ? C.redInk : toStop <= 3 ? C.amberInk : C.textMuted }}>
                           {toStop < 0 ? 'Stop breached' : `${toStop.toFixed(1)}% above stop`}
                         </span>
                       </span>
                     ) : (
-                      <span style={{ fontSize: 12, color: C.textMuted }}>{t.st === 'Long-term' ? 'Long-term · no exit levels' : 'No exit levels'}</span>
+                      <span style={{ fontSize: 13, color: C.textMuted }}>{t.st === 'Long-term' ? 'Long-term · no exit levels' : 'No exit levels'}</span>
                     )}
                   </span>
                 </button>
@@ -255,7 +255,7 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0,1fr))', gap: 16 }}>
           {hist.map((p, i) => (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: 12, fontWeight: i === 5 ? 700 : 500, textAlign: 'center' }}>
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: 13, fontWeight: i === 5 ? 700 : 500, textAlign: 'center' }}>
               <span>{labels[i]}</span>
               <span style={{ color: C.textMuted, fontWeight: 500 }}>{short(ofIncome(p))}</span>
             </div>

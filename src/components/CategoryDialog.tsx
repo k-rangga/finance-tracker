@@ -85,6 +85,8 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
   const usedBy = existing ? Object.keys(recat).filter(id => recat[id] === existing.name) : [];
   /** Re-point a transaction's override; the original category comes from the import (unknown for older rows, so the override is kept). */
   const move = (to: string) => usedBy.forEach(id => setOverride(id, txRows.find(r => r.id === id)?.category ?? '', to));
+  /** Merchant rules re-pointed from this category to `to`. */
+  const movedRules = (to: string) => Object.fromEntries(Object.entries(settings.merchantRules).map(([k, v]) => [k, v === existing?.name ? to : v]));
 
   const save = () => {
     if (builtIn) {
@@ -104,7 +106,7 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
     if (!(limitPct >= 0 && limitPct <= 100)) return setErr('The limit must be between 0 and 100% of income.');
     const next = { ...draft, name: n };
     if (existing) {
-      update({ customCategories: settings.customCategories.map(c => (c.name === existing.name ? next : c)) });
+      update({ customCategories: settings.customCategories.map(c => (c.name === existing.name ? next : c)), merchantRules: movedRules(n) });
       if (n !== existing.name) move(n);
     } else {
       update({ customCategories: [...settings.customCategories, next] });
@@ -122,7 +124,7 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
         onClose={onClose}
         onDelete={to => {
           move(to);
-          update({ customCategories: settings.customCategories.filter(c => c.name !== existing.name) });
+          update({ customCategories: settings.customCategories.filter(c => c.name !== existing.name), merchantRules: movedRules(to) });
           onClose();
         }}
       />
@@ -241,7 +243,7 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
             </button>
           ))}
         </div>
-        <span style={{ fontSize: 12, color: C.textMuted }}>Faded colours are already used. Pick an unused one to keep categories easy to tell apart.</span>
+        <span style={{ fontSize: 13, color: C.textMuted }}>Faded colours are already used. Pick an unused one to keep categories easy to tell apart.</span>
       </div>
       {err && <span className={s.error}>{err}</span>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>

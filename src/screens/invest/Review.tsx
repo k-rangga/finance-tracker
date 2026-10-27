@@ -53,7 +53,7 @@ export function Review({ today, P, onOpenTrade }: { today: Date; P: Portfolio; o
                     <span style={{ fontSize: 16, fontWeight: 700 }}>
                       {t.tk} <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>{t.nm || t.mk}</span>
                     </span>
-                    <span style={{ fontSize: 12, color: C.textMuted }}>
+                    <span style={{ fontSize: 13, color: C.textMuted }}>
                       {fmtD(t.d)} → {fmtD(t.ex!.d)} · held {d.days} {d.days === 1 ? 'day' : 'days'}
                     </span>
                   </span>
@@ -67,7 +67,7 @@ export function Review({ today, P, onOpenTrade }: { today: Date; P: Portfolio; o
                     <span style={{ fontSize: 16, fontWeight: 800, color: ink }}>
                       {d.r == null ? '—' : fmtR(d.r)} · {fmtPct(d.ret)}
                     </span>
-                    <span style={{ fontSize: 12, color: ink }}>Net {dS(d.net, true)}</span>
+                    <span style={{ fontSize: 13, color: ink }}>Net {dS(d.net, true)}</span>
                   </span>
                 </span>
                 <span style={{ margin: '0 0 0 22px', fontSize: 14, lineHeight: 1.5, color: C.textSoft }}>{t.ex!.ls || 'No lesson written.'}</span>

@@ -92,9 +92,9 @@ const cases = [
     { kind: 'spend', amount: 36000, title: 'SITI AMINAH' },
   ],
   [
-    'GrabFood receipt (Indonesian) → restaurant + order id ref',
+    'GrabFood receipt (Indonesian) → Take out, restaurant + order id ref',
     parse('FW: Your Grab E-Receipt', ME, fwd('Grab <no-reply@grab.com>', 'Your Grab E-Receipt', '[E-receipt]\nSelamat menikmati makanan Anda!\nTOTAL\nRp 172000 TANGGAL | WAKTU\n26 Sep 26 09:47 +0700\nDetail Pesanan\nJenis Kendaraan:\nGrabFood\n\nPesanan ID\nA-9SNARFAGWUHIAV\n\nPesanan Dari:\nBakmi Kun - Kota Wisata\nRuko Fresh Market 5\nSubtotal Rp 336000\nTOTAL (INCL. TAX) Rp 172000')),
-    { kind: 'spend', amount: 172000, title: 'Bakmi Kun - Kota Wisata', category: 'Dining', ref: 'grab:A-9SNARFAGWUHIAV:172000' },
+    { kind: 'spend', amount: 172000, title: 'Bakmi Kun - Kota Wisata', category: 'Take out', ref: 'grab:A-9SNARFAGWUHIAV:172000' },
   ],
   [
     'GrabMart (Indonesian) → charged total, not the tax-invoice total',
@@ -104,7 +104,7 @@ const cases = [
   [
     'Grab tip → separate charge from the order',
     parse('FW: Your Grab E-Receipt', ME, fwd('Grab <no-reply@grab.com>', 'Your Grab E-Receipt', 'GrabFood\n[Grab]\nTerima kasih! Tip darimu sudah disalurkan ke pengemudimu.\nTotal\nRP 10000\nTip\nKode Booking: A-9U5HT82GWLW5AV\n10000')),
-    { amount: 10000, title: 'Grab tip', category: 'Dining', ref: 'grab:A-9U5HT82GWLW5AV:10000' },
+    { amount: 10000, title: 'Grab tip', category: 'Take out', ref: 'grab:A-9U5HT82GWLW5AV:10000' },
   ],
   [
     'BCA Virtual Account to own Pluang → Investment',
@@ -158,6 +158,11 @@ const cases = [
     'Older stored row: card receipt → card account',
     vm.runInContext('accounts_', ctx)({ kind: 'spend', category: 'Dining', source: 'Card receipt' }, 'KartuKreditBCA@klikbca.com\nCredit Card Transaction Notification\nTuku'),
     { category: 'Dining', account: 'CC BCA', to_account: '' },
+  ],
+  [
+    'Coffee shop, restaurant and delivery names → Cafe, Dining, Take out',
+    { cats: ['Kopi Kenangan', 'Starbucks Kota Wisata', 'Tuku Kota Wisata', 'Ayam Gepuk Pak Gembus', 'GoFood'].map(n => vm.runInContext('categoryOfName_', ctx)(n)).join() },
+    { cats: 'Cafe,Cafe,Cafe,Dining,Take out' },
   ],
   ['Newsletter → null', parse('Newsletter', 'News <n@x.com>', 'No amounts here'), null],
   ['Plain Netflix (not forwarded)', parse('Your Netflix bill', 'Netflix <info@netflix.com>', 'Amount charged: Rp 186.000\nPlan: Premium'), { amount: 186000, title: 'Netflix', category: 'Subscriptions' }],

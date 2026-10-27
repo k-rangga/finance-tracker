@@ -57,6 +57,28 @@ export function toTransaction(r: TxRow, display: Currency, fxRate: number): Tran
   };
 }
 
+/** One merchant across receipts: "6202-Hero Kota Wisata" and "HERO KOTA WISATA" → "hero kota wisata". */
+export const merchantKey = (title: string) =>
+  title
+    .toLowerCase()
+    .replace(/[^\p{L}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/**
+ * Overrides with your merchant rules filled in: a transaction you didn't fix by hand takes the category you
+ * chose for its merchant. Card bill payments are never re-categorised.
+ */
+export function withMerchantRules(txs: Transaction[], recat: Record<string, string>, rules: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const t of txs) {
+    if (t.id in recat || t.category === CC_PAYMENT_CATEGORY) continue;
+    const r = rules[merchantKey(t.title)];
+    if (r && r !== t.category) out[t.id] = r;
+  }
+  return { ...out, ...recat };
+}
+
 /** Transactions dated within a cycle, up to and including today. */
 export const inCycle = (txs: Transaction[], c: Cycle) => txs.filter(t => t.date >= c.start && t.date <= c.today && t.date < c.next);
 

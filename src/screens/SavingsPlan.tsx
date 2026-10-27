@@ -16,11 +16,15 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
   const save = ofIncome(SAVINGS_TARGET_PCT);
   const gap = b.projTotal - b.budget;
 
+  // Saved = what you moved with "Transfer (savings)"; the spending pace says how much room is left to move.
   const headline =
-    gap > 0
-      ? `On pace to save ${b.projSavePct.toFixed(1)}%. Trim ${full(gap)} in the last ${cycle.daysLeft} days to hit ${SAVINGS_TARGET_PCT}%.`
-      : `On pace to save ${b.projSavePct.toFixed(1)}%, ahead of the ${SAVINGS_TARGET_PCT}% target.`;
+    b.saved >= save
+      ? `Saved ${b.savedPct.toFixed(1)}% (${full(b.saved)}) this cycle. The ${SAVINGS_TARGET_PCT}% target is reached.`
+      : `Saved ${b.savedPct.toFixed(1)}% (${full(b.saved)}) so far. Move ${full(save - b.saved)} more to savings to reach ${SAVINGS_TARGET_PCT}%.`;
   const summary =
+    (gap > 0
+      ? `At this pace spending finishes ${full(gap)} over budget, leaving room to save ${b.projSavePct.toFixed(1)}%. `
+      : `At this pace you'll have room to save ${b.projSavePct.toFixed(1)}%. `) +
     `You have spent ${full(b.spent)} of your ${full(b.budget)} budget by day ${cycle.dayN} of ${cycle.cycleDays}, with ${full(b.fixedDue)} in fixed bills still due. ` +
     `Variable spending runs at ${short(b.velDay * 7)} a week; staying under ${short(b.safeDay)} a day until ${dayLabel(cycle.end)} lands the cycle on budget.`;
 
@@ -44,10 +48,10 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
   actions.sort((x, y) => (y.over ?? 0) - (x.over ?? 0));
   const buf = b.cats.find(c => c.name === 'Buffer');
   const bufLeft = buf ? buf.limit - buf.spent : 0;
-  if (bufLeft > 0) actions.push({ title: `Keep the ${full(bufLeft)} buffer`, body: `Whatever remains on ${dayLabel(cycle.end)} is swept to savings, lifting the cycle above ${SAVINGS_TARGET_PCT}%.` });
+  if (bufLeft > 0) actions.push({ title: `Keep the ${full(bufLeft)} buffer`, body: `Move whatever remains on ${dayLabel(cycle.end)} to savings and set it to Transfer (savings) to count it.` });
   actions.push({
     title: `Move ${full(save)} on ${dayLabel(cycle.next)}`,
-    body: `Automate the transfer for payday morning. The remaining ${full(b.budget)} funds the next ${diffDays(paydays[1], paydays[2])}-day cycle.`,
+    body: `Automate the transfer for payday morning and set it to Transfer (savings) so it counts. The remaining ${full(b.budget)} funds the next ${diffDays(paydays[1], paydays[2])}-day cycle.`,
   });
 
   const fixed = b.cats.filter(c => c.type === 'fixed');
@@ -68,7 +72,7 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
   return (
     <div className={s.stack}>
       <section style={{ background: C.accent800, color: '#fff', borderRadius: 24, padding: 32, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.accentTint }}>
+        <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.accentTint }}>
           Action plan · {dayLabel(cycle.today)} {cycle.today.getFullYear()}
         </span>
         <h2 style={{ fontSize: 'clamp(24px, 3vw, 32px)', lineHeight: 1.2, maxWidth: 820, textWrap: 'pretty' } as CSSProperties}>{headline}</h2>
@@ -96,7 +100,7 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
             <div style={{ flex: fixedPct, background: '#b4ecdf' }} />
             <div style={{ flex: varPct, background: '#6fd9c2' }} />
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 13 }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <Dot color="#3d9a88" />
               Savings {SAVINGS_TARGET_PCT}%
@@ -145,7 +149,7 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
                     <span style={{ fontWeight: k === 1 ? 700 : 500 }}>
                       {dayLabel(p)} {p.getFullYear()}
                     </span>
-                    <span style={{ fontSize: 12, color: C.textMuted }}>
+                    <span style={{ fontSize: 13, color: C.textMuted }}>
                       {isPast ? 'This cycle · saved ' : 'Saves '}
                       {full(save)}
                     </span>
@@ -177,7 +181,7 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
               <Dot color={[C.accent700, C.mint[5], C.mint[7]][i]} />
               <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
                 <span style={{ fontWeight: 700, fontSize: 15 }}>{k.name}</span>
-                <span style={{ fontSize: 12, color: C.textMuted }}>{k.note}</span>
+                <span style={{ fontSize: 13, color: C.textMuted }}>{k.note}</span>
                 {k.link && (
                   <button type="button" className={s.linkBtn} style={{ alignSelf: 'flex-start' }} onClick={onOpenInvest}>
                     Open investment journal <Icon d={IC.arrowRight} size={14} />
