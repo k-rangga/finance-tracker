@@ -723,7 +723,7 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
   /** Hovered tile and where the pointer is, for the details tooltip. */
   const [hover, setHover] = useState<{ name: string; x: number; y: number } | null>(null);
 
-  // Tiles are grouped by type (variable, fixed), like families: each group's block first, then its categories inside.
+  // Totals per type, for the legend.
   const groups = useMemo(() => {
     const spent = b.cats.filter(c => c.spent > 0);
     return (
@@ -732,24 +732,25 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
         ['Fixed bills', spent.filter(c => c.type === 'fixed')],
       ] as const
     )
-      .map(([name, cats]) => ({ name, cats: [...cats].sort((x, y) => y.spent - x.spent), total: sum(cats.map(c => c.spent)) }))
+      .map(([name, cats]) => ({ name, total: sum(cats.map(c => c.spent)) }))
       .filter(g => g.total > 0)
       .sort((x, y) => y.total - x.total);
   }, [b.cats]);
+  // Tiles strictly by size: biggest top-left down to smallest bottom-right, whatever the type.
+  // Colour still tells the type: warm shades for variable spending, greens for fixed bills, darkest first.
   const tiles = useMemo(() => {
-    const blocks = squarify(
-      groups.map(g => g.total),
+    const cats = b.cats.filter(c => c.spent > 0).sort((x, y) => y.spent - x.spent);
+    const rects = squarify(
+      cats.map(c => c.spent),
       { x: 0, y: 0, w: width, h: height },
     );
-    return groups.flatMap((g, i) => {
-      const inner = squarify(
-        g.cats.map(c => c.spent),
-        blocks[i],
-      );
-      const family = TREEMAP_FAMILIES[g.name];
-      return g.cats.map((c, j) => ({ c, r: inner[j], color: family[j % family.length] }));
+    const seen = { variable: 0, fixed: 0 };
+    return cats.map((c, i) => {
+      const family = TREEMAP_FAMILIES[c.type === 'fixed' ? 'Fixed bills' : 'Variable'];
+      const color = family[seen[c.type]++ % family.length];
+      return { c, r: rects[i], color };
     });
-  }, [groups, width, height]);
+  }, [b.cats, width, height]);
   const ranked = [...b.cats].sort((x, y) => x.status.rank - y.status.rank || y.used - x.used);
   const hovered = hover ? b.cats.find(c => c.name === hover.name) : undefined;
 
