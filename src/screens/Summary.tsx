@@ -50,7 +50,7 @@ export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onShowT
   const target = ofIncome(SAVINGS_TARGET_PCT);
   const id = toISO(cycle.start);
   const thisCycle = (
-    <ThisCycle cycle={cycle} budget={budget} onOpenSettings={onOpenSettings} onShowCycle={() => onShowTransactions('cycle')} onSeeCategories={() => onOpenCategory('')} />
+    <ThisCycle cycle={cycle} budget={budget} onOpenSettings={onOpenSettings} onShowCycle={() => onShowTransactions('cycle')} />
   );
   const savings = <SavingsCard cycle={cycle} budget={budget} compact={phone} onMark={() => onShowTransactions('cycle', TRANSFER_CATEGORY)} />;
   const today = <TodayCard cycle={cycle} budget={budget} onSeeAll={() => onShowTransactions('today')} />;
@@ -125,7 +125,7 @@ function Greeting({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
   const streak = underBudgetStreak(cycle, b);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '6px 12px', flexWrap: 'wrap' }}>
-      <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.01em' }}>
+      <span style={{ fontSize: 15, fontWeight: 500, color: C.textSoft }}>
         {hello}
         {name ? `, ${name}` : ''}
       </span>
@@ -143,7 +143,6 @@ type Row = {
   label: string;
   value?: string;
   items: Item[];
-  note?: string;
   strong?: boolean;
   /** Shown above the items when the row opens (e.g. the savings breakdown). */
   summary?: ReactNode;
@@ -158,13 +157,11 @@ function ThisCycle({
   budget: b,
   onOpenSettings,
   onShowCycle,
-  onSeeCategories,
 }: {
   cycle: Cycle;
   budget: Budget;
   onOpenSettings: () => void;
   onShowCycle: () => void;
-  onSeeCategories: () => void;
 }) {
   const { full, short, ofIncome, settings } = useSettings();
   const { notes } = useData();
@@ -217,9 +214,6 @@ function ThisCycle({
   // not the plan; investing comes out of it.
   const aboveInvestPlan = b.invested - investPlan;
   const leftInSavings = b.saved - b.invested;
-  const savingsNote =
-    `Saved ${full(b.saved)} of ${full(savings)} planned · Invested ${full(b.invested)}` +
-    (leftInSavings >= 0 ? ` · ${full(leftInSavings)} left in savings` : ` · ${full(-leftInSavings)} more than you saved`);
   const savingsSummary = (
     <div style={{ display: 'flex', flexDirection: 'column', padding: '6px 0 4px' }}>
       <BreakdownLine
@@ -250,16 +244,15 @@ function ThisCycle({
     { id: 'inc', label: 'Income', value: full(b.income), items: b.txs.filter(t => t.isIncome && !t.reimbursesId).map(txItem) },
     {
       id: 'save',
-      label: `Savings (${SAVINGS_TARGET_PCT}%)`,
-      value: full(b.saved),
+      label: 'Savings',
+      value: `${fit(b.saved)} / ${fit(savings)}`,
       items: b.txs.filter(t => t.isSavings || t.isInvestment).map(txItem),
-      note: savingsNote,
       summary: savingsSummary,
     },
     { id: 'fixed', label: 'Fixed bills paid', value: full(b.fixedSpent), items: fixedItems },
     { id: 'var', label: 'Variable spending', value: full(b.varSpent), items: varItems, byCategory: true },
     billItems.length
-      ? { id: 'due', label: 'Bills still due', value: full(b.fixedDue), items: billItems, note: `${billItems.length} upcoming before ${dayMonth(cycle.end)}` }
+      ? { id: 'due', label: 'Bills still due', value: full(b.fixedDue), items: billItems }
       : { id: 'due', label: 'No more bills before payday', items: [], quiet: true },
     { id: 'left', label: 'Left to spend', value: full(b.budget - b.spent), items: [], strong: true },
   ].filter((r: Row) => r.quiet || r.strong || r.id === 'inc' || r.items.length > 0 || r.summary || r.value !== full(0));
@@ -292,22 +285,31 @@ function ThisCycle({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flex: 1, minWidth: 0 }}>
           {/* One number first: what you can spend today and stay on budget. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 14, color: C.textMuted }}>Safe to spend today</span>
+            <span className={s.statLabel}>Safe today</span>
             <span style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: 36, lineHeight: 1.05, color: b.safeDay > 0 ? C.text : C.redInk }}>{full(safeShown)}</span>
-            <span style={{ fontSize: 14, color: C.textSoft }}>
-              {fit(Math.max(0, b.budget - b.spent - b.fixedDue))} left after bills ·{' '}
-              <span style={{ whiteSpace: 'nowrap' }}>
-                payday {dayLabel(cycle.next)} ({cycle.daysLeft} {cycle.daysLeft === 1 ? 'day' : 'days'})
-              </span>
-            </span>
           </div>
-          <button type="button" className={s.textLink} onClick={onShowCycle} title="See this cycle's transactions">
-            <span>
-              Spent <strong style={{ color: C.text, whiteSpace: 'nowrap' }}>{fit(b.spent)}</strong> of <span style={{ whiteSpace: 'nowrap' }}>{fit(b.budget)}</span>
-              {phone ? '' : ` budget (${budgetPct}% of income)`}
-            </span>
-            <Icon d={IC.arrowRight} size={13} />
-          </button>
+          {/* Then three figures, label over number. */}
+          <div className={s.statRow}>
+            <div className={s.stat}>
+              <span className={s.statLabel}>After bills</span>
+              <span className={s.statValue}>{fit(Math.max(0, b.budget - b.spent - b.fixedDue))}</span>
+            </div>
+            <div className={s.stat} title={`Next payday ${dayLabel(cycle.next)}`}>
+              <span className={s.statLabel}>Payday</span>
+              <span className={s.statValue}>
+                {cycle.daysLeft} {cycle.daysLeft === 1 ? 'day' : 'days'}
+              </span>
+            </div>
+            <button type="button" className={`${s.stat} ${s.statBtn}`} onClick={onShowCycle} title={`See this cycle's transactions · budget is ${budgetPct}% of income`}>
+              <span className={s.statLabel}>
+                Spent <Icon d={IC.arrowRight} size={11} />
+              </span>
+              <span className={s.statValue}>
+                {fit(b.spent)}
+                <span style={{ color: C.textMuted, fontWeight: 500 }}> / {fit(b.budget).replace(/^Rp /, '')}</span>
+              </span>
+            </button>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div
               className={s.track}
@@ -328,25 +330,13 @@ function ThisCycle({
               style={{ fontSize: 13, fontWeight: 600, color: statusInk }}
             >
               {b.spent > b.budget
-                ? `${short(b.spent - b.budget)} over budget`
+                ? `+${short(b.spent - b.budget)} over budget`
                 : ending
                   ? `${short(Math.max(0, b.budget - b.spent))} left until payday`
                   : overPace > 0
-                    ? `${short(overPace)} over today's pace`
-                    : `${short(-overPace)} under today's pace`}
+                    ? `+${short(overPace)} over pace`
+                    : `${short(-overPace)} under pace`}
             </span>
-          </div>
-          <div style={{ display: 'flex', gap: '6px 14px', flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
-            {segs.slice(0, phone ? 3 : 5).map(c => (
-              <span key={c.name} style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                <Dot color={c.color} /> {c.name} {short(c.spent)}
-              </span>
-            ))}
-            {segs.length > 0 && (
-              <button type="button" className={s.textBtnSm} onClick={onSeeCategories} style={{ padding: 0 }}>
-                See all →
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -369,12 +359,10 @@ function ThisCycle({
                 disabled={!has}
                 aria-expanded={has ? isOpen : undefined}
                 onClick={() => has && setOpen(isOpen ? null : r.id)}
-                style={{ padding: '12px var(--pad)', fontWeight: r.strong ? 600 : 500, background: r.strong ? 'color-mix(in srgb, var(--accent-500) 9%, transparent)' : undefined, minHeight: 48 }}
+                title={has ? (r.items.length ? count(r.items.length) : undefined) : undefined}
+                style={{ padding: '10px var(--pad)', fontWeight: r.strong ? 600 : 500, background: r.strong ? 'color-mix(in srgb, var(--accent-500) 9%, transparent)' : undefined, minHeight: 46 }}
               >
-                <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
-                  <span style={{ fontSize: 15 }}>{r.label}</span>
-                  {(r.note ?? count(r.items.length)) && <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>{r.note ?? count(r.items.length)}</span>}
-                </span>
+                <span style={{ fontSize: 15, marginRight: 'auto', minWidth: 0 }}>{r.label}</span>
                 <span style={{ fontSize: 15, color: r.strong ? C.accent800 : C.text, whiteSpace: 'nowrap', flex: 'none' }}>{r.value}</span>
                 <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ opacity: has ? 1 : 0, transform: isOpen ? 'rotate(180deg)' : 'none' }} />
               </button>
