@@ -1476,19 +1476,6 @@ textarea.input {
   place-items: center;
 }
 
-/* ---------- Where it went: category rows ---------- */
-.catBadges {
-  flex: none;
-  display: grid;
-  grid-template-columns: 92px 64px;
-  gap: 10px;
-}
-/* When the badges wrap under the bar on phones, line them up with the category name. */
-@media (max-width: 640px) {
-  .catBadges {
-    margin-left: 48px;
-  }
-}
 @media (max-width: 759px) {
   .sideCard {
     padding: 16px;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
-import { Badge, Bar, Card, CardHead, Dot, DueChip, IconChip } from '../components/ui';
+import { Badge, Card, CardHead, Dot, DueChip, IconChip } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
 import { Celebrate, useCountUp } from '../components/Delight';
 import { changeBadge, dayAmount, dayTotalLabel, iconChip, type Budget, type TxView } from '../lib/budget';
@@ -823,7 +823,7 @@ function squarify(values: number[], r: Rect): Rect[] {
 }
 
 function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
-  const { full } = useSettings();
+  const { full, short } = useSettings();
   const phone = useIsPhone();
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
@@ -867,8 +867,11 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
       return { c, r: rects[i], color };
     });
   }, [b.cats, width, height]);
-  // Phones list only what you've spent on; the rest is on Categories.
-  const ranked = [...b.cats].filter(c => !phone || c.spent > 0).sort((x, y) => x.status.rank - y.status.rank || y.used - x.used);
+  // Over or near their limit, worst first, at most three.
+  const attention = b.cats
+    .filter(c => c.status.key !== 'ok')
+    .sort((x, y) => x.status.rank - y.status.rank || y.used - x.used)
+    .slice(0, 3);
   const hovered = hover ? b.cats.find(c => c.name === hover.name) : undefined;
 
   return (
@@ -952,40 +955,38 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
         </span>
         <span style={{ color: C.textMuted }}>{phone ? 'Tile size = share of spending · tap to open' : 'Tile size = share of spending · hover for details · click to open'}</span>
       </div>
+      {/* Only what needs a look; the full list lives on Categories. */}
       <div className={s.bleed} style={{ marginTop: 4 }}>
-        {ranked.map(c => {
-          const ic = iconChip(c.name);
-          const ch = changeBadge(c.spent, c.lastSameDays);
-          return (
-            <button
-              key={c.name}
-              type="button"
-              className={s.rowBtn}
-              onClick={() => onOpenCategory(c.name)}
-              style={{ padding: '12px var(--pad)', background: c.status.rowBg, flexWrap: 'wrap' }}
-            >
-              <IconChip d={c.icon} bg={ic.bg} ink={ic.ink} size={36} iconSize={16} />
-              <span style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 220px', minWidth: 0 }}>
-                <span style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '2px 8px', fontSize: 14 }}>
-                  <span style={{ fontWeight: 600 }}>{c.name}</span>
-                  <span style={{ color: C.textMuted, whiteSpace: 'nowrap', marginLeft: 'auto' }}>
-                    <strong style={{ color: C.text, fontWeight: 600 }}>{full(c.spent)}</strong> / {full(c.limit)}
-                  </span>
+        {attention.length === 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px var(--pad)', fontSize: 14, color: C.accent800 }}>
+            ✓ All categories on track
+          </div>
+        ) : (
+          attention.map(c => {
+            const ic = iconChip(c.name);
+            return (
+              <button
+                key={c.name}
+                type="button"
+                className={s.rowBtn}
+                onClick={() => onOpenCategory(c.name)}
+                style={{ padding: '10px var(--pad)', background: c.status.rowBg, minHeight: 48 }}
+              >
+                <IconChip d={c.icon} bg={ic.bg} ink={ic.ink} size={28} iconSize={14} />
+                <span className={s.ellipsis} style={{ fontSize: 14, fontWeight: 600, marginRight: 'auto', minWidth: 0 }}>
+                  {c.name}
                 </span>
-                <Bar value={c.spent} max={Math.max(c.limit, c.spent)} tick={c.limit} color={c.status.bar} height={8} label={`${c.name} ${Math.round(c.used)}% of limit`} />
-              </span>
-              {/* Fixed-width badge columns, so every row's bar, limit tick and amount end at the same place. */}
-              <span className={s.catBadges}>
-                <Badge ink={c.status.ink}>
-                  {c.status.label}
-                </Badge>
-                <Badge ink={ch.ink}>
-                  {ch.label}
-                </Badge>
-              </span>
-            </button>
-          );
-        })}
+                <span style={{ fontSize: 14, whiteSpace: 'nowrap', color: C.textMuted }}>
+                  <strong style={{ color: C.text, fontWeight: 600 }}>{short(c.spent)}</strong> / {short(c.limit)}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', color: c.status.ink, minWidth: 40, textAlign: 'right' }}>{Math.round(c.used)}%</span>
+              </button>
+            );
+          })
+        )}
+        <button type="button" className={s.rowBtn} onClick={() => onOpenCategory('')} style={{ padding: '12px var(--pad)', fontSize: 14, fontWeight: 600, color: C.accent700 }}>
+          See all categories →
+        </button>
       </div>
     </Card>
   );
