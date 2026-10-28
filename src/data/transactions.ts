@@ -89,6 +89,12 @@ export const isCard = (account: string) => account.startsWith('CC ');
 
 export type Bill = { date: Date; title: string; category: string; amount: number; source: string };
 
+/** A predicted bill's identity within one cycle (`cycleId` = the cycle's start as ISO), for dismissing it. */
+export const billKey = (cycleId: string, b: Bill) => `${cycleId}|${b.title.toLowerCase()}|${b.amount}`;
+
+/** Installment payments come from your plan; only bills predicted from last cycle can be dismissed. */
+export const canDismissBill = (b: Bill) => b.source !== 'Installment';
+
 /** A row of the `transactions` table, as imported from Gmail. */
 export type TxRow = {
   id: string;

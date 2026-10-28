@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
-import { Badge, Card, CardHead, Dot, DueChip, IconChip } from '../components/ui';
+import { Badge, Card, CardHead, DismissBill, Dot, DueChip, IconChip } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
 import { Celebrate, useCountUp } from '../components/Delight';
 import { changeBadge, dayAmount, dayTotalLabel, iconChip, type Budget, type TxView } from '../lib/budget';
@@ -11,6 +11,7 @@ import { useData } from '../lib/data';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
 import { categoryByName, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY } from '../data/categories';
+import { canDismissBill, type Bill } from '../data/transactions';
 
 type Props = { cycle: Cycle; budget: Budget; onOpenCategory: (name: string) => void };
 
@@ -30,10 +31,14 @@ type Item = {
   struck?: string;
   /** Bills only: when it's due, shown as a chip. */
   due?: { date: Date; inDays: number };
+  /** Predicted bills only: "not a bill this cycle". */
+  onDismiss?: () => void;
 };
 
 type SummaryProps = Props & {
   onOpenSettings: () => void;
+  /** Hide a predicted bill for this cycle. */
+  onDismissBill: (b: Bill) => void;
   /** Open Transactions on a range, optionally filtered to one category. */
   onShowTransactions: (range: 'today' | 'cycle', cat?: string) => void;
 };
@@ -43,18 +48,18 @@ type SummaryProps = Props & {
  * Phones: one column read top to bottom (spend today → today and what's coming → savings → where it went),
  * with the comparisons folded under More.
  */
-export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onShowTransactions }: SummaryProps) {
+export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismissBill, onShowTransactions }: SummaryProps) {
   const { ofIncome } = useSettings();
   const phone = useIsPhone();
   const [more, setMore] = useState(false);
   const target = ofIncome(SAVINGS_TARGET_PCT);
   const id = toISO(cycle.start);
   const thisCycle = (
-    <ThisCycle cycle={cycle} budget={budget} onOpenSettings={onOpenSettings} onShowCycle={() => onShowTransactions('cycle')} />
+    <ThisCycle cycle={cycle} budget={budget} onOpenSettings={onOpenSettings} onShowCycle={() => onShowTransactions('cycle')} onDismissBill={onDismissBill} />
   );
   const savings = <SavingsCard cycle={cycle} budget={budget} compact={phone} onMark={() => onShowTransactions('cycle', TRANSFER_CATEGORY)} />;
   const today = <TodayCard cycle={cycle} budget={budget} onSeeAll={() => onShowTransactions('today')} />;
-  const comingUp = <ComingUpCard cycle={cycle} budget={budget} />;
+  const comingUp = <ComingUpCard cycle={cycle} budget={budget} onDismissBill={onDismissBill} />;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Small wins, once per cycle on this device. */}
@@ -157,11 +162,13 @@ function ThisCycle({
   budget: b,
   onOpenSettings,
   onShowCycle,
+  onDismissBill,
 }: {
   cycle: Cycle;
   budget: Budget;
   onOpenSettings: () => void;
   onShowCycle: () => void;
+  onDismissBill: (b: Bill) => void;
 }) {
   const { full, short, ofIncome, settings } = useSettings();
   const { notes } = useData();
@@ -195,7 +202,7 @@ function ThisCycle({
   };
   const typeOf = (n: string) => categoryByName(n)?.type;
   const billItems: Item[] = b.bills.map(bill => ({
-    key: bill.title,
+    key: `${bill.title}|${bill.amount}|${bill.date.getTime()}`,
     title: tidyName(bill.title),
     sub: bill.category,
     due: { date: bill.date, inDays: cycle.offsetOf(bill.date) - cycle.dayIdx },
@@ -203,6 +210,7 @@ function ThisCycle({
     ink: C.text,
     icon: IC.calendar,
     cat: bill.category,
+    onDismiss: canDismissBill(bill) ? () => onDismissBill(bill) : undefined,
   }));
   const savings = ofIncome(SAVINGS_TARGET_PCT);
   const investPlan = ofIncome(settings.investPct);
@@ -394,7 +402,7 @@ function SideHead({ title, sub, action }: { title: string; sub?: ReactNode; acti
 }
 
 /** One line in a side card: marker, name over a detail line, amount. */
-function SideRow({ mark, title, sub, value, ink = C.text }: { mark: ReactNode; title: string; sub: ReactNode; value: string; ink?: string }) {
+function SideRow({ mark, title, sub, value, ink = C.text, action }: { mark: ReactNode; title: string; sub: ReactNode; value: string; ink?: string; action?: ReactNode }) {
   return (
     <div className={s.sideRow}>
       <span className={s.sideMark}>{mark}</span>
@@ -405,6 +413,7 @@ function SideRow({ mark, title, sub, value, ink = C.text }: { mark: ReactNode; t
         <span style={{ fontSize: 13, color: C.textMuted }}>{sub}</span>
       </span>
       <span style={{ fontSize: 14, fontWeight: 600, flex: 'none', whiteSpace: 'nowrap', color: ink }}>{value}</span>
+      {action}
     </div>
   );
 }
@@ -508,7 +517,7 @@ function TodayCard({ cycle, budget: b, onSeeAll }: { cycle: Cycle; budget: Budge
 }
 
 /** Fixed bills expected before payday, soonest first. */
-function ComingUpCard({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
+function ComingUpCard({ cycle, budget: b, onDismissBill }: { cycle: Cycle; budget: Budget; onDismissBill: (b: Bill) => void }) {
   const { full } = useSettings();
   const bills = [...b.bills].sort((x, y) => x.date.getTime() - y.date.getTime());
   return (
@@ -521,11 +530,12 @@ function ComingUpCard({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
             const inDays = cycle.offsetOf(bill.date) - cycle.dayIdx;
             return (
               <SideRow
-                key={bill.title}
+                key={`${bill.title}|${bill.amount}|${bill.date.getTime()}`}
                 mark={<Icon d={IC.calendar} size={15} color={C.textMuted} />}
                 title={tidyName(bill.title)}
                 sub={<DueChip date={bill.date} inDays={inDays} />}
                 value={full(bill.amount)}
+                action={canDismissBill(bill) ? <DismissBill title={tidyName(bill.title)} onClick={() => onDismissBill(bill)} /> : undefined}
               />
             );
           })}
@@ -708,6 +718,7 @@ function CycleItem({ i }: { i: Item }) {
         <span style={{ fontSize: 14, fontWeight: 600, color: i.ink, whiteSpace: 'nowrap' }}>{i.value}</span>
         {i.struck && <span style={{ fontSize: 13, color: C.textMuted, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>{i.struck}</span>}
       </div>
+      {i.onDismiss && <DismissBill title={i.title} onClick={i.onDismiss} />}
     </div>
   );
 }

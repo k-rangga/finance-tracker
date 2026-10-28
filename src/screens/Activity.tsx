@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import s from '../styles/ui.module.css';
-import { DueChip, IconChip } from '../components/ui';
+import { DismissBill, DueChip, IconChip } from '../components/ui';
 import { Logo } from '../components/Logo';
 import { IC, Icon } from '../components/Icon';
 import { CategoryDialog } from '../components/CategoryDialog';
@@ -14,7 +14,7 @@ import { dayLabel, dayMonth, parseISO, sum, tidyName, toISO } from '../lib/forma
 import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
 import { CATEGORIES, categoryByName, categoryLabel, CC_PAYMENT_CATEGORY, OTHER_CATEGORIES } from '../data/categories';
-import { isCard, merchantKey } from '../data/transactions';
+import { canDismissBill, isCard, merchantKey, type Bill } from '../data/transactions';
 
 export type Range = 'today' | 'week' | 'last' | 'cycle' | 'custom';
 /** `from` / `to` (YYYY-MM-DD, inclusive) are the dates picked for the `custom` range. */
@@ -36,11 +36,13 @@ type Props = {
   onLink: (incomeId: string, expenseId: string | null) => void;
   /** Your share of an expense as a fraction (0–1); `null` counts the full amount. */
   onShare: (txId: string, ratio: number | null) => void;
+  /** Hide a predicted bill for this cycle. */
+  onDismissBill: (b: Bill) => void;
 };
 
 type Popover = 'link' | 'share' | 'cat' | 'more' | 'note';
 
-export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, setFilter, onRecat, onLink, onShare }: Props) {
+export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, setFilter, onRecat, onLink, onShare, onDismissBill }: Props) {
   const { full, settings, update } = useSettings();
   /** The row with an open popover: an income's "paid back for" picker or an expense's "my share" editor. */
   const [open, setOpen] = useState<{ id: string; kind: Popover } | null>(null);
@@ -306,7 +308,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
             const ic = iconChip(b.category);
             const inDays = cycle.offsetOf(b.date) - cycle.dayIdx;
             return (
-              <div key={b.title} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px' }}>
+              <div key={`${b.title}|${b.amount}|${b.date.getTime()}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px' }}>
                 <IconChip d={IC.calendar} bg={ic.bg} ink={ic.ink} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginRight: 'auto', minWidth: 0 }}>
                   <span className={s.ellipsis} style={{ fontSize: 15, fontWeight: 600 }}>
@@ -318,6 +320,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
                   <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>- {full(b.amount)}</span>
                   <DueChip date={b.date} inDays={inDays} />
                 </div>
+                {canDismissBill(b) && <DismissBill title={tidyName(b.title)} onClick={() => onDismissBill(b)} />}
               </div>
             );
           })}

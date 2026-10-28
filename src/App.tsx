@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import s from './styles/ui.module.css';
 import { IC, Icon } from './components/Icon';
 import { Logo } from './components/Logo';
@@ -8,10 +8,10 @@ import { GmailDialog, syncedAgo } from './components/GmailDialog';
 import { KEYS, storage } from './lib/storage';
 import { getCycle } from './lib/cycle';
 import { computeBudget, txViews } from './lib/budget';
-import { addDays, dayLabel, dayMonth, startOfToday } from './lib/format';
+import { addDays, dayLabel, dayMonth, startOfToday, tidyName, toISO } from './lib/format';
 import { useSettings } from './lib/settings';
 import { useData } from './lib/data';
-import { expectedBills, inCycle, installmentBills, installmentPayments, toTransaction, withMerchantRules } from './data/transactions';
+import { billKey, expectedBills, inCycle, installmentBills, installmentPayments, toTransaction, withMerchantRules, type Bill } from './data/transactions';
 import { INSTALLMENT_CATEGORY } from './data/categories';
 import { Summary } from './screens/Summary';
 import { Categories } from './screens/Categories';
@@ -49,7 +49,7 @@ export default function App() {
   /** Create (no name) or edit one of your categories; opened from Settings or a Categories row. */
   const [catDialog, setCatDialog] = useState<{ editing?: string } | null>(null);
   const [gmailOpen, setGmailOpen] = useState(false);
-  const { settings } = useSettings();
+  const { settings, update } = useSettings();
 
   const today = useMemo(startOfToday, []);
   const cycle = useMemo(() => getCycle(today), [today]);
@@ -72,10 +72,28 @@ export default function App() {
   const transactions = useMemo(() => inCycle(all, cycle), [all, cycle]);
   const prevTransactions = useMemo(() => all.filter(t => t.date >= prevCycle.start && t.date < cycle.start), [all, prevCycle, cycle]);
   const bills = useMemo(
-    () => [...expectedBills(prevTransactions, prevCycle, transactions, cycle, recat), ...installmentBills(payments, cycle)].sort((x, y) => x.date.getTime() - y.date.getTime()),
+    () =>
+      [
+        ...expectedBills(prevTransactions, prevCycle, transactions, cycle, recat).filter(b => !settings.dismissedBills.includes(billKey(toISO(cycle.start), b))),
+        ...installmentBills(payments, cycle),
+      ].sort((x, y) => x.date.getTime() - y.date.getTime()),
     // Custom categories change which categories are fixed bills.
-    [prevTransactions, prevCycle, transactions, cycle, recat, payments, settings.customCategories],
+    [prevTransactions, prevCycle, transactions, cycle, recat, payments, settings.customCategories, settings.dismissedBills],
   );
+  /** "Not a bill this cycle": hides a predicted bill until payday, with a few seconds to undo. */
+  const [billUndo, setBillUndo] = useState<{ text: string; run: () => void } | null>(null);
+  useEffect(() => {
+    if (!billUndo) return;
+    const t = setTimeout(() => setBillUndo(null), 5000);
+    return () => clearTimeout(t);
+  }, [billUndo]);
+  const dismissBill = (b: Bill) => {
+    const id = toISO(cycle.start);
+    // Keys from earlier cycles no longer match anything.
+    const before = settings.dismissedBills.filter(k => k.startsWith(id + '|'));
+    update({ dismissedBills: [...before, billKey(id, b)] });
+    setBillUndo({ text: `${tidyName(b.title)} removed from bills`, run: () => update({ dismissedBills: before }) });
+  };
   const budget = useMemo(
     () => computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, income: settings.income, warnAt: settings.warnAt }),
     [transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, settings.income, settings.warnAt, settings.savingsPct, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
@@ -278,6 +296,7 @@ export default function App() {
                 budget={budget}
                 onOpenCategory={showCategory}
                 onOpenSettings={() => setSettingsOpen(true)}
+                onDismissBill={dismissBill}
                 onShowTransactions={(range, cat = '') => {
                   setTxFilter({ range, cat, q: '' });
                   setTab('tx');
@@ -287,7 +306,7 @@ export default function App() {
             {tab === 'categories' && (
               <Categories cycle={cycle} budget={budget} open={openCat} setOpen={setOpenCat} onShowTransactions={showTransactions} onEditCategory={name => setCatDialog({ editing: name })} onNewCategory={() => setCatDialog({})} />
             )}
-            {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} />}
+            {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} onDismissBill={dismissBill} />}
             {tab === 'plan' && <SavingsPlan cycle={cycle} budget={budget} onOpenInvest={() => setTab('invest')} />}
             {tab === 'invest' && <Invest cycle={cycle} />}
           </div>
@@ -295,6 +314,21 @@ export default function App() {
       </main>
 
       {gmailOpen && <GmailDialog onClose={() => setGmailOpen(false)} />}
+      {billUndo && (
+        <div className={s.toast} role="status">
+          <span style={{ marginRight: 'auto', minWidth: 0 }}>{billUndo.text}</span>
+          <button
+            type="button"
+            className={s.toastBtn}
+            onClick={() => {
+              billUndo.run();
+              setBillUndo(null);
+            }}
+          >
+            Undo
+          </button>
+        </div>
+      )}
       {settingsOpen && (
         <SettingsDialog
           email={email}

@@ -181,3 +181,12 @@ export function Modal({ title, onClose, children, width = 520 }: { title: string
 }
 
 export { s as ui };
+
+/** The small × on a predicted bill: "not a bill this cycle". */
+export function DismissBill({ title, onClick }: { title: string; onClick: () => void }) {
+  return (
+    <button type="button" className={s.billX} onClick={onClick} aria-label={`${title} isn't due this cycle`} title="Not a bill this cycle">
+      <Icon d={IC.close} size={14} strokeWidth={2.5} />
+    </button>
+  );
+}

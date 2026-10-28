@@ -27,6 +27,8 @@ export type Settings = {
   colorOverrides: Record<string, string>;
   /** Category you chose for a merchant, by `merchantKey`: applied to its other and future transactions. */
   merchantRules: Record<string, string>;
+  /** Predicted bills you said aren't due this cycle, by `billKey`. Older cycles' keys are dropped. */
+  dismissedBills: string[];
 };
 
 export const DEFAULT_INCOME: Record<Currency, number> = { IDR: 30_000_000, USD: 6_500 };
@@ -46,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   limitOverrides: {},
   colorOverrides: {},
   merchantRules: {},
+  dismissedBills: [],
 };
 
 type Ctx = {
