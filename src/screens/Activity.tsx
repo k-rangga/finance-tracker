@@ -38,7 +38,7 @@ type Props = {
   onShare: (txId: string, ratio: number | null) => void;
 };
 
-type Popover = 'link' | 'share' | 'cat' | 'more';
+type Popover = 'link' | 'share' | 'cat' | 'more' | 'note';
 
 export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, setFilter, onRecat, onLink, onShare }: Props) {
   const { full, settings, update } = useSettings();
@@ -47,7 +47,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   /** "New category" dialog, opened from a row's category menu; the new category is applied to that row. */
   const [creating, setCreating] = useState<{ name: string; tx: TxView } | null>(null);
   const [calOpen, setCalOpen] = useState(false);
-  const { installments, setInstallment } = useData();
+  const { installments, setInstallment, notes } = useData();
   /** The purchase whose installment plan is open in the dialog. */
   const [planFor, setPlanFor] = useState<string | null>(null);
   const planTx = planFor ? allTxs.find(x => x.id === planFor) : undefined;
@@ -125,7 +125,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   const needle = q.trim().toLowerCase();
   /** Everything in the range that matches the filters: what the recap adds up. */
   const inRange = (range === 'custom' ? allTxs : budget.txs).filter(
-    t => t.offset >= lo && t.offset <= hi && (!cat || t.cat === cat) && (!needle || `${t.title} ${t.account} ${t.source} ${t.cat}`.toLowerCase().includes(needle)),
+    t => t.offset >= lo && t.offset <= hi && (!cat || t.cat === cat) && (!needle || `${t.title} ${t.account} ${t.source} ${t.cat} ${notes[t.id] ?? ''}`.toLowerCase().includes(needle)),
   );
   /** What the list shows: the same, minus transfers between your accounts when you hide them. */
   const txs = filter.hideTransfers ? inRange.filter(t => !t.isTransfer) : inRange;
@@ -216,7 +216,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
                 type="search"
                 value={q}
                 onChange={e => setFilter({ ...filter, q: e.target.value })}
-                placeholder="Search merchant, source or category"
+                placeholder="Search merchant, category or note"
                 aria-label="Search transactions"
                 style={{ borderRadius: 8, paddingLeft: 42, fontSize: 14 }}
               />
@@ -493,8 +493,9 @@ type RowProps = {
 };
 
 function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewCategory, expenses, popover, setPopover }: RowProps) {
-  const { installments } = useData();
+  const { installments, notes, setNote } = useData();
   const { full } = useSettings();
+  const note = notes[t.id];
   const c = categoryByName(t.cat);
   const ic = iconChip(t.cat);
   const row = useRef<HTMLDivElement>(null);
@@ -517,6 +518,8 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
     };
   }, [popover, setPopover]);
 
+  /** Where the money went from and to: the account for spending, the flow for a transfer, the source for income. */
+  const where = t.isTransfer && !t.isCcPayment ? `${t.account}${t.toAccount ? ' → ' + t.toAccount : ''}` : t.type === 'expense' ? t.account : t.source;
   const paidBy = t.paidBackBy.join(', ');
   const shareNote = t.share != null ? `your share of ${full(t.amount)}` : '';
   const amount = t.isIncome
@@ -537,6 +540,7 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
   const planId = t.plan?.of ?? (t.isInstallment ? t.id : null);
   type Item = [string, () => void];
   const more: Item[] = [
+    [note ? 'Edit note' : 'Add note…', () => setPopover('note')],
     ...(isExpense && !t.plan ? [[t.share != null ? 'Edit my share' : 'My share…', () => setPopover('share')] as Item] : []),
     ...(canLink && !t.reimbursesId ? [['Paid back for…', () => setPicking(true)] as Item] : []),
     ...(planId
@@ -582,11 +586,25 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
           ) : (
             <CategoryButton t={t} open={popover === 'cat'} onToggle={() => setPopover(popover === 'cat' ? null : 'cat')} />
           )}
-          {/* Where the money went from and to: the account for spending, the flow for a transfer, the source for income. */}
-          <span className={s.ellipsis}>
-            {t.isTransfer && !t.isCcPayment ? `${t.account}${t.toAccount ? ' → ' + t.toAccount : ''}` : t.type === 'expense' ? t.account : t.source}
-          </span>
+          {/* Your note takes the account's place (the account moves under the time), so the row stays two lines. */}
+          {note ? (
+            <button type="button" className={s.txNote} onClick={() => setPopover('note')} title={`${note} · click to edit`}>
+              {note}
+            </button>
+          ) : (
+            <span className={s.ellipsis}>{where}</span>
+          )}
         </div>
+        {popover === 'note' && (
+          <NoteEditor
+            t={t}
+            note={note ?? ''}
+            onSave={text => {
+              setNote(t.id, text);
+              setPopover(null);
+            }}
+          />
+        )}
         {picking && (
           <Picker
             income={t}
@@ -620,7 +638,10 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>
         <span style={{ fontSize: 15, fontWeight: 600, color: amount.ink }}>{amount.text}</span>
         {amount.note && <span style={{ fontSize: 13, fontWeight: 600, color: C.accent800 }}>{amount.note}</span>}
-        <span style={{ fontSize: 13, color: C.textMuted }}>{t.time}</span>
+        <span style={{ fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>
+          {t.time}
+          {note && where ? ` · ${where}` : ''}
+        </span>
       </div>
       <div style={{ position: 'relative', flex: 'none' }}>
         <button
@@ -688,6 +709,44 @@ function Picker({ income, expenses, onPick }: { income: TxView; expenses: TxView
         ))}
       </div>
     </div>
+  );
+}
+
+/** Your own remark on a transaction: what it was for, the occasion. Saving it empty removes it. */
+function NoteEditor({ t, note, onSave }: { t: TxView; note: string; onSave: (note: string) => void }) {
+  const [text, setText] = useState(note);
+  return (
+    <form
+      className={s.picker}
+      role="dialog"
+      aria-label={`Note on ${t.title}`}
+      onSubmit={e => {
+        e.preventDefault();
+        onSave(text);
+      }}
+      style={{ padding: 12, gap: 10 }}
+    >
+      <span style={{ fontSize: 13, color: C.textMuted }}>What was it for? It shows under the name, and search finds it.</span>
+      <input
+        autoFocus
+        className={s.input}
+        maxLength={200}
+        value={text}
+        onChange={e => setText(e.target.value)}
+        placeholder="e.g. Mum's birthday dinner"
+        aria-label="Note"
+      />
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+        {note && (
+          <button type="button" className={s.textBtnSm} onClick={() => onSave('')} style={{ marginRight: 'auto', color: C.redInk }}>
+            Remove note
+          </button>
+        )}
+        <button type="submit" className={s.btnPrimarySm} disabled={text.trim() === note}>
+          Save
+        </button>
+      </div>
+    </form>
   );
 }
 

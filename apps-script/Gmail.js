@@ -322,13 +322,14 @@ function mergeCardDuplicates_() {
 
 /**
  * Drop each pair's `drop` row and keep `keep`. Your category fix (unless `keepCategory`), reimbursement link or
- * share on the dropped row moves to the kept one, and the dropped email is noted in `skipped` so it isn't imported again.
+ * share or note on the dropped row moves to the kept one, and the dropped email is noted in `skipped` so it isn't imported again.
  */
 function dropDuplicates_(pairs) {
   if (!pairs.length) return 0;
   const now = new Date().toISOString();
   const overrides = readTable_('overrides');
   const shares = readTable_('shares');
+  const notes = readTable_('notes');
   const links = readTable_('links');
   const removed = readTable_('removed');
   const installments = readTable_('installments');
@@ -339,6 +340,8 @@ function dropDuplicates_(pairs) {
     if (ov && !p.keepCategory && !overrides.some(o => o.tx_id === to)) upsertRow_('overrides', 'tx_id', { tx_id: to, category: ov.category, updated_at: now });
     const sh = shares.filter(x => x.tx_id === from)[0];
     if (sh && !shares.some(x => x.tx_id === to)) upsertRow_('shares', 'tx_id', { tx_id: to, ratio: sh.ratio, updated_at: now });
+    const note = notes.filter(x => x.tx_id === from)[0];
+    if (note && !notes.some(x => x.tx_id === to)) upsertRow_('notes', 'tx_id', { tx_id: to, note: note.note, updated_at: now });
     links.filter(l => l.expense_id === from).forEach(l => upsertRow_('links', 'income_id', { income_id: l.income_id, expense_id: to, updated_at: now }));
     links.filter(l => l.income_id === from).forEach(l => upsertRow_('links', 'income_id', { income_id: to, expense_id: l.expense_id, updated_at: now }));
     if (removed.some(x => x.tx_id === from) && !removed.some(x => x.tx_id === to)) upsertRow_('removed', 'tx_id', { tx_id: to, removed_at: now });
@@ -349,6 +352,7 @@ function dropDuplicates_(pairs) {
   deleteWhere_('transactions', 'id', gone);
   deleteWhere_('overrides', 'tx_id', gone);
   deleteWhere_('shares', 'tx_id', gone);
+  deleteWhere_('notes', 'tx_id', gone);
   deleteWhere_('links', 'income_id', gone);
   deleteWhere_('removed', 'tx_id', gone);
   deleteWhere_('installments', 'tx_id', gone);

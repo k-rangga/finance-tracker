@@ -108,7 +108,7 @@
 @media (max-width: 759px) {
   .main {
     /* Room for the tab bar so the last card isn't hidden behind it. */
-    padding: 20px 16px calc(104px + env(safe-area-inset-bottom));
+    padding: 16px 16px calc(120px + env(safe-area-inset-bottom));
   }
 }
 
@@ -208,7 +208,8 @@
   justify-content: center;
   gap: 4px;
   /* Labels shrink a little on narrow phones so "Categories" still fits its fifth of the bar. */
-  font-size: clamp(11px, 3vw, 13px);
+  font-size: clamp(10.5px, 2.9vw, 13px);
+  letter-spacing: -0.01em;
   font-weight: 600;
   color: var(--text-muted);
   background: transparent;
@@ -257,6 +258,27 @@
   align-items: baseline;
   flex-wrap: wrap;
   gap: 2px 12px;
+}
+.headerActions {
+  display: flex;
+  gap: 8px;
+}
+/* Phones: title on the left, sync and settings as two icons on the right, on one line. */
+@media (max-width: 759px) {
+  .header {
+    flex-wrap: nowrap;
+    align-items: flex-start;
+  }
+  .headerTitle {
+    min-width: 0;
+    flex: 1;
+  }
+  .headerActions button.chip {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    justify-content: center;
+  }
 }
 .h1 {
   font-weight: 600;
@@ -885,6 +907,25 @@ textarea.input {
   .picker {
     left: -52px;
   }
+}
+
+/* Your note beside the category, in place of the account: plain secondary text, one line, click to edit. */
+.txNote {
+  /* Only the room the category pill leaves, so the pill never gets squeezed. */
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 13px;
+  color: var(--text-soft);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.txNote:hover {
+  text-decoration: underline;
 }
 
 /* ---------- My share ---------- */

@@ -21,6 +21,8 @@ type Ctx = UserData & {
   setLink: (incomeId: string, expenseId: string | null) => void;
   /** Your share of an expense as a fraction (0–1); `null` counts the full amount. */
   setShare: (txId: string, ratio: number | null) => void;
+  /** Your remark on a transaction; empty removes it. */
+  setNote: (txId: string, note: string) => void;
   /** Hide a transaction everywhere (`true`) or bring it back. */
   setRemoved: (txId: string, removed: boolean) => void;
   /** Pay a purchase in installments; `null` makes it one purchase again. */
@@ -101,6 +103,17 @@ export function DataProvider({ backend, children, loading, failed }: { backend: 
           return { ...d, shares };
         });
         write(backend.setShare(txId, ratio));
+      },
+      setNote: (txId, note) => {
+        const text = note.trim();
+        setData(d => {
+          if (!d) return d;
+          const notes = { ...d.notes };
+          if (text) notes[txId] = text;
+          else delete notes[txId];
+          return { ...d, notes };
+        });
+        write(backend.setNote(txId, text));
       },
       setRemoved: (txId, removed) => {
         setData(d => d && { ...d, removed: removed ? [...d.removed.filter(id => id !== txId), txId] : d.removed.filter(id => id !== txId) });

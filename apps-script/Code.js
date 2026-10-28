@@ -36,6 +36,7 @@ const ACTIONS = {
     recat: overrides_(),
     links: links_(),
     shares: shares_(),
+    notes: notes_(),
     removed: readTable_('removed').map(r => r.tx_id),
     installments: installments_(),
     trades: readTable_('trades'),
@@ -64,6 +65,12 @@ const ACTIONS = {
   setShare: p => {
     if (p.ratio == null) deleteRow_('shares', 'tx_id', p.txId);
     else upsertRow_('shares', 'tx_id', { tx_id: p.txId, ratio: p.ratio, updated_at: new Date().toISOString() });
+    return true;
+  },
+  setNote: p => {
+    const note = String(p.note || '').trim().slice(0, 500);
+    if (!note) deleteRow_('notes', 'tx_id', p.txId);
+    else upsertRow_('notes', 'tx_id', { tx_id: p.txId, note: note, updated_at: new Date().toISOString() });
     return true;
   },
   setInstallment: p => {
@@ -150,6 +157,15 @@ function installments_() {
     } catch (e) {
       // A row edited by hand into something unreadable is skipped rather than breaking the load.
     }
+  });
+  return out;
+}
+
+/** { txId: note } */
+function notes_() {
+  const out = {};
+  readTable_('notes').forEach(r => {
+    if (r.note) out[r.tx_id] = String(r.note);
   });
   return out;
 }

@@ -22,6 +22,8 @@ export type UserData = {
   links: Record<string, string>;
   /** Your share of an expense as a fraction of its amount: { txId: 0–1 }. */
   shares: Record<string, number>;
+  /** Your remarks on transactions: { txId: note }. */
+  notes: Record<string, string>;
   /** Ids of transactions you removed by hand. */
   removed: string[];
   /** Card purchases paid in installments, by transaction id. */
@@ -47,6 +49,8 @@ export type Backend = {
   setLink(incomeId: string, expenseId: string | null): Promise<void>;
   /** `ratio: null` counts the full amount again. */
   setShare(txId: string, ratio: number | null): Promise<void>;
+  /** An empty note removes it. */
+  setNote(txId: string, note: string): Promise<void>;
   /** Hide a transaction everywhere (`true`) or bring it back. */
   setRemoved(txId: string, removed: boolean): Promise<void>;
   /** Pay a purchase in installments; `null` makes it one purchase again. */
@@ -180,6 +184,7 @@ type State = {
   recat: Record<string, string>;
   links?: Record<string, string>;
   shares?: Record<string, number>;
+  notes?: Record<string, string>;
   removed?: string[];
   installments?: Record<string, InstallmentPlan>;
   trades: TradeRow[];
@@ -200,6 +205,7 @@ export const backend: Backend = {
       recat: s.recat,
       links: s.links ?? {},
       shares: s.shares ?? {},
+      notes: s.notes ?? {},
       removed: s.removed ?? [],
       installments: s.installments ?? {},
       journal: s.trades.map(toTrade).sort((a, b) => b.d.localeCompare(a.d)),
@@ -215,6 +221,7 @@ export const backend: Backend = {
   setOverride: async (txId, category) => void (await run('setOverride', { txId, category })),
   setLink: async (incomeId, expenseId) => void (await run('setLink', { incomeId, expenseId })),
   setShare: async (txId, ratio) => void (await run('setShare', { txId, ratio })),
+  setNote: async (txId, note) => void (await run('setNote', { txId, note })),
   setRemoved: async (txId, removed) => void (await run('setRemoved', { txId, removed })),
   setInstallment: async (txId, plan) => void (await run('setInstallment', { txId, plan })),
   saveTrade: async t => void (await run('saveTrade', { trade: toRow(t) })),

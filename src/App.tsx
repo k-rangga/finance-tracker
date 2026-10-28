@@ -26,7 +26,7 @@ export type Tab = 'summary' | 'categories' | 'tx' | 'plan' | 'invest';
 const TABS: { key: Tab; label: string; short: string; icon: string }[] = [
   { key: 'summary', label: 'Summary', short: 'Summary', icon: IC.summary },
   { key: 'categories', label: 'Categories', short: 'Categories', icon: IC.categories },
-  { key: 'tx', label: 'Transactions', short: 'Activity', icon: IC.list },
+  { key: 'tx', label: 'Transactions', short: 'Transactions', icon: IC.list },
   { key: 'plan', label: 'Savings plan', short: 'Plan', icon: IC.piggy },
   { key: 'invest', label: 'Investment journal', short: 'Invest', icon: IC.trend },
 ];
@@ -212,36 +212,40 @@ export default function App() {
         <div className={s.content}>
           <header className={s.header}>
             <div className={s.headerTitle}>
-              <span className={s.mobileOnly} style={{ fontWeight: 600, fontSize: 14 }}>
-                Personal Spending Tracker
-              </span>
               <div className={s.headerLine}>
                 <h1 className={s.h1}>{current.label}</h1>
                 <span className={s.label}>
-                  Cycle {dayMonth(cycle.start)} – {dayMonth(cycle.end)} · Day {cycle.dayN} of {cycle.cycleDays}
+                  <span className={s.desktopOnly}>
+                    Cycle {dayMonth(cycle.start)} – {dayMonth(cycle.end)} ·&nbsp;
+                  </span>
+                  Day {cycle.dayN} of {cycle.cycleDays}
                 </span>
               </div>
               <span className={s.cycleProgress} role="progressbar" aria-label="Pay cycle" aria-valuemin={1} aria-valuemax={cycle.cycleDays} aria-valuenow={cycle.dayN}>
                 <span style={{ width: `${(cycle.dayN / cycle.cycleDays) * 100}%` }} />
               </span>
             </div>
-            <span className={s.badgeAccent}>
+            {/* Phones show payday in the Summary card instead. */}
+            <span className={`${s.badgeAccent} ${s.desktopOnly}`}>
               Next payday {dayLabel(cycle.next)}
               {nextNote}
             </span>
-            <button
-              type="button"
-              className={s.chip}
-              onClick={() => setGmailOpen(true)}
-              style={syncWarn ? { borderColor: 'var(--amber)', color: 'var(--amber-ink)', fontWeight: 600 } : undefined}
-              title="Gmail sync settings"
-            >
-              <Icon d={IC.refresh} size={14} />
-              {syncLabel}
-            </button>
-            <button type="button" className={`${s.chip} ${s.mobileOnly}`} onClick={() => setSettingsOpen(true)} aria-label="Settings" title="Settings">
-              <Icon d={IC.settings} size={14} />
-            </button>
+            <div className={s.headerActions}>
+              <button
+                type="button"
+                className={s.chip}
+                onClick={() => setGmailOpen(true)}
+                style={syncWarn ? { borderColor: 'var(--amber)', color: 'var(--amber-ink)', fontWeight: 600 } : undefined}
+                title={syncLabel}
+                aria-label={syncLabel}
+              >
+                <Icon d={IC.refresh} size={14} />
+                <span className={s.desktopOnly}>{syncLabel}</span>
+              </button>
+              <button type="button" className={`${s.chip} ${s.mobileOnly}`} onClick={() => setSettingsOpen(true)} aria-label="Settings" title="Settings">
+                <Icon d={IC.settings} size={14} />
+              </button>
+            </div>
           </header>
 
           {saveError && (
