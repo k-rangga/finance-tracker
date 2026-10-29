@@ -641,12 +641,13 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
     [note ? 'Edit note' : 'Add note…', () => setPopover('note')],
     ...(isExpense && !t.plan ? [[t.share != null ? 'Edit my share' : 'My share…', () => setPopover('share')] as Item] : []),
     ...(canLink && !t.reimbursesId ? [['Paid back for…', () => setPicking(true)] as Item] : []),
+    // Installments: card purchases, and shopping paid any other way (paylater, store credit).
     ...(planId
       ? ([
           ['Edit installment…', () => onPlan(planId)],
           ['Make it one purchase again', () => onUnplan(planId)],
         ] as Item[])
-      : isExpense && isCard(t.account)
+      : isExpense && (isCard(t.account) || t.cat === 'Shopping')
         ? [['Pay in installments…', () => onPlan(t.id)] as Item]
         : []),
     // A monthly payment is part of its plan; it's removed by making the purchase one purchase again.

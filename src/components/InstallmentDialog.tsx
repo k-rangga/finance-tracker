@@ -10,7 +10,7 @@ import type { TxView } from '../lib/budget';
 const MONTH_CHOICES = [3, 6, 12] as const;
 
 type Props = {
-  /** The card purchase being paid in installments. */
+  /** The purchase being paid in installments: on a card, or shopping paid another way. */
   tx: TxView;
   /** The plan it already has, when editing. */
   plan?: InstallmentPlan;
