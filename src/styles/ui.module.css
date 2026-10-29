@@ -777,6 +777,25 @@ textarea.input {
   outline: 2px solid var(--accent-500);
   outline-offset: 2px;
 }
+/* Phones: the category as coloured text (still tappable), without the pill. */
+.catText {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-soft);
+  background: none;
+  border: none;
+  padding: 2px 0;
+  cursor: pointer;
+}
+.catText:focus-visible {
+  outline: 2px solid var(--accent-500);
+  outline-offset: 2px;
+}
 .catPillText {
   overflow: hidden;
   text-overflow: ellipsis;

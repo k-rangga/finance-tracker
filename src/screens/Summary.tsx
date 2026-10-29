@@ -58,8 +58,10 @@ export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismi
     <ThisCycle cycle={cycle} budget={budget} onOpenSettings={onOpenSettings} onShowCycle={() => onShowTransactions('cycle')} onDismissBill={onDismissBill} />
   );
   const savings = <SavingsCard cycle={cycle} budget={budget} compact={phone} onMark={() => onShowTransactions('cycle', TRANSFER_CATEGORY)} />;
-  const today = <TodayCard cycle={cycle} budget={budget} onSeeAll={() => onShowTransactions('today')} />;
-  const comingUp = <ComingUpCard cycle={cycle} budget={budget} onDismissBill={onDismissBill} />;
+  const today = <TodayCard cycle={cycle} budget={budget} compact={phone} onSeeAll={() => onShowTransactions('today')} />;
+  const comingUp = (
+    <ComingUpCard cycle={cycle} budget={budget} onDismissBill={onDismissBill} limit={phone ? 1 : 4} onSeeAll={() => onShowTransactions('today')} />
+  );
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Small wins, once per cycle on this device. */}
@@ -175,8 +177,9 @@ function ThisCycle({
   const phone = useIsPhone();
   /** Phones: short amounts (Rp 4.0M) wherever a full one would wrap. */
   const fit = phone ? short : full;
-  // Everything starts collapsed.
+  // Everything starts collapsed; on phones the whole breakdown too.
   const [open, setOpen] = useState<string | null>(null);
+  const [breakdown, setBreakdown] = useState(false);
   const budgetPct = Math.round((b.budget / b.income) * 100);
 
   const txItem = (t: TxView): Item => {
@@ -262,7 +265,8 @@ function ThisCycle({
     billItems.length
       ? { id: 'due', label: 'Bills still due', value: full(b.fixedDue), items: billItems }
       : { id: 'due', label: 'No more bills before payday', items: [], quiet: true },
-    { id: 'left', label: 'Left to spend', value: full(b.budget - b.spent), items: [], strong: true },
+    // Same figure as "After bills" above: bills still due are already spoken for.
+    { id: 'left', label: 'Left after bills', value: full(Math.max(0, b.budget - b.spent - b.fixedDue)), items: [], strong: true },
   ].filter((r: Row) => r.quiet || r.strong || r.id === 'inc' || r.items.length > 0 || r.summary || r.value !== full(0));
 
   const safeShown = useCountUp(b.safeDay);
@@ -349,7 +353,14 @@ function ThisCycle({
         </div>
       </div>
       <div className={s.bleed}>
-        {rows.map(r => {
+        {phone && (
+          <button type="button" className={s.rowBtn} aria-expanded={breakdown} onClick={() => setBreakdown(!breakdown)} style={{ padding: '10px var(--pad)', minHeight: 46 }}>
+            <span style={{ fontSize: 15, fontWeight: 500, marginRight: 'auto' }}>Breakdown</span>
+            <span style={{ fontSize: 13, color: C.textMuted }}>Income, savings, bills</span>
+            <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ transform: breakdown ? 'rotate(180deg)' : 'none' }} />
+          </button>
+        )}
+        {(!phone || breakdown) && rows.map(r => {
           const has = r.items.length > 0 || !!r.summary;
           const isOpen = open === r.id && has;
           if (r.quiet)
@@ -431,6 +442,38 @@ function SavingsCard({ cycle, budget: b, compact, onMark }: { cycle: Cycle; budg
   const size = compact ? 64 : 136;
   const hole = compact ? 50 : 106;
   const pct = none ? '0%' : b.savedPct.toFixed(compact ? 0 : 1) + '%';
+  const ringStyle = (px: number) => ({
+    flex: 'none',
+    width: px,
+    height: px,
+    borderRadius: '50%',
+    background: `conic-gradient(${ring} 0deg ${deg}deg, ${C.divider} ${deg}deg 360deg)`,
+    display: 'grid',
+    placeItems: 'center',
+  });
+  // Phones: one row (small ring, saved / target, and the button when nothing is marked yet).
+  if (compact)
+    return (
+      <section className={s.sideCard} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <div role="img" aria-label={`Saved ${b.savedPct.toFixed(1)}% of income this cycle against a ${SAVINGS_TARGET_PCT}% target`} style={ringStyle(32)}>
+          <div style={{ width: 22, height: 22, borderRadius: '50%', background: C.surface }} />
+        </div>
+        <span style={{ display: 'flex', flexDirection: 'column', gap: 1, marginRight: 'auto', minWidth: 0 }}>
+          <h3 className={s.sideTitle}>Savings</h3>
+          <span style={{ fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>
+            <strong style={{ color: ink, fontWeight: 600 }}>{short(b.saved)}</strong> / {short(target)}
+            {onTarget ? ' ✓' : ''}
+          </span>
+        </span>
+        {none ? (
+          <button type="button" className={s.btnOutline} onClick={onMark} title="Set a transfer's category to Transfer (savings)" style={{ flex: 'none' }}>
+            Mark transfer
+          </button>
+        ) : (
+          <span style={{ fontSize: 15, fontWeight: 600, color: ink }}>{pct}</span>
+        )}
+      </section>
+    );
   return (
     <section className={s.sideCard}>
       <SideHead title="Savings" sub={`Target ${SAVINGS_TARGET_PCT}% of income · ${compact ? short(target) : full(target)}`} />
@@ -471,13 +514,21 @@ function SavingsCard({ cycle, budget: b, compact, onMark }: { cycle: Cycle; budg
 }
 
 /** Today's spending and income, newest first. Moves between your own accounts aren't spending, so they're only counted. */
-function TodayCard({ cycle, budget: b, onSeeAll }: { cycle: Cycle; budget: Budget; onSeeAll: () => void }) {
+function TodayCard({ cycle, budget: b, compact, onSeeAll }: { cycle: Cycle; budget: Budget; compact?: boolean; onSeeAll: () => void }) {
   const { full } = useSettings();
   const { notes } = useData();
   const all = b.txs.filter(t => t.offset === cycle.dayIdx);
   const today = all.filter(t => !t.isTransfer);
   const transfers = all.filter(t => t.isTransfer && !t.isInstallment).length;
   const spent = today.filter(t => !t.isIncome).reduce((a, t) => a + t.net, 0);
+  // Phones, nothing yet: one line instead of a card.
+  if (compact && today.length === 0)
+    return (
+      <section className={s.sideCard} style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+        <h3 className={s.sideTitle}>Today</h3>
+        <span style={{ fontSize: 14, color: C.textMuted }}>Nothing spent yet 🌿</span>
+      </section>
+    );
   return (
     <section className={s.sideCard}>
       <SideHead
@@ -517,7 +568,20 @@ function TodayCard({ cycle, budget: b, onSeeAll }: { cycle: Cycle; budget: Budge
 }
 
 /** Fixed bills expected before payday, soonest first. */
-function ComingUpCard({ cycle, budget: b, onDismissBill }: { cycle: Cycle; budget: Budget; onDismissBill: (b: Bill) => void }) {
+function ComingUpCard({
+  cycle,
+  budget: b,
+  onDismissBill,
+  limit,
+  onSeeAll,
+}: {
+  cycle: Cycle;
+  budget: Budget;
+  onDismissBill: (b: Bill) => void;
+  /** How many to list (phones: just the next one); the rest are on Transactions. */
+  limit: number;
+  onSeeAll: () => void;
+}) {
   const { full } = useSettings();
   const bills = [...b.bills].sort((x, y) => x.date.getTime() - y.date.getTime());
   return (
@@ -526,7 +590,7 @@ function ComingUpCard({ cycle, budget: b, onDismissBill }: { cycle: Cycle; budge
       {bills.length === 0 && <span style={{ fontSize: 14, color: C.textMuted }}>No more bills before payday.</span>}
       {bills.length > 0 && (
         <div className={s.sideList}>
-          {bills.slice(0, 4).map(bill => {
+          {bills.slice(0, limit).map(bill => {
             const inDays = cycle.offsetOf(bill.date) - cycle.dayIdx;
             return (
               <SideRow
@@ -541,7 +605,11 @@ function ComingUpCard({ cycle, budget: b, onDismissBill }: { cycle: Cycle; budge
           })}
         </div>
       )}
-      {bills.length > 4 && <span style={{ fontSize: 13, color: C.textMuted }}>+{bills.length - 4} more</span>}
+      {bills.length > limit && (
+        <button type="button" className={s.textBtnSm} onClick={onSeeAll} style={{ alignSelf: 'flex-start' }}>
+          +{bills.length - limit} more on Transactions →
+        </button>
+      )}
     </section>
   );
 }
@@ -790,6 +858,10 @@ function onColor(hex: string) {
   return L > 0.22 ? '#16201e' : '#ffffff';
 }
 
+/** Phones: categories under this share of spending go into one "Other" tile. */
+const OTHER_SHARE = 0.05;
+const OTHER_COLOR = '#8b8f8a';
+
 type Rect = { x: number; y: number; w: number; h: number };
 
 /** Squarified treemap: tiles for `values` (largest first) in `r`, kept as close to square as the space allows. */
@@ -845,8 +917,8 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  // Phones get a taller box so narrow tiles still have room for a name.
-  const height = width < 520 ? 360 : 340;
+  // Phones: a shorter box, with the small categories merged into one "Other" tile so every tile can be read.
+  const height = phone ? 230 : 340;
   /** Hovered tile and where the pointer is, for the details tooltip. */
   const [hover, setHover] = useState<{ name: string; x: number; y: number } | null>(null);
 
@@ -866,18 +938,24 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
   // Tiles strictly by size: biggest top-left down to smallest bottom-right, whatever the type.
   // Colour still tells the type: warm shades for variable spending, greens for fixed bills, darkest first.
   const tiles = useMemo(() => {
-    const cats = b.cats.filter(c => c.spent > 0).sort((x, y) => y.spent - x.spent);
+    const all = b.cats.filter(c => c.spent > 0).sort((x, y) => y.spent - x.spent);
+    const small = phone ? all.filter(c => c.spent / b.spent < OTHER_SHARE) : [];
+    // Only worth merging when there's more than one.
+    const cats = small.length > 1 ? all.filter(c => !small.includes(c)) : all;
+    const other = small.length > 1 ? sum(small.map(c => c.spent)) : 0;
     const rects = squarify(
-      cats.map(c => c.spent),
+      [...cats.map(c => c.spent), ...(other ? [other] : [])],
       { x: 0, y: 0, w: width, h: height },
     );
     const seen = { variable: 0, fixed: 0 };
-    return cats.map((c, i) => {
+    const list = cats.map((c, i) => {
       const family = TREEMAP_FAMILIES[c.type === 'fixed' ? 'Fixed bills' : 'Variable'];
       const color = family[seen[c.type]++ % family.length];
-      return { c, r: rects[i], color };
+      return { name: c.name, spent: c.spent, r: rects[i], color, others: undefined as string[] | undefined };
     });
-  }, [b.cats, width, height]);
+    if (other) list.push({ name: 'Other', spent: other, r: rects[cats.length], color: OTHER_COLOR, others: small.map(c => c.name) });
+    return list;
+  }, [b.cats, b.spent, phone, width, height]);
   // Over or near their limit, worst first, at most three.
   const attention = b.cats
     .filter(c => c.status.key !== 'ok')
@@ -897,9 +975,9 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
       </div>
       <div ref={box} data-own-gestures className={s.treemap} style={{ height: tiles.length ? height : 120 }} onMouseLeave={() => setHover(null)}>
         {!tiles.length && <span style={{ margin: 'auto', fontSize: 14, color: C.textMuted }}>Nothing spent yet this cycle.</span>}
-        {tiles.map(({ c, r, color }) => {
+        {tiles.map(({ name, spent, r, color, others }) => {
           if (!r) return null;
-          const pct = (c.spent / b.spent) * 100;
+          const pct = (spent / b.spent) * 100;
           const ink = onColor(color);
           // Label size follows the tile: big tiles read from across the room, small ones keep what fits.
           const side = Math.min(r.w, r.h);
@@ -908,15 +986,17 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
           const tiny = !fits && side >= 24 && r.w >= 44;
           return (
             <button
-              key={c.name}
+              key={name}
               type="button"
               className={s.tile}
-              onClick={() => onOpenCategory(c.name)}
+              onClick={() => onOpenCategory(others ? '' : name)}
               onMouseMove={e => {
+                if (others) return;
                 const box2 = box.current!.getBoundingClientRect();
-                setHover({ name: c.name, x: e.clientX - box2.left, y: e.clientY - box2.top });
+                setHover({ name, x: e.clientX - box2.left, y: e.clientY - box2.top });
               }}
-              aria-label={`${c.name}: ${full(c.spent)}, ${pct.toFixed(1)}% of spending. Open in Categories`}
+              title={others?.join(', ')}
+              aria-label={`${others ? 'Other (' + others.join(', ') + ')' : name}: ${full(spent)}, ${pct.toFixed(1)}% of spending. Open in Categories`}
               style={{
                 left: r.x,
                 top: r.y,
@@ -924,14 +1004,14 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
                 height: r.h,
                 background: color,
                 color: ink,
-                opacity: hover && hover.name !== c.name ? 0.55 : 1,
+                opacity: hover && hover.name !== name ? 0.55 : 1,
                 padding: big ? '12px 14px' : '8px 10px',
               }}
             >
               {(fits || tiny) && (
                 <>
                   <span className={s.tileName} style={{ fontSize: big ? 16 : fits && side >= 70 ? 14 : 12 }}>
-                    {c.name}
+                    {name}
                   </span>
                   <span style={{ fontSize: big ? 22 : fits && side >= 70 ? 16 : 12, fontWeight: 600, lineHeight: 1.15, opacity: 0.92 }}>{pct.toFixed(1)}%</span>
                 </>
@@ -964,7 +1044,7 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
             </span>
           ))}
         </span>
-        <span style={{ color: C.textMuted }}>{phone ? 'Tile size = share of spending · tap to open' : 'Tile size = share of spending · hover for details · click to open'}</span>
+        {!phone && <span style={{ color: C.textMuted }}>Tile size = share of spending · hover for details · click to open</span>}
       </div>
       {/* Only what needs a look; the full list lives on Categories. */}
       <div className={s.bleed} style={{ marginTop: 4 }}>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import s from '../styles/ui.module.css';
 import { DismissBill, DueChip, IconChip } from '../components/ui';
 import { Logo } from '../components/Logo';
@@ -12,6 +12,7 @@ import { dayAmount, dayTotalLabel, iconChip, inDayTotal, type Budget, type TxVie
 import type { Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth, parseISO, sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
+import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
 import { CATEGORIES, categoryByName, categoryLabel, CC_PAYMENT_CATEGORY, OTHER_CATEGORIES } from '../data/categories';
 import { canDismissBill, isCard, merchantKey, type Bill } from '../data/transactions';
@@ -42,6 +43,9 @@ type Props = {
 
 type Popover = 'link' | 'share' | 'cat' | 'more' | 'note';
 
+/** Square icon button in the phone filter row. */
+const iconPill = { flex: 'none', width: 44, height: 44, minHeight: 44, padding: 0, display: 'grid', placeItems: 'center' } as const;
+
 export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, setFilter, onRecat, onLink, onShare, onDismissBill }: Props) {
   const { full, settings, update } = useSettings();
   /** The row with an open popover: an income's "paid back for" picker or an expense's "my share" editor. */
@@ -61,6 +65,10 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   /** What just changed, with a way to take it back, for a few seconds. */
   const [toast, setToast] = useState<{ text: string; action: string; run: () => void } | null>(null);
   const [showRemoved, setShowRemoved] = useState(false);
+  const phone = useIsPhone();
+  /** Phones: search sits behind an icon, and the recap is folded. */
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [recapOpen, setRecapOpen] = useState(false);
   /** Height of the pinned bar, so day headings pin just below it. */
   const bar = useRef<HTMLDivElement>(null);
   const [barH, setBarH] = useState(0);
@@ -155,14 +163,44 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
     .filter(([, v]) => v > 0)
     .sort((x, y) => y[1] - x[1]);
   const bills = budget.bills.filter(b => !cat || b.category === cat);
+  /** The account most spending comes from: phones only name the account on rows paid from another one. */
+  const usualAccount = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const t of allTxs) if (t.type === 'expense') n.set(t.account, (n.get(t.account) ?? 0) + 1);
+    return [...n].sort((x, y) => y[1] - x[1])[0]?.[0];
+  }, [allTxs]);
+  const fromTo = (a: Date, b: Date) =>
+    // Phones: "26–29 Oct" when both ends share a month.
+    phone && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear() ? `${a.getDate()}–${dayMonth(b)}` : `${dayMonth(a)} – ${dayMonth(b)}`;
   const removedHere = removedTxs.filter(t => t.offset >= lo && t.offset <= hi);
+
+  const recap = (
+    <Recap
+      bare={phone}
+      rangeLabel={rangeLabel}
+      count={inRange.length}
+      figures={[
+        ['Income', income, C.accent800],
+        ['Reimbursed', paidBack, C.text],
+        ['Card bills paid', cardBills, C.text],
+        ['Saved', saved, C.text],
+        ['Invested', invested, C.text],
+        ['Moved between your accounts', moved, C.textMuted],
+      ]}
+      spent={out}
+      transfers={transferCount}
+      byCat={byCat}
+      cat={cat}
+      onPickCat={c => setFilter({ ...filter, cat: c === cat ? '' : c })}
+    />
+  );
 
   return (
     <div className={s.splitGrid} style={{ ['--bar-h' as string]: barH + 'px' }}>
       <div className={s.splitMain}>
         {/* Dates, search and totals stay pinned while you scroll the list. */}
         <div ref={bar} className={s.stickyBar}>
-          <div style={{ position: 'relative', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ position: 'relative', display: 'flex', flexWrap: phone ? 'nowrap' : 'wrap', alignItems: 'center', gap: 8 }}>
             <button
               type="button"
               className={s.pillActive}
@@ -170,34 +208,65 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
               aria-haspopup="dialog"
               aria-expanded={calOpen}
               onClick={() => setCalOpen(!calOpen)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: 'none', whiteSpace: 'nowrap', paddingInline: 16 }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: 'none', whiteSpace: 'nowrap', paddingInline: phone ? 12 : 16 }}
             >
               <Icon d={IC.calendar} size={16} />
-              {from === to ? dayMonth(parseISO(from)) : `${dayMonth(parseISO(from))} – ${dayMonth(parseISO(to))}`}
+              {from === to ? dayMonth(parseISO(from)) : fromTo(parseISO(from), parseISO(to))}
               <Icon d={IC.chevDown} size={14} style={{ transform: calOpen ? 'rotate(180deg)' : undefined }} />
             </button>
-            <button
-              type="button"
-              className={filter.hideTransfers ? s.pillActive : s.pill}
-              aria-pressed={!!filter.hideTransfers}
-              onClick={() => setFilter({ ...filter, hideTransfers: !filter.hideTransfers })}
-              title="Transfers between your own accounts aren't spending"
-              style={{ marginLeft: 'auto', flex: 'none', whiteSpace: 'nowrap', minHeight: 44, paddingInline: 14 }}
-            >
-              {filter.hideTransfers ? 'Transfers hidden' : 'Hide transfers'}
-            </button>
+            {!phone && (
+              <button
+                type="button"
+                className={filter.hideTransfers ? s.pillActive : s.pill}
+                aria-pressed={!!filter.hideTransfers}
+                onClick={() => setFilter({ ...filter, hideTransfers: !filter.hideTransfers })}
+                title="Transfers between your own accounts aren't spending"
+                style={{ marginLeft: 'auto', flex: 'none', whiteSpace: 'nowrap', minHeight: 44, paddingInline: 14 }}
+              >
+                {filter.hideTransfers ? 'Transfers hidden' : 'Hide transfers'}
+              </button>
+            )}
             <Select
               value={cat}
               onChange={v => setFilter({ ...filter, cat: v })}
               ariaLabel="Filter by category"
               align="right"
               options={[
-                { value: '', label: 'All categories' },
+                { value: '', label: phone ? 'All' : 'All categories' },
                 ...CATEGORIES.map(c => ({ value: c.name, label: c.name, dot: c.color, group: 'Spending' })),
                 ...[...OTHER_CATEGORIES, CC_PAYMENT_CATEGORY].map(c => ({ value: c, label: categoryLabel(c), group: 'Not spending' })),
               ]}
-              style={{ width: 'auto', minWidth: 0, maxWidth: 220, borderRadius: 8, fontSize: 14, padding: '9px 40px 9px 16px', minHeight: 44 }}
+              style={{ width: 'auto', minWidth: 0, maxWidth: phone ? 140 : 220, borderRadius: 8, fontSize: 14, padding: phone ? '9px 34px 9px 12px' : '9px 40px 9px 16px', minHeight: 44 }}
             />
+            {/* Phones: search and "hide transfers" as icons on the same row. */}
+            {phone && (
+              <>
+                <button
+                  type="button"
+                  className={searchOpen || q ? s.pillActive : s.pill}
+                  aria-label="Search transactions"
+                  aria-expanded={searchOpen || !!q}
+                  onClick={() => {
+                    if (searchOpen || q) setFilter({ ...filter, q: '' });
+                    setSearchOpen(!(searchOpen || q));
+                  }}
+                  style={{ marginLeft: 'auto', ...iconPill }}
+                >
+                  <Icon d={searchOpen || q ? IC.close : IC.search} size={17} />
+                </button>
+                <button
+                  type="button"
+                  className={filter.hideTransfers ? s.pillActive : s.pill}
+                  aria-pressed={!!filter.hideTransfers}
+                  aria-label="Hide transfers between your accounts"
+                  title={filter.hideTransfers ? 'Transfers hidden' : 'Hide transfers'}
+                  onClick={() => setFilter({ ...filter, hideTransfers: !filter.hideTransfers })}
+                  style={iconPill}
+                >
+                  <Icon d={IC.transfer} size={17} />
+                </button>
+              </>
+            )}
             {calOpen && (
               <DateRangePicker
                 from={from}
@@ -210,23 +279,29 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
               />
             )}
           </div>
-          <div style={{ display: 'flex' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-              <Icon d={IC.search} size={16} color={C.textMuted} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-              <input
-                className={s.input}
-                type="search"
-                value={q}
-                onChange={e => setFilter({ ...filter, q: e.target.value })}
-                placeholder="Search merchant, category or note"
-                aria-label="Search transactions"
-                style={{ borderRadius: 8, paddingLeft: 42, fontSize: 14 }}
-              />
+          {(!phone || searchOpen || q) && (
+            <div style={{ display: 'flex' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+                <Icon d={IC.search} size={16} color={C.textMuted} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                <input
+                  className={s.input}
+                  type="search"
+                  value={q}
+                  onChange={e => setFilter({ ...filter, q: e.target.value })}
+                  placeholder="Search merchant, category or note"
+                  aria-label="Search transactions"
+                  autoFocus={phone}
+                  style={{ borderRadius: 8, paddingLeft: 42, fontSize: 14 }}
+                />
+              </div>
             </div>
-          </div>
+          )}
           {/* Narrow screens: the recap as one short line (wide screens have the recap panel instead). */}
           <div className={s.txSummaryLine} aria-live="polite">
-            <strong style={{ color: C.text, fontWeight: 600 }}>{full(out)} spent</strong> · {rangeLabel} · {inRange.length} {inRange.length === 1 ? 'transaction' : 'transactions'}
+            <strong style={{ color: C.text, fontWeight: 600 }}>{full(out)} spent</strong>
+            {/* Phones: the date chip already says the dates. */}
+            {phone ? '' : ` · ${rangeLabel}`} · {inRange.length} {inRange.length === 1 ? 'transaction' : 'transactions'}
+            {filter.hideTransfers && phone ? ' · transfers hidden' : ''}
           </div>
         </div>
 
@@ -262,6 +337,8 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
                   onPlan={setPlanFor}
                   onUnplan={unplan}
                   expenses={expenses}
+                  compact={phone}
+                  usualAccount={usualAccount}
                   onNewCategory={name => {
                     setOpen(null);
                     setCreating({ name, tx: t });
@@ -309,7 +386,9 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
             const inDays = cycle.offsetOf(b.date) - cycle.dayIdx;
             return (
               <div key={`${b.title}|${b.amount}|${b.date.getTime()}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px' }}>
-                <IconChip d={IC.calendar} bg={ic.bg} ink={ic.ink} />
+                <span className={s.rowIcon}>
+                  <IconChip d={IC.calendar} bg={ic.bg} ink={ic.ink} />
+                </span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginRight: 'auto', minWidth: 0 }}>
                   <span className={s.ellipsis} style={{ fontSize: 15, fontWeight: 600 }}>
                     {tidyName(b.title)}
@@ -326,23 +405,25 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
           })}
         </section>
       </div>
-      <Recap
-        rangeLabel={rangeLabel}
-        count={inRange.length}
-        figures={[
-          ['Income', income, C.accent800],
-          ['Reimbursed', paidBack, C.text],
-          ['Card bills paid', cardBills, C.text],
-          ['Saved', saved, C.text],
-          ['Invested', invested, C.text],
-          ['Moved between your accounts', moved, C.textMuted],
-        ]}
-        spent={out}
-        transfers={transferCount}
-        byCat={byCat}
-        cat={cat}
-        onPickCat={c => setFilter({ ...filter, cat: c === cat ? '' : c })}
-      />
+      {phone ? (
+        // Phones: folded under one row; the total is already in the line above the list.
+        <section className={s.splitSide}>
+          <button type="button" className={s.rowBtn} aria-expanded={recapOpen} onClick={() => setRecapOpen(!recapOpen)} style={{ padding: '14px 16px', minHeight: 48 }}>
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', textAlign: 'left' }}>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>Recap</span>
+              <span style={{ fontSize: 13, color: C.textMuted }}>Totals and spending by category</span>
+            </span>
+            <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ transform: recapOpen ? 'rotate(180deg)' : 'none' }} />
+          </button>
+          {recapOpen && (
+            <div className="fade-in" style={{ borderTop: `1px solid ${C.divider}` }}>
+              {recap}
+            </div>
+          )}
+        </section>
+      ) : (
+        recap
+      )}
       {toast && (
         <div className={s.toast} role="status">
           <span style={{ marginRight: 'auto', minWidth: 0 }}>{toast.text}</span>
@@ -393,6 +474,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
  * when it isn't zero, then spending by category (click one to filter the list to it).
  */
 function Recap({
+  bare,
   rangeLabel,
   count,
   spent,
@@ -410,40 +492,49 @@ function Recap({
   byCat: [string, number][];
   cat: string;
   onPickCat: (cat: string) => void;
+  /** Phones: inside the Recap fold, without its own title and total. */
+  bare?: boolean;
 }) {
   const { full } = useSettings();
   const total = sum(byCat.map(([, v]) => v));
+  const hasFigures = figures.some(([, v]) => v > 0) || transfers > 0;
   return (
-    <aside className={s.splitSide} aria-label="Recap of these dates">
-      <section className={s.sideCard}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <h3 className={s.sideTitle}>Recap</h3>
-          <span style={{ fontSize: 13, color: C.textMuted }}>
-            {rangeLabel} · {count} {count === 1 ? 'transaction' : 'transactions'}
-          </span>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span style={{ fontSize: 13, color: C.textMuted }}>Spent</span>
-          <span style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.01em' }}>{full(spent)}</span>
-        </div>
-        {figures.some(([, v]) => v > 0) && (
-          <div className={s.sideList} style={{ gap: 8 }}>
-            {figures
-              .filter(([, v]) => v > 0)
-              .map(([label, v, ink]) => (
-                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14 }}>
-                  <span style={{ color: C.textSoft }}>{label}</span>
-                  <span style={{ fontWeight: 500, color: ink, whiteSpace: 'nowrap' }}>{full(v)}</span>
-                </div>
-              ))}
-          </div>
-        )}
-        {transfers > 0 && (
-          <span style={{ fontSize: 13, color: C.textMuted }}>
-            {transfers} {transfers === 1 ? 'transfer' : 'transfers'} aren't counted as spending.
-          </span>
-        )}
-      </section>
+    <aside className={bare ? undefined : s.splitSide} aria-label="Recap of these dates">
+      {(!bare || hasFigures) && (
+        <section className={s.sideCard}>
+          {!bare && (
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <h3 className={s.sideTitle}>Recap</h3>
+                <span style={{ fontSize: 13, color: C.textMuted }}>
+                  {rangeLabel} · {count} {count === 1 ? 'transaction' : 'transactions'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ fontSize: 13, color: C.textMuted }}>Spent</span>
+                <span style={{ fontSize: 26, fontWeight: 600, letterSpacing: '-0.01em' }}>{full(spent)}</span>
+              </div>
+            </>
+          )}
+          {figures.some(([, v]) => v > 0) && (
+            <div className={s.sideList} style={{ gap: 8 }}>
+              {figures
+                .filter(([, v]) => v > 0)
+                .map(([label, v, ink]) => (
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14 }}>
+                    <span style={{ color: C.textSoft }}>{label}</span>
+                    <span style={{ fontWeight: 500, color: ink, whiteSpace: 'nowrap' }}>{full(v)}</span>
+                  </div>
+                ))}
+            </div>
+          )}
+          {transfers > 0 && (
+            <span style={{ fontSize: 13, color: C.textMuted }}>
+              {transfers} {transfers === 1 ? 'transfer' : 'transfers'} aren't counted as spending.
+            </span>
+          )}
+        </section>
+      )}
       {byCat.length > 0 && (
         <section className={s.sideCard}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -493,9 +584,12 @@ type RowProps = {
   expenses: TxView[];
   popover: Popover | null;
   setPopover: (kind: Popover | null) => void;
+  /** Phones: category as plain text, the account only when it isn't the usual one, and tapping the row opens its menu. */
+  compact?: boolean;
+  usualAccount?: string;
 };
 
-function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewCategory, expenses, popover, setPopover }: RowProps) {
+function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewCategory, expenses, popover, setPopover, compact, usualAccount }: RowProps) {
   const { installments, notes, setNote } = useData();
   const { full } = useSettings();
   const note = notes[t.id];
@@ -522,7 +616,8 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
   }, [popover, setPopover]);
 
   /** Where the money went from and to: the account for spending, the flow for a transfer, the source for income. */
-  const where = t.isTransfer && !t.isCcPayment ? `${t.account}${t.toAccount ? ' → ' + t.toAccount : ''}` : t.type === 'expense' ? t.account : t.source;
+  const fullWhere = t.isTransfer && !t.isCcPayment ? `${t.account}${t.toAccount ? ' → ' + t.toAccount : ''}` : t.type === 'expense' ? t.account : t.source;
+  const where = compact && t.type === 'expense' && t.account === usualAccount ? '' : fullWhere;
   const paidBy = t.paidBackBy.join(', ');
   const shareNote = t.share != null ? `your share of ${full(t.amount)}` : '';
   const amount = t.isIncome
@@ -559,7 +654,13 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
   ];
 
   return (
-    <div ref={row} className={s.hoverRow} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px' }}>
+    <div
+      ref={row}
+      className={s.hoverRow}
+      // Phones: tap anywhere that isn't a control to open the row's menu.
+      onClick={e => compact && !(e.target as Element).closest('button, input, a, form, [role=dialog], [role=menu], [role=listbox]') && setPopover(popover === 'more' ? null : 'more')}
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: compact ? '10px 16px' : '8px 18px', cursor: compact ? 'pointer' : undefined }}
+    >
       <span className={s.rowIcon}>
         <IconChip d={c ? c.icon : t.isCcPayment || t.isInstallment ? IC.card : t.isInvestment ? IC.trend : t.isSavings ? IC.piggy : t.isTransfer ? IC.transfer : IC.coins} bg={ic.bg} ink={ic.ink} />
       </span>
@@ -587,7 +688,7 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
               <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
             </button>
           ) : (
-            <CategoryButton t={t} open={popover === 'cat'} onToggle={() => setPopover(popover === 'cat' ? null : 'cat')} />
+            <CategoryButton t={t} plain={compact} open={popover === 'cat'} onToggle={() => setPopover(popover === 'cat' ? null : 'cat')} />
           )}
           {/* Your note takes the account's place (the account moves under the time), so the row stays two lines. */}
           {note ? (
@@ -595,7 +696,7 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
               {note}
             </button>
           ) : (
-            <span className={s.ellipsis}>{where}</span>
+            where && <span className={s.ellipsis}>{where}</span>
           )}
         </div>
         {popover === 'note' && (
@@ -649,7 +750,7 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
       <div style={{ position: 'relative', flex: 'none' }}>
         <button
           type="button"
-          className={s.rowMore}
+          className={compact ? 'sr-only' : s.rowMore}
           aria-haspopup="menu"
           aria-expanded={popover === 'more'}
           aria-label={`More for ${t.title}`}
@@ -806,12 +907,12 @@ function ShareEditor({ t, onSave }: { t: TxView; onSave: (ratio: number | null) 
 }
 
 /** Category pill on a row: tint background, ink text, colour outline. Opens the searchable menu. */
-function CategoryButton({ t, open, onToggle }: { t: TxView; open: boolean; onToggle: () => void }) {
+function CategoryButton({ t, open, onToggle, plain }: { t: TxView; open: boolean; onToggle: () => void; plain?: boolean }) {
   const c = categoryByName(t.cat);
   return (
     <button
       type="button"
-      className={s.catPill}
+      className={plain ? s.catText : s.catPill}
       aria-haspopup="listbox"
       aria-expanded={open}
       aria-label={`Category for ${t.title}: ${t.cat}`}
@@ -820,7 +921,9 @@ function CategoryButton({ t, open, onToggle }: { t: TxView; open: boolean; onTog
     >
       <span aria-hidden="true" style={{ flex: 'none', width: 7, height: 7, borderRadius: '50%', background: c?.color ?? C.textFaint, marginRight: 6 }} />
       <span className={s.catPillText}>{t.cat}</span>
-      <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: `translateY(-50%)${open ? ' rotate(180deg)' : ''}`, pointerEvents: 'none' }} />
+      {!plain && (
+        <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: `translateY(-50%)${open ? ' rotate(180deg)' : ''}`, pointerEvents: 'none' }} />
+      )}
     </button>
   );
 }
