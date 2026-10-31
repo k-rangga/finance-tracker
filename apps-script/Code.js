@@ -39,6 +39,7 @@ const ACTIONS = {
     notes: notes_(),
     removed: readTable_('removed').map(r => r.tx_id),
     installments: installments_(),
+    rules: categoryRules_(),
     trades: readTable_('trades'),
     updates: readTable_('trade_updates'),
     prices: props_('prices', null),
@@ -76,6 +77,11 @@ const ACTIONS = {
   setInstallment: p => {
     if (!p.plan) deleteRow_('installments', 'tx_id', p.txId);
     else upsertRow_('installments', 'tx_id', { tx_id: p.txId, start: p.plan.start, amounts: JSON.stringify(p.plan.amounts), updated_at: new Date().toISOString() });
+    return true;
+  },
+  /** { merchant: category, or null to drop the rule }. */
+  setRules: p => {
+    setRules_(p.rules || {});
     return true;
   },
   setRemoved: p => {
@@ -129,6 +135,50 @@ function ensureSetup_() {
     mergeCardDuplicates_();
     setProps_('cardMergeV1', true);
   }
+  // Once: merchant rules move out of settings into the category_rules tab, where they can be edited in the sheet.
+  if (!props_('rulesTabV1', false)) {
+    const settings = props_('settings', null);
+    if (settings && settings.merchantRules) {
+      setRules_(settings.merchantRules);
+      delete settings.merchantRules;
+      setProps_('settings', settings);
+    }
+    setProps_('rulesTabV1', true);
+  }
+}
+
+/** { merchant as written in the tab: category }. */
+function categoryRules_() {
+  const out = {};
+  readTable_('category_rules').forEach(r => {
+    if (r.merchant && r.category) out[r.merchant] = r.category;
+  });
+  return out;
+}
+
+/** Same as merchantKey in the app: "6202-Hero Kota Wisata" → "hero kota wisata". */
+function merchantKey_(s) {
+  return String(s)
+    .toLowerCase()
+    .replace(/[^\p{L}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Set or drop rules; a row written another way ("Hero Kota Wisata") is the same merchant and is replaced. */
+function setRules_(rules) {
+  const merchants = Object.keys(rules);
+  if (!merchants.length) return;
+  const changed = {};
+  merchants.forEach(m => (changed[merchantKey_(m)] = true));
+  const stale = readColumn_('category_rules', 'merchant').filter(m => changed[merchantKey_(m)]);
+  if (stale.length) deleteWhere_('category_rules', 'merchant', stale);
+  const now = new Date().toISOString();
+  appendNew_(
+    'category_rules',
+    'merchant',
+    merchants.filter(m => rules[m]).map(m => ({ merchant: m, category: rules[m], updated_at: now })),
+  );
 }
 
 function overrides_() {

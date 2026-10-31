@@ -18,6 +18,12 @@ const TABLES = {
   removed: ['tx_id', 'removed_at'],
   /** Card purchases you turned into an installment: first payment date and each month's amount (JSON list). */
   installments: ['tx_id', 'start', 'amounts', 'updated_at'],
+  /**
+   * Merchant → category: every transaction from a merchant takes its rule's category (unless you fixed it by hand).
+   * Edit it here too (by hand or with Gemini in Sheets): the merchant may be part of the name ("tunas toyota"),
+   * the category must be one of the app's (any case).
+   */
+  category_rules: ['merchant', 'category', 'updated_at'],
   trades: [
     'id', 'market', 'ticker', 'name', 'buy_date', 'price', 'quantity', 'fee', 'style', 'conviction', 'target', 'stop',
     'catalyst', 'catalyst_date', 'thesis', 'tags', 'leverage', 'direction',

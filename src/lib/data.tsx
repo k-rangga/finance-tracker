@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { Backend, UserData } from './backend';
 import type { Settings } from './settings';
 import type { Prices, Snap, Trade, TradeUpdate } from '../screens/invest/model';
-import type { InstallmentPlan } from '../data/transactions';
+import { merchantKey, type InstallmentPlan } from '../data/transactions';
 import { getCycle } from './cycle';
 import { addDays, startOfToday } from './format';
 
@@ -27,6 +27,8 @@ type Ctx = UserData & {
   setRemoved: (txId: string, removed: boolean) => void;
   /** Pay a purchase in installments; `null` makes it one purchase again. */
   setInstallment: (txId: string, plan: InstallmentPlan | null) => void;
+  /** Set merchant rules ({ merchant: category }); `null` drops one. Kept in the category_rules tab. */
+  setRules: (rules: Record<string, string | null>) => void;
   saveTrade: (t: Trade) => void;
   saveUpdate: (u: TradeUpdate) => void;
   deleteUpdate: (id: string) => void;
@@ -128,6 +130,17 @@ export function DataProvider({ backend, children, loading, failed }: { backend: 
           return { ...d, installments };
         });
         write(backend.setInstallment(txId, plan));
+      },
+      setRules: patch => {
+        // A rule typed another way in the sheet ("Hero Kota Wisata") is the same merchant: replace it.
+        const changed = new Set(Object.keys(patch).map(merchantKey));
+        setData(d => {
+          if (!d) return d;
+          const rules = Object.fromEntries(Object.entries(d.rules).filter(([m]) => !changed.has(merchantKey(m))));
+          for (const [m, cat] of Object.entries(patch)) if (cat) rules[m] = cat;
+          return { ...d, rules };
+        });
+        write(backend.setRules(patch));
       },
       saveTrade: t => {
         setData(d => d && { ...d, journal: d.journal.some(x => x.id === t.id) ? d.journal.map(x => (x.id === t.id ? t : x)) : [t, ...d.journal] });

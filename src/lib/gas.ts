@@ -43,6 +43,7 @@ type Dev = Record<string, unknown> & {
   notes?: Record<string, string>;
   removed?: string[];
   installments?: Record<string, unknown>;
+  rules?: Record<string, string>;
   trades: Record<string, unknown>[];
   updates?: { id: string }[];
   snapshots: { day: string }[];
@@ -72,7 +73,7 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
   const gmail = { google_email: 'dev@localhost', label_name: (d.label as string) ?? null, last_synced_at: null, last_sync_status: null, last_sync_count: null };
   switch (action) {
     case 'getState':
-      return { email: 'dev@localhost', settings: d.settings ?? null, recat: d.overrides, links: d.links ?? {}, shares: d.shares ?? {}, notes: d.notes ?? {}, removed: d.removed ?? [], installments: d.installments ?? {}, trades: d.trades, updates: d.updates ?? [], prices: d.prices ?? null, snaps: d.snapshots, txRows: d.txRows ?? [], gmail };
+      return { email: 'dev@localhost', settings: d.settings ?? null, recat: d.overrides, links: d.links ?? {}, shares: d.shares ?? {}, notes: d.notes ?? {}, removed: d.removed ?? [], installments: d.installments ?? {}, rules: d.rules ?? {}, trades: d.trades, updates: d.updates ?? [], prices: d.prices ?? null, snaps: d.snapshots, txRows: d.txRows ?? [], gmail };
     case 'getImports':
       return { txRows: d.txRows ?? [], gmail };
     case 'saveSettings':
@@ -105,6 +106,14 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       const plans = (d.installments ??= {});
       if (q.plan) plans[q.txId as string] = q.plan;
       else delete plans[q.txId as string];
+      return save();
+    }
+    case 'setRules': {
+      const rules = (d.rules ??= {});
+      for (const [m, cat] of Object.entries(q.rules as Record<string, string | null>)) {
+        for (const k of Object.keys(rules)) if (k.toLowerCase() === m.toLowerCase()) delete rules[k];
+        if (cat) rules[m] = cat;
+      }
       return save();
     }
     case 'setRemoved': {

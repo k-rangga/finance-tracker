@@ -25,8 +25,6 @@ export type Settings = {
   limitOverrides: Record<string, number>;
   /** Your colours for built-in categories, by name. */
   colorOverrides: Record<string, string>;
-  /** Category you chose for a merchant, by `merchantKey`: applied to its other and future transactions. */
-  merchantRules: Record<string, string>;
   /** Predicted bills you said aren't due this cycle, by `billKey`. Older cycles' keys are dropped. */
   dismissedBills: string[];
 };
@@ -47,7 +45,6 @@ export const DEFAULT_SETTINGS: Settings = {
   customCategories: [],
   limitOverrides: {},
   colorOverrides: {},
-  merchantRules: {},
   dismissedBills: [],
 };
 

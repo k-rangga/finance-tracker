@@ -65,13 +65,13 @@ function useFlipUp<T extends HTMLElement>(style?: CSSProperties) {
 const iconPill = { flex: 'none', width: 44, height: 44, minHeight: 44, padding: 0, display: 'grid', placeItems: 'center' } as const;
 
 export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, setFilter, onRecat, onLink, onShare, onDismissBill }: Props) {
-  const { full, settings, update } = useSettings();
+  const { full } = useSettings();
   /** The row with an open popover: an income's "paid back for" picker or an expense's "my share" editor. */
   const [open, setOpen] = useState<{ id: string; kind: Popover } | null>(null);
   /** "New category" dialog, opened from a row's category menu; the new category is applied to that row. */
   const [creating, setCreating] = useState<{ name: string; tx: TxView } | null>(null);
   const [calOpen, setCalOpen] = useState(false);
-  const { installments, setInstallment, notes } = useData();
+  const { installments, setInstallment, notes, rules, setRules } = useData();
   /** The purchase whose installment plan is open in the dialog. */
   const [planFor, setPlanFor] = useState<string | null>(null);
   const planTx = planFor ? allTxs.find(x => x.id === planFor) : undefined;
@@ -112,18 +112,14 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
     const key = merchantKey(t.title);
     onRecat(t.id, t.category, to);
     if (!key) return;
-    const prev = settings.merchantRules[key];
-    update({ merchantRules: { ...settings.merchantRules, [key]: to } });
+    // The rule it replaces, however it's written in the sheet.
+    const prev = Object.entries(rules).find(([m]) => merchantKey(m) === key);
+    setRules({ [key]: to });
     const others = allTxs.filter(x => x.id !== t.id && !x.isCcPayment && merchantKey(x.title) === key).length;
     setToast({
       text: `${t.title} → ${categoryLabel(to)}` + (others ? ` for ${others} other ${others === 1 ? 'transaction' : 'transactions'} too, and future ones` : ' from now on'),
       action: 'Just this one',
-      run: () => {
-        const rules = { ...settings.merchantRules };
-        if (prev == null) delete rules[key];
-        else rules[key] = prev;
-        update({ merchantRules: rules });
-      },
+      run: () => setRules(prev ? { [prev[0]]: prev[1] } : { [key]: null }),
     });
   };
   const expenses = budget.txs.filter(t => !t.isIncome && !t.isTransfer);

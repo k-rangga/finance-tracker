@@ -1,6 +1,6 @@
 import type { Cycle } from '../lib/cycle';
 import { parseISO, type Currency } from '../lib/format';
-import { CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INTEREST_CATEGORY, INVESTMENT_CATEGORY, SAVINGS_CATEGORY, TRANSFER_CATEGORY } from './categories';
+import { CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INTEREST_CATEGORY, INVESTMENT_CATEGORY, OTHER_CATEGORIES, SAVINGS_CATEGORY, TRANSFER_CATEGORY } from './categories';
 
 export type Transaction = {
   id: string;
@@ -137,12 +137,23 @@ export const merchantKey = (title: string) =>
 /**
  * Overrides with your merchant rules filled in: a transaction you didn't fix by hand takes the category you
  * chose for its merchant. Card bill payments are never re-categorised.
+ *
+ * Rules can be typed in the sheet, so they're forgiving: a rule matches its merchant exactly, else as whole
+ * words inside the name ("tunas toyota" → "Tunas Toyota Bodyrepair", longest rule first), and the category
+ * is matched ignoring case. A rule naming a category the app doesn't have is skipped.
  */
 export function withMerchantRules(txs: Transaction[], recat: Record<string, string>, rules: Record<string, string>): Record<string, string> {
+  const names = [...CATEGORIES.map(c => c.name), ...OTHER_CATEGORIES];
+  const list = Object.entries(rules)
+    .map(([m, c]) => [merchantKey(m), names.find(n => n.toLowerCase() === c.trim().toLowerCase())] as const)
+    .filter((r): r is readonly [string, string] => !!r[0] && !!r[1])
+    .sort((a, b) => b[0].length - a[0].length);
+  const exact = new Map(list);
+  const ruleFor = (key: string) => exact.get(key) ?? list.find(([k]) => ` ${key} `.includes(` ${k} `))?.[1];
   const out: Record<string, string> = {};
   for (const t of txs) {
     if (t.id in recat || t.category === CC_PAYMENT_CATEGORY) continue;
-    const r = rules[merchantKey(t.title)];
+    const r = ruleFor(merchantKey(t.title));
     if (r && r !== t.category) out[t.id] = r;
   }
   return { ...out, ...recat };

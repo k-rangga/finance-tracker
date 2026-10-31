@@ -37,7 +37,7 @@ export default function App() {
     const t = storage.getRaw(KEYS.tab) as Tab | null;
     return t && TABS.some(x => x.key === t) ? t : 'summary';
   });
-  const { recat: fixed, links, shares, removed, installments, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email, refreshImports } = useData();
+  const { recat: fixed, links, shares, removed, installments, rules, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email, refreshImports } = useData();
   // Transactions remembers your last dates, category and search on this device.
   const [txFilter, setTxFilterState] = useState<ActivityFilter>(() => storage.get<ActivityFilter>(KEYS.txFilter, { range: 'week', cat: '', q: '' }));
   const setTxFilter = useCallback((f: ActivityFilter) => {
@@ -57,7 +57,8 @@ export default function App() {
   const imported = useMemo(() => txRows.map(r => toTransaction(r, settings.currency, settings.fxRate)), [txRows, settings.currency, settings.fxRate]);
   const removedIds = useMemo(() => new Set(removed), [removed]);
   /** Your fixes by hand, plus your merchant rules for every other transaction of those merchants. */
-  const fixedAndRules = useMemo(() => withMerchantRules(imported, fixed, settings.merchantRules), [imported, fixed, settings.merchantRules]);
+  // Categories are in the deps: a rule naming a category you just made starts to apply.
+  const fixedAndRules = useMemo(() => withMerchantRules(imported, fixed, rules), [imported, fixed, rules, settings.customCategories]);
   const kept = useMemo(() => imported.filter(t => !removedIds.has(t.id)), [imported, removedIds]);
   /** Installment purchases become monthly payments, each on its due date, in the purchase's category. */
   const payments = useMemo(() => installmentPayments(kept, installments, t => fixedAndRules[t.id] ?? t.category), [kept, installments, fixedAndRules]);
