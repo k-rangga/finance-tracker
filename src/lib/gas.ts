@@ -150,9 +150,9 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       return save();
     case 'askGemini': {
       // Stand-in for Gemini: a canned answer built from the summary, so the chat and its cards can be tried
-      // locally. Set `geminiError` in localStorage (e.g. "no_key") to see the error states.
+      // locally. Set `geminiError` in localStorage (e.g. "no_key") to see the error states, `geminiDelay` (ms) a slow answer.
       if (d.geminiError) return { error: d.geminiError, detail: 'dev' };
-      await new Promise(r => setTimeout(r, 700));
+      await new Promise(r => setTimeout(r, (d.geminiDelay as number) ?? 700));
       type Cat = { name: string; type: string; limit: number; spent: number };
       const c = q.context as { spent: number; budget: number; perDayToFinishOnBudget: number; categories: Cat[]; transactions: { merchant: string; category: string }[] };
       const vari = c.categories.filter(x => x.type === 'variable');

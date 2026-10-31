@@ -19,7 +19,7 @@ export const askGemini = (messages: ChatMessage[], context: object) =>
   run<ChatAnswer>('askGemini', { messages: messages.map(m => ({ role: m.role, text: m.text })), context });
 
 /** Newest transactions sent along; enough for a cycle, small enough to keep each question quick. */
-const MAX_TXS = 200;
+const MAX_TXS = 120;
 
 /**
  * What Gemini sees with each question: this cycle's numbers, categories (with sub-categories and last cycle at
@@ -50,14 +50,14 @@ export function chatContext({ cycle, budget: b, settings, notes, withNotes }: { 
       subs: settings.subcategories[c.name] ?? [],
     })),
     bills: b.bills.map(x => ({ title: tidyName(x.title), category: x.category, amount: r(x.amount), date: toISO(x.date) })),
+    // Only what's needed to explain spending: no account, and empty fields left out (a smaller request answers faster).
     transactions: b.txs.slice(0, MAX_TXS).map(t => ({
       id: t.id,
-      date: toISO(t.date),
+      date: toISO(t.date).slice(5),
       merchant: tidyName(t.title),
       category: t.cat,
       ...(t.sub ? { sub: t.sub } : {}),
       amount: r(t.isIncome || t.isTransfer ? t.amount : t.net),
-      account: t.account,
       ...(withNotes && notes[t.id] ? { note: notes[t.id] } : {}),
     })),
   };

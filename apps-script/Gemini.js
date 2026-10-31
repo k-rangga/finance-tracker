@@ -37,21 +37,20 @@ function askGemini_(p) {
   const body = {
     systemInstruction: { parts: [{ text: GEMINI_SYSTEM + '\n\nData (JSON):\n' + JSON.stringify(p.context || {}) }] },
     contents: messages.map(m => ({ role: m.role === 'model' ? 'model' : 'user', parts: [{ text: String(m.text || '').slice(0, 2000) }] })),
-    generationConfig: { responseMimeType: 'application/json', temperature: 0.4 },
+    // Low thinking: a budgeting answer doesn't need long reasoning, and it's what makes replies slow.
+    generationConfig: { responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 1200, thinkingConfig: { thinkingLevel: 'low' } },
   };
-  const res = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { 'x-goog-api-key': key },
-    payload: JSON.stringify(body),
-    muteHttpExceptions: true,
-  });
-  let data = null;
-  try {
-    data = JSON.parse(res.getContentText());
-  } catch (e) {
-    /* not JSON: reported below */
+  const started = Date.now();
+  let res = geminiFetch_(model, key, body);
+  let data = geminiJson_(res);
+  // A model that doesn't take a thinking level: ask again without it.
+  if (res.getResponseCode() === 400 && /thinking/i.test(JSON.stringify(data || ''))) {
+    delete body.generationConfig.thinkingConfig;
+    res = geminiFetch_(model, key, body);
+    data = geminiJson_(res);
   }
+  // Timing and token use land in the Apps Script Executions log, to see what makes a reply slow.
+  console.log('askGemini ' + model + ' ' + res.getResponseCode() + ' in ' + (Date.now() - started) + 'ms · ' + JSON.stringify((data && data.usageMetadata) || {}));
   if (res.getResponseCode() !== 200) {
     const msg = data && data.error && data.error.message ? data.error.message : 'HTTP ' + res.getResponseCode();
     return { error: 'api', detail: String(msg).slice(0, 300) };
@@ -63,10 +62,29 @@ function askGemini_(p) {
     return { error: 'blocked', detail: String(why) };
   }
   try {
-    const out = JSON.parse(text);
+    // Some models wrap JSON in a code fence even when asked not to.
+    const out = JSON.parse(text.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, ''));
     return { reply: String(out.reply || ''), actions: Array.isArray(out.actions) ? out.actions.slice(0, 5) : [] };
   } catch (e) {
     // Not the JSON we asked for: show it as a plain answer.
     return { reply: text, actions: [] };
+  }
+}
+
+function geminiFetch_(model, key, body) {
+  return UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-goog-api-key': key },
+    payload: JSON.stringify(body),
+    muteHttpExceptions: true,
+  });
+}
+
+function geminiJson_(res) {
+  try {
+    return JSON.parse(res.getContentText());
+  } catch (e) {
+    return null;
   }
 }

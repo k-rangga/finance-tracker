@@ -12,6 +12,9 @@ import { CATEGORIES, categoryByName, categoryLabel, OTHER_CATEGORIES } from '../
 import { merchantKey } from '../data/transactions';
 import { tidyName } from '../lib/format';
 
+/** Stop waiting after this long; Apps Script would still finish, but the answer is dropped. */
+const TIMEOUT_MS = 75_000;
+
 const STARTERS = ['Why am I over budget?', 'How do I finish this cycle on budget?', 'Which merchants should I cut back on?', 'Sort my Buffer transactions'];
 
 type Props = {
@@ -34,7 +37,11 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<{ kind: 'no_key' | 'api' | 'blocked' | 'network'; detail?: string } | null>(null);
+  const [problem, setProblem] = useState<{ kind: 'no_key' | 'api' | 'blocked' | 'network' | 'slow'; detail?: string } | null>(null);
+  /** Seconds waited for the current answer, shown while thinking. */
+  const [waited, setWaited] = useState(0);
+  /** The question being answered; an answer for an older one (after a timeout or New chat) is dropped. */
+  const asking = useRef(0);
   const [withNotes, setWithNotes] = useState(false);
   const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -47,16 +54,26 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
     setText('');
     setProblem(null);
     setBusy(true);
+    setWaited(0);
+    const id = ++asking.current;
+    const timeout = new Promise<'slow'>(r => setTimeout(() => r('slow'), TIMEOUT_MS));
     try {
-      const a = await askGemini(next, chatContext({ cycle, budget, settings, notes, withNotes }));
-      if ('error' in a) setProblem({ kind: a.error, detail: a.detail });
+      const a = await Promise.race([askGemini(next, chatContext({ cycle, budget, settings, notes, withNotes })), timeout]);
+      if (id !== asking.current) return;
+      if (a === 'slow') setProblem({ kind: 'slow' });
+      else if ('error' in a) setProblem({ kind: a.error, detail: a.detail });
       else setMessages([...next, { role: 'model', text: a.reply, actions: a.actions }]);
     } catch (e) {
-      setProblem({ kind: 'network', detail: e instanceof Error ? e.message : String(e) });
+      if (id === asking.current) setProblem({ kind: 'network', detail: e instanceof Error ? e.message : String(e) });
     } finally {
-      setBusy(false);
+      if (id === asking.current) setBusy(false);
     }
   };
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(() => setWaited(w => w + 1), 1000);
+    return () => clearInterval(t);
+  }, [busy]);
 
   useEffect(() => {
     if (ask) void send(ask);
@@ -82,7 +99,16 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
             <span style={{ fontSize: 12, color: C.textMuted }}>About this cycle's spending</span>
           </span>
           {messages.length > 0 && (
-            <button type="button" className={s.textBtnSm} onClick={() => (setMessages([]), setProblem(null))}>
+            <button
+              type="button"
+              className={s.textBtnSm}
+              onClick={() => {
+                asking.current++;
+                setMessages([]);
+                setProblem(null);
+                setBusy(false);
+              }}
+            >
               New chat
             </button>
           )}
@@ -118,7 +144,14 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
               </div>
             ),
           )}
-          {busy && <div className={s.chatTheirs} style={{ color: C.textMuted }}>Thinking…</div>}
+          {busy && (
+            <div className={s.chatTheirs} style={{ color: C.textMuted }}>
+              <span>
+                Thinking…{waited >= 3 ? ` ${waited}s` : ''}
+              </span>
+              {waited >= 20 && <span style={{ fontSize: 12 }}>Gemini can take up to a minute on a long question.</span>}
+            </div>
+          )}
           {problem && <Problem p={problem} onRetry={() => messages.length && send(messages[messages.length - 1].text)} />}
         </div>
 
@@ -191,6 +224,19 @@ function Problem({ p, onRetry }: { p: { kind: string; detail?: string }; onRetry
           Create an API key in Google AI Studio, then in the Apps Script editor open <strong>Project Settings → Script properties</strong> and add{' '}
           <code>GEMINI_API_KEY</code> with your key. Then ask again.
         </span>
+      </div>
+    );
+  if (p.kind === 'slow')
+    return (
+      <div className={s.chatNote}>
+        <strong>Gemini is taking too long.</strong>
+        <span>
+          Try again. If it keeps happening, switch to the faster model: in <strong>Script properties</strong> add <code>GEMINI_MODEL</code> ={' '}
+          <code>gemini-3.5-flash-lite</code>.
+        </span>
+        <button type="button" className={s.textBtnSm} onClick={onRetry} style={{ alignSelf: 'flex-start', padding: 0 }}>
+          Try again
+        </button>
       </div>
     );
   return (
