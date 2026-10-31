@@ -2138,6 +2138,51 @@ textarea.input {
   background: #fff;
 }
 
+/* ---------- Action plan (Plan) ---------- */
+.stepList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--divider);
+}
+.stepRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--divider);
+}
+.stepMark {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--accent-tint);
+  color: var(--accent-800);
+}
+.stepMark[data-done] {
+  background: var(--accent-800);
+  color: var(--surface);
+}
+@media (max-width: 759px) {
+  .stepRow {
+    flex-wrap: wrap;
+  }
+  /* Number and words on one line, the button under the words. */
+  .stepRow > span:nth-child(2) {
+    flex: 1 1 calc(100% - 42px);
+  }
+  .stepRow > button {
+    margin-left: 42px;
+  }
+}
+
 /* ---------- Monthly plan (Plan) ---------- */
 .mpTable {
   display: flex;
@@ -2147,7 +2192,7 @@ textarea.input {
 .mpHead,
 .mpCols {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 44px repeat(3, 112px);
+  grid-template-columns: minmax(120px, 1fr) 40px repeat(3, minmax(88px, 104px)) 60px;
   gap: 10px;
   align-items: baseline;
 }

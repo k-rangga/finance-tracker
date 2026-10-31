@@ -17,6 +17,20 @@ const SAVE_INK = '#3d9a88';
 const FIXED_INK = '#b4ecdf';
 const VAR_INK = '#6fd9c2';
 
+/**
+ * This cycle against last cycle by the same day (not all of last cycle, which would always look far lower early
+ * on): ▲ spending more, ▼ less. Nothing when last cycle had no spending to compare with.
+ */
+function vsLast(now: number, before: number): { text: string; ink: string } | undefined {
+  if (before <= 0) return undefined;
+  const d = ((now - before) / before) * 100;
+  if (Math.abs(d) < 5) return { text: '≈ same', ink: C.textMuted };
+  if (d < 0) return { text: `▼ ${Math.round(-d)}%`, ink: C.accent800 };
+  // Double or more reads better as times: "▲ 2.6×", not "▲ 160%".
+  const x = now / before;
+  return { text: d < 100 ? `▲ ${Math.round(d)}%` : `▲ ${x < 10 ? Math.round(x * 10) / 10 : Math.round(x)}×`, ink: C.redInk };
+}
+
 /** What a spending transaction counts for this cycle. */
 const isSpend = (t: TxView) => !t.isIncome && !t.isTransfer && t.net > 0;
 
@@ -119,6 +133,7 @@ export function MonthlyPlan({ budget: b, onOpenInvest }: { budget: Budget; onOpe
           last={lastOf(c) > 0 ? full(lastOf(c)) : '—'}
           now={c.spent > 0 ? full(c.spent) : '—'}
           nowInk={nowInk(c)}
+          vs={vsLast(c.spent, c.lastSameDays)}
           open={items.length ? open.has(key) : undefined}
           onToggle={() => toggle(key)}
           phone={phone}
@@ -144,7 +159,7 @@ export function MonthlyPlan({ budget: b, onOpenInvest }: { budget: Budget; onOpe
     <Card style={{ gap: 14 }}>
       <div className={s.cardHead}>
         <h2 className={s.h2}>Monthly plan</h2>
-        <span className={s.caption}>{full(b.income)} income · plan, last cycle and this cycle so far</span>
+        <span className={s.caption}>{full(b.income)} income · vs last compares this cycle with last cycle by the same day</span>
       </div>
 
       <div style={{ display: 'flex', height: 14, borderRadius: 999, overflow: 'hidden', gap: 3 }} aria-hidden="true">
@@ -177,6 +192,7 @@ export function MonthlyPlan({ budget: b, onOpenInvest }: { budget: Budget; onOpe
             <span>Plan</span>
             <span>Last cycle</span>
             <span>This cycle</span>
+            <span title="This cycle against last cycle by the same day">vs last</span>
           </div>
         )}
 
@@ -214,6 +230,7 @@ export function MonthlyPlan({ budget: b, onOpenInvest }: { budget: Budget; onOpe
           plan={full(ofIncome(fixedPct))}
           last={full(sum(fixed.map(lastOf)))}
           now={full(sum(fixed.map(c => c.spent)))}
+          vs={vsLast(sum(fixed.map(c => c.spent)), sum(fixed.map(c => c.lastSameDays)))}
           open={open.has('Fixed bills')}
           onToggle={() => toggle('Fixed bills')}
           phone={phone}
@@ -227,6 +244,7 @@ export function MonthlyPlan({ budget: b, onOpenInvest }: { budget: Budget; onOpe
           plan={full(ofIncome(varPct))}
           last={full(sum(vari.map(lastOf)))}
           now={full(sum(vari.map(c => c.spent)))}
+          vs={vsLast(sum(vari.map(c => c.spent)), sum(vari.map(c => c.lastSameDays)))}
           open={open.has('Everyday spending')}
           onToggle={() => toggle('Everyday spending')}
           phone={phone}
@@ -283,6 +301,7 @@ function Row({
   last,
   now,
   nowInk,
+  vs,
   open,
   onToggle,
   flag,
@@ -297,6 +316,7 @@ function Row({
   last?: string;
   now?: string;
   nowInk?: string;
+  vs?: { text: string; ink: string };
   open?: boolean;
   onToggle?: () => void;
   flag?: ReactNode;
@@ -337,6 +357,7 @@ function Row({
             {has(now) && (
               <>
                 this cycle <span style={{ color: nowInk }}>{now}</span>
+                {vs && <span style={{ color: vs.ink, fontWeight: 600 }}> {vs.text}</span>}
               </>
             )}
           </span>
@@ -356,6 +377,9 @@ function Row({
         </span>
         <span className={s.mpNum} style={{ color: nowInk, fontWeight: level === 0 ? 600 : 500 }}>
           {now ?? ''}
+        </span>
+        <span className={s.mpNum} style={{ color: vs?.ink, fontSize: 13, fontWeight: 600 }}>
+          {vs?.text ?? ''}
         </span>
       </div>
       {flag && <span style={{ paddingLeft: level * 18 + 20 }}>{flag}</span>}

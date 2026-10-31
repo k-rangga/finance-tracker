@@ -344,7 +344,7 @@ export default function App() {
             )}
             {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} onDismissBill={dismissBill} />}
             {tab === 'plan' && (
-              <SavingsPlan cycle={cycle} budget={budget} onOpenInvest={() => setTab('invest')}>
+              <SavingsPlan cycle={cycle} budget={budget} onOpenInvest={() => setTab('invest')} onShowTransactions={showTransactions}>
                 <Subscriptions budget={budget} states={subStates} txs={all} catOf={catOf} />
               </SavingsPlan>
             )}

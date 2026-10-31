@@ -133,6 +133,20 @@ export function usualDay(cycle: Cycle, b: Budget) {
   return days.length % 2 ? days[m] : (days[m - 1] + days[m]) / 2;
 }
 
+/**
+ * One status, agreeing with the daily target (Summary and Plan both show it): over budget, nothing left, your
+ * usual day against the target, or on track.
+ */
+export function cycleStatus(cycle: Cycle, b: Budget, full: (v: number) => string, short: (v: number) => string) {
+  const over = b.spent - b.budget;
+  const usual = usualDay(cycle, b);
+  if (over > 0) return { ink: C.redInk, text: `Over budget by ${full(over)}` };
+  if (b.budget - b.spent - b.fixedDue <= 0) return { ink: C.redInk, text: 'Nothing left for spending before payday' };
+  if (usual == null) return { ink: C.textMuted, text: 'Stay at or under this each day to finish on budget' };
+  if (usual > b.safeDay * 1.05) return { ink: C.amberInk, text: `Your usual day lately is ${short(usual)}, ${short(usual - b.safeDay)} more than this` };
+  return { ink: C.accent800, text: `On track · your usual day lately is ${short(usual)}` };
+}
+
 /** Days in a row, back from today, where variable spending stayed within its even daily share. */
 export function underBudgetStreak(cycle: Cycle, b: Budget) {
   const perDay = b.varBudget / cycle.cycleDays;
@@ -317,19 +331,8 @@ function ThisCycle({
   // Budget and savings both come out of income: together they can't be more than all of it.
   const plannedPct = budgetPct + SAVINGS_TARGET_PCT;
   const ending = cycle.daysLeft <= 2;
-  const usual = usualDay(cycle, b);
   const over = b.spent - b.budget;
-  // One status, agreeing with the daily target: over budget, nothing left, your usual day against the target, or on track.
-  const status =
-    over > 0
-      ? { ink: C.redInk, text: `Over budget by ${full(over)}` }
-      : left <= 0
-        ? { ink: C.redInk, text: 'Nothing left for spending before payday' }
-        : usual == null
-          ? { ink: C.textMuted, text: 'Stay at or under this each day to finish on budget' }
-          : usual > b.safeDay * 1.05
-            ? { ink: C.amberInk, text: `Your usual day lately is ${short(usual)}, ${short(usual - b.safeDay)} more than this` }
-            : { ink: C.accent800, text: `On track · your usual day lately is ${short(usual)}` };
+  const status = cycleStatus(cycle, b, full, short);
   // The budget bar: spent, bills still due, what's left. Over budget, the spent part fills it in red.
   const scale = Math.max(b.budget, b.spent + b.fixedDue, 1);
   const usedPct = b.budget ? Math.round((b.spent / b.budget) * 100) : 0;
