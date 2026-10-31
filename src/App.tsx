@@ -18,6 +18,7 @@ import { Categories } from './screens/Categories';
 import { Activity, type ActivityFilter } from './screens/Activity';
 import { SavingsPlan } from './screens/SavingsPlan';
 import { Invest } from './screens/invest/Invest';
+import { Chat } from './components/Chat';
 import { PULL_TO_SYNC, usePageGestures } from './lib/gestures';
 import { syncNow } from './lib/gmail';
 
@@ -49,6 +50,8 @@ export default function App() {
   /** Create (no name) or edit one of your categories; opened from Settings or a Categories row. */
   const [catDialog, setCatDialog] = useState<{ editing?: string } | null>(null);
   const [gmailOpen, setGmailOpen] = useState(false);
+  /** Ask Gemini panel; `ask` is a question to send as it opens. */
+  const [chat, setChat] = useState<{ ask?: string } | null>(null);
   const { settings, update } = useSettings();
 
   const today = useMemo(startOfToday, []);
@@ -252,6 +255,10 @@ export default function App() {
               {nextNote}
             </span>
             <div className={s.headerActions}>
+              <button type="button" className={s.chip} onClick={() => setChat({})} aria-label="Ask Gemini" title="Ask Gemini about your spending">
+                <Icon d={IC.sparkle} size={14} />
+                <span className={s.desktopOnly}>Ask Gemini</span>
+              </button>
               <button
                 type="button"
                 className={s.chip}
@@ -300,6 +307,7 @@ export default function App() {
                 onOpenCategory={showCategory}
                 onOpenSettings={() => setSettingsOpen(true)}
                 onDismissBill={dismissBill}
+                onAsk={ask => setChat({ ask })}
                 onShowTransactions={(range, cat = '') => {
                   setTxFilter({ range, cat, q: '' });
                   setTab('tx');
@@ -332,6 +340,7 @@ export default function App() {
           </button>
         </div>
       )}
+      {chat && <Chat cycle={cycle} budget={budget} allTxs={allTxs} ask={chat.ask} onClose={() => setChat(null)} />}
       {settingsOpen && (
         <SettingsDialog
           email={email}

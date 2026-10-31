@@ -148,6 +148,27 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
     case 'deleteTradeUpdate':
       d.updates = (d.updates ?? []).filter(y => y.id !== q.id);
       return save();
+    case 'askGemini': {
+      // Stand-in for Gemini: a canned answer built from the summary, so the chat and its cards can be tried
+      // locally. Set `geminiError` in localStorage (e.g. "no_key") to see the error states.
+      if (d.geminiError) return { error: d.geminiError, detail: 'dev' };
+      await new Promise(r => setTimeout(r, 700));
+      type Cat = { name: string; type: string; limit: number; spent: number };
+      const c = q.context as { spent: number; budget: number; perDayToFinishOnBudget: number; categories: Cat[]; transactions: { merchant: string; category: string }[] };
+      const vari = c.categories.filter(x => x.type === 'variable');
+      const worst = [...vari].sort((a, b) => b.spent - b.limit - (a.spent - a.limit))[0];
+      const room = [...vari].sort((a, b) => b.limit - b.spent - (a.limit - a.spent))[0];
+      const unsorted = c.transactions.find(t => t.category === 'Buffer');
+      const actions: unknown[] = [];
+      if (unsorted) actions.push({ type: 'rule', merchant: unsorted.merchant, category: 'Transfer', sub: null, why: 'Looks like an e-wallet top-up, not spending.' });
+      if (worst && room && worst !== room && worst.spent > worst.limit)
+        actions.push({ type: 'move_limit', from: room.name, to: worst.name, amount: Math.min(worst.spent - worst.limit, room.limit - room.spent), why: `${room.name} has the most room left.` });
+      const n = (v: number) => 'Rp ' + Math.round(v).toLocaleString('id-ID');
+      return {
+        reply: `(Dev stand-in, not Gemini) You've spent **${n(c.spent)}** of **${n(c.budget)}**.\n- ${worst?.name ?? 'Nothing'} is furthest over its limit.\n- To finish on budget, keep to about **${n(c.perDayToFinishOnBudget)}** a day.`,
+        actions,
+      };
+    }
     case 'quotes': {
       // Stand-in for Google Finance: prices from `quotes` in localStorage; anything missing acts like #N/A.
       const at = new Date().toISOString();

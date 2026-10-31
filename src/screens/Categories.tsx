@@ -8,7 +8,8 @@ import { dayMonth, pc, sum, tidyName } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
-import { builtInCategory, catFilter } from '../data/categories';
+import { catFilter } from '../data/categories';
+import { useSetLimits } from '../lib/limits';
 
 type Mode = 'cycle' | 'week';
 
@@ -40,22 +41,6 @@ const makeView = (mode: Mode, wi: number, warnAt: number, txs: TxView[]) => (c: 
   return { c, cur, last, lim, used, st, mine, scale: Math.max(lim, cur, 1) };
 };
 
-/** A change to category limits (% of income): built-in ones are stored as overrides, yours on the category. */
-function useSetLimits() {
-  const { settings, update } = useSettings();
-  return (patch: Record<string, number>) => {
-    const limits = { ...settings.limitOverrides };
-    let customs = settings.customCategories;
-    for (const [name, pct] of Object.entries(patch)) {
-      const b = builtInCategory(name);
-      if (!b) customs = customs.map(c => (c.name === name ? { ...c, limitPct: pct } : c));
-      // Only store what differs from the default, so defaults can still change later.
-      else if (Math.abs(pct - b.limitPct) < 1e-9) delete limits[name];
-      else limits[name] = pct;
-    }
-    update({ limitOverrides: limits, customCategories: customs });
-  };
-}
 
 export function Categories({ cycle, budget, open, setOpen, onShowTransactions, onEditCategory, onNewCategory }: Props) {
   const { settings, full, short, ofIncome } = useSettings();

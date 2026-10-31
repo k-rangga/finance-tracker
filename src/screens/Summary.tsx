@@ -41,6 +41,8 @@ type SummaryProps = Props & {
   onDismissBill: (b: Bill) => void;
   /** Open Transactions on a range, optionally filtered to one category. */
   onShowTransactions: (range: 'today' | 'cycle', cat?: string) => void;
+  /** Ask Gemini this question. */
+  onAsk: (question: string) => void;
 };
 
 /**
@@ -48,7 +50,7 @@ type SummaryProps = Props & {
  * Phones: one column read top to bottom (spend today → today and what's coming → savings → where it went),
  * with the comparisons folded under More.
  */
-export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismissBill, onShowTransactions }: SummaryProps) {
+export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismissBill, onShowTransactions, onAsk }: SummaryProps) {
   const { ofIncome } = useSettings();
   const phone = useIsPhone();
   const [more, setMore] = useState(false);
@@ -91,7 +93,7 @@ export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismi
               </div>
             )}
           </section>
-          {more && <SpendingPace cycle={cycle} budget={budget} />}
+          {more && <SpendingPace cycle={cycle} budget={budget} onAsk={onAsk} />}
         </>
       ) : (
         <div className={s.summaryGrid}>
@@ -105,7 +107,7 @@ export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismi
           <div className={s.summaryRest}>
             {budget.cards.length > 0 && <CreditCards budget={budget} />}
             <WhereItWent cycle={cycle} budget={budget} onOpenCategory={onOpenCategory} />
-            <SpendingPace cycle={cycle} budget={budget} />
+            <SpendingPace cycle={cycle} budget={budget} onAsk={onAsk} />
           </div>
         </div>
       )}
@@ -1087,7 +1089,7 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
  * Spending so far, day by day (cumulative), and where it ends if you keep going: variable spending at your
  * daily average plus the bills still due on their dates. One line against the budget.
  */
-function SpendingPace({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
+function SpendingPace({ cycle, budget: b, onAsk }: { cycle: Cycle; budget: Budget; onAsk: (question: string) => void }) {
   const { full, short } = useSettings();
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
@@ -1137,6 +1139,20 @@ function SpendingPace({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
           {over > 0 ? `${short(over)} over budget` : `${short(-over)} under budget`}
           <span style={{ fontWeight: 400, color: C.textMuted }}> · budget {short(b.budget)}</span>
         </span>
+        <button
+          type="button"
+          className={s.linkBtn}
+          onClick={() =>
+            onAsk(
+              over > 0
+                ? `My spending pace ends at ${full(end)}, ${full(over)} over my ${full(b.budget)} budget. Why, and how do I finish this cycle on budget?`
+                : `My spending pace ends at ${full(end)}, under my ${full(b.budget)} budget. Anything I should watch for the rest of this cycle?`,
+            )
+          }
+          style={{ alignSelf: 'flex-start', marginTop: 4 }}
+        >
+          <Icon d={IC.sparkle} size={14} /> {over > 0 ? 'Why, and how to fix it?' : 'Ask Gemini about it'}
+        </button>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

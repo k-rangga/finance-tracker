@@ -119,6 +119,8 @@ const ACTIONS = {
     return true;
   },
 
+  askGemini: p => askGemini_(p),
+
   listLabels: () => listLabels_(),
   chooseLabel: p => chooseLabel_(p.name),
   syncNow: () => syncGmail_(),
