@@ -26,6 +26,8 @@ const TABLES = {
   category_rules: ['merchant', 'category', 'updated_at', 'sub'],
   /** Sub-category you picked for a transaction (a label inside its category; limits stay on the category). */
   subs: ['tx_id', 'sub', 'updated_at'],
+  /** Receipt files in your Drive receipts folder, one per transaction (see Receipts.js). */
+  receipts: ['tx_id', 'file_id', 'name', 'mime', 'uploaded_at'],
   trades: [
     'id', 'market', 'ticker', 'name', 'buy_date', 'price', 'quantity', 'fee', 'style', 'conviction', 'target', 'stop',
     'catalyst', 'catalyst_date', 'thesis', 'tags', 'leverage', 'direction',

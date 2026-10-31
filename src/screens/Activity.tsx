@@ -13,6 +13,7 @@ import type { Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth, parseISO, sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
+import { readReceipt, receiptName, receiptTxId, receiptUrl } from '../lib/receipt';
 import { C } from '../lib/tokens';
 import { CATEGORIES, catFilter, categoryByName, categoryLabel, CC_PAYMENT_CATEGORY, OTHER_CATEGORIES, parseCatFilter } from '../data/categories';
 import { canDismissBill, isCard, merchantKey, type Bill } from '../data/transactions';
@@ -74,7 +75,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   /** "New category" dialog, opened from a row's category menu; the new category is applied to that row. */
   const [creating, setCreating] = useState<{ name: string; tx: TxView } | null>(null);
   const [calOpen, setCalOpen] = useState(false);
-  const { installments, setInstallment, notes, rules, ruleSubs, setRules, setSub } = useData();
+  const { installments, setInstallment, notes, rules, ruleSubs, setRules, setSub, receipts } = useData();
   /** The purchase whose installment plan is open in the dialog. */
   const [planFor, setPlanFor] = useState<string | null>(null);
   const planTx = planFor ? allTxs.find(x => x.id === planFor) : undefined;
@@ -84,7 +85,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
     setToast({ text: 'Back to one purchase', action: 'Undo', run: () => before && setInstallment(id, before) });
   };
   /** What just changed, with a way to take it back, for a few seconds. */
-  const [toast, setToast] = useState<{ text: string; action: string; run: () => void } | null>(null);
+  const [toast, setToast] = useState<{ text: string; action?: string; run?: () => void } | null>(null);
   const [showRemoved, setShowRemoved] = useState(false);
   const phone = useIsPhone();
   /** Phones: search sits behind an icon, and the recap is folded. */
@@ -161,7 +162,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   /** Everything in the range that matches the filters: what the recap adds up. */
   const inRange = (range === 'custom' ? allTxs : budget.txs).filter(
     t => t.offset >= lo && t.offset <= hi && (!cat || (t.cat === pick.cat && (!pick.sub || t.sub === pick.sub))) &&
-      (!needle || `${t.title} ${t.account} ${t.source} ${t.cat} ${t.sub ?? ''} ${notes[t.id] ?? ''}`.toLowerCase().includes(needle)),
+      (!needle || `${t.title} ${t.account} ${t.source} ${t.cat} ${t.sub ?? ''} ${notes[t.id] ?? ''} ${receipts[receiptTxId(t)] ? 'receipt' : ''}`.toLowerCase().includes(needle)),
   );
   /** What the list shows: the same, minus transfers between your accounts when you hide them. */
   const txs = filter.hideTransfers ? inRange.filter(t => !t.isTransfer) : inRange;
@@ -368,6 +369,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
                   expenses={expenses}
                   compact={phone}
                   usualAccount={usualAccount}
+                  onNotice={text => setToast({ text })}
                   onNewCategory={name => {
                     setOpen(null);
                     setCreating({ name, tx: t });
@@ -456,16 +458,18 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
       {toast && (
         <div className={s.toast} role="status">
           <span style={{ marginRight: 'auto', minWidth: 0 }}>{toast.text}</span>
-          <button
-            type="button"
-            className={s.toastBtn}
-            onClick={() => {
-              toast.run();
-              setToast(null);
-            }}
-          >
-            {toast.action}
-          </button>
+          {toast.action && (
+            <button
+              type="button"
+              className={s.toastBtn}
+              onClick={() => {
+                toast.run?.();
+                setToast(null);
+              }}
+            >
+              {toast.action}
+            </button>
+          )}
         </div>
       )}
       {planTx && (
@@ -616,10 +620,34 @@ type RowProps = {
   /** Phones: category as plain text, the account only when it isn't the usual one, and tapping the row opens its menu. */
   compact?: boolean;
   usualAccount?: string;
+  /** A short message at the bottom of the screen (receipt saved, or why it wasn't). */
+  onNotice: (text: string) => void;
 };
 
-function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewCategory, expenses, popover, setPopover, compact, usualAccount }: RowProps) {
-  const { installments, notes, setNote } = useData();
+function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewCategory, expenses, popover, setPopover, compact, usualAccount, onNotice }: RowProps) {
+  const { installments, notes, setNote, receipts, attachReceipt, removeReceipt } = useData();
+  const receipt = receipts[receiptTxId(t)];
+  const filePick = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const upload = async (file: File) => {
+    setUploading(true);
+    try {
+      const f = await readReceipt(file);
+      await attachReceipt(receiptTxId(t), { name: receiptName(t, f.ext), mime: f.mime, data: f.data });
+      onNotice(`Receipt saved for ${tidyName(t.title)}`);
+    } catch (e) {
+      onNotice("Receipt not saved: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setUploading(false);
+    }
+  };
+  const viewReceipt = () => {
+    if (!receipt) return;
+    const url = receiptUrl(receipt);
+    // A data URL (local preview only) can't be opened directly; show it in a blank window instead.
+    if (url.startsWith('data:')) window.open('', '_blank')?.document.write(`<img src="${url}" style="max-width:100%">`);
+    else window.open(url, '_blank', 'noopener');
+  };
   const { full } = useSettings();
   const note = notes[t.id];
   const c = categoryByName(t.cat);
@@ -679,6 +707,13 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
       : isExpense && (isCard(t.account) || t.cat === 'Shopping')
         ? [['Pay in installments…', () => onPlan(t.id)] as Item]
         : []),
+    ...(receipt
+      ? ([
+          ['View receipt', viewReceipt],
+          ['Replace receipt…', () => filePick.current?.click()],
+          ['Remove receipt', () => (removeReceipt(receiptTxId(t)), onNotice('Receipt removed · it stays in Drive\'s trash for 30 days'))],
+        ] as Item[])
+      : [['Attach receipt…', () => filePick.current?.click()] as Item]),
     // A monthly payment is part of its plan; it's removed by making the purchase one purchase again.
     ...(t.plan ? [] : [['Remove transaction', onRemove] as Item]),
   ];
@@ -773,10 +808,28 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>
         <span style={{ fontSize: 15, fontWeight: 600, color: amount.ink }}>{amount.text}</span>
         {amount.note && <span style={{ fontSize: 13, fontWeight: 600, color: C.accent800 }}>{amount.note}</span>}
-        <span style={{ fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>
+          {uploading ? (
+            'Uploading…'
+          ) : receipt ? (
+            <button type="button" className={s.receiptBtn} onClick={viewReceipt} aria-label={`View receipt for ${t.title}`} title={receipt.name}>
+              <Icon d={IC.clip} size={13} />
+            </button>
+          ) : null}
           {t.time}
           {note && where ? ` · ${where}` : ''}
         </span>
+        <input
+          ref={filePick}
+          type="file"
+          accept="image/*,application/pdf"
+          hidden
+          onChange={e => {
+            const f = e.target.files?.[0];
+            e.target.value = '';
+            if (f) void upload(f);
+          }}
+        />
       </div>
       <div style={{ position: 'relative', flex: 'none' }}>
         <button

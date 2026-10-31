@@ -129,6 +129,19 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
         </div>
       </div>
       {num('fxRate', 'USD exchange rate', 'Rp per $1')}
+      <label className={s.field}>
+        <span>
+          Receipts folder <span style={{ fontWeight: 500 }}>(Google Drive folder link)</span>
+        </span>
+        <input
+          className={s.input}
+          value={d.receiptsFolder}
+          onChange={e => setD(p => ({ ...p, receiptsFolder: e.target.value.trim() }))}
+          placeholder="https://drive.google.com/drive/folders/…"
+          inputMode="url"
+        />
+        <span style={{ fontWeight: 500 }}>Receipts you attach are saved here as 20261031_id_Merchant.jpg.</span>
+      </label>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span className={s.label}>Your categories</span>
         {settings.customCategories.length === 0 ? (

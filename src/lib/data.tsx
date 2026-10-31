@@ -31,6 +31,9 @@ type Ctx = UserData & {
   setRules: (rules: Record<string, string | null>, subs?: Record<string, string | null>) => void;
   /** Your sub-category for a transaction; `null` clears it. */
   setSub: (txId: string, sub: string | null) => void;
+  /** Upload a receipt for a transaction; resolves when it's saved (rejects with the reason if it isn't). */
+  attachReceipt: (txId: string, file: { name: string; mime: string; data: string }) => Promise<void>;
+  removeReceipt: (txId: string) => void;
   saveTrade: (t: Trade) => void;
   saveUpdate: (u: TradeUpdate) => void;
   deleteUpdate: (id: string) => void;
@@ -151,6 +154,19 @@ export function DataProvider({ backend, children, loading, failed }: { backend: 
           return { ...d, rules, ruleSubs };
         });
         write(backend.setRules(patch, subPatch));
+      },
+      attachReceipt: async (txId, file) => {
+        const r = await backend.attachReceipt(txId, file);
+        setData(d => d && { ...d, receipts: { ...d.receipts, [txId]: r } });
+      },
+      removeReceipt: txId => {
+        setData(d => {
+          if (!d) return d;
+          const receipts = { ...d.receipts };
+          delete receipts[txId];
+          return { ...d, receipts };
+        });
+        write(backend.removeReceipt(txId));
       },
       setSub: (txId, sub) => {
         setData(d => {

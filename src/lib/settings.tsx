@@ -25,6 +25,8 @@ export type Settings = {
   limitOverrides: Record<string, number>;
   /** Your colours for built-in categories, by name. */
   colorOverrides: Record<string, string>;
+  /** Google Drive folder (link or id) receipts are saved to. */
+  receiptsFolder: string;
   /** Sub-categories per category (labels inside it; the limit stays on the category). */
   subcategories: Record<string, string[]>;
   /** Predicted bills you said aren't due this cycle, by `billKey`. Older cycles' keys are dropped. */
@@ -49,6 +51,7 @@ export const DEFAULT_SETTINGS: Settings = {
   colorOverrides: {},
   dismissedBills: [],
   subcategories: DEFAULT_SUBCATEGORIES,
+  receiptsFolder: '',
 };
 
 type Ctx = {

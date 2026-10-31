@@ -922,6 +922,20 @@ textarea.input {
   color: var(--accent-600);
 }
 
+/* The 📎 on a row with a receipt: opens it. */
+.receiptBtn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent-tint);
+  color: var(--accent-800);
+  cursor: pointer;
+}
+
 /* Your note beside the category, in place of the account: plain secondary text, one line, click to edit. */
 .txNote {
   /* Only the room the category pill leaves, so the pill never gets squeezed. */

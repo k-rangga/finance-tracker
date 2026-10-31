@@ -42,6 +42,7 @@ const ACTIONS = {
     rules: categoryRules_(),
     ruleSubs: ruleSubs_(),
     subs: subs_(),
+    receipts: receipts_(),
     trades: readTable_('trades'),
     updates: readTable_('trade_updates'),
     prices: props_('prices', null),
@@ -120,6 +121,8 @@ const ACTIONS = {
   },
 
   askGemini: p => askGemini_(p),
+  attachReceipt: p => attachReceipt_(p),
+  removeReceipt: p => removeReceipt_(p),
 
   listLabels: () => listLabels_(),
   chooseLabel: p => chooseLabel_(p.name),

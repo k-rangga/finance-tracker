@@ -34,6 +34,8 @@ export type UserData = {
   ruleSubs: Record<string, string>;
   /** Sub-category you picked for a transaction: { txId: sub-category }. */
   subs: Record<string, string>;
+  /** Receipt file in your Drive receipts folder, by transaction id. */
+  receipts: Record<string, Receipt>;
   journal: Trade[];
   /** Avg up / avg down buys and notes on journal entries. */
   updates: TradeUpdate[];
@@ -43,6 +45,8 @@ export type UserData = {
   txRows: TxRow[];
   gmail: GmailConnection;
 };
+
+export type Receipt = { fileId: string; name: string };
 
 export type Backend = {
   load(since: Date): Promise<UserData>;
@@ -65,6 +69,10 @@ export type Backend = {
   setRules(rules: Record<string, string | null>, subs?: Record<string, string | null>): Promise<void>;
   /** `sub: null` clears it. */
   setSub(txId: string, sub: string | null): Promise<void>;
+  /** Upload a receipt (base64) for a transaction, replacing its earlier one. */
+  attachReceipt(txId: string, file: { name: string; mime: string; data: string }): Promise<Receipt>;
+  /** Unlink a transaction's receipt and move the file to Drive's trash. */
+  removeReceipt(txId: string): Promise<void>;
   saveTrade(t: Trade): Promise<void>;
   saveUpdate(u: TradeUpdate): Promise<void>;
   deleteUpdate(id: string): Promise<void>;
@@ -200,6 +208,7 @@ type State = {
   rules?: Record<string, string>;
   ruleSubs?: Record<string, string>;
   subs?: Record<string, string>;
+  receipts?: Record<string, Receipt>;
   trades: TradeRow[];
   updates?: UpdateRow[];
   prices: Prices | null;
@@ -224,6 +233,7 @@ export const backend: Backend = {
       rules: s.rules ?? {},
       ruleSubs: s.ruleSubs ?? {},
       subs: s.subs ?? {},
+      receipts: s.receipts ?? {},
       journal: s.trades.map(toTrade).sort((a, b) => b.d.localeCompare(a.d)),
       updates: (s.updates ?? []).map(toUpdate),
       prices: s.prices ?? defaultPrices(),
@@ -242,6 +252,8 @@ export const backend: Backend = {
   setInstallment: async (txId, plan) => void (await run('setInstallment', { txId, plan })),
   setRules: async (rules, subs) => void (await run('setRules', { rules, subs })),
   setSub: async (txId, sub) => void (await run('setSub', { txId, sub })),
+  attachReceipt: (txId, file) => run('attachReceipt', { txId, ...file }),
+  removeReceipt: async txId => void (await run('removeReceipt', { txId })),
   saveTrade: async t => void (await run('saveTrade', { trade: toRow(t) })),
   saveUpdate: async x => void (await run('saveTradeUpdate', { update: toUpdateRow(x) })),
   deleteUpdate: async id => void (await run('deleteTradeUpdate', { id })),
