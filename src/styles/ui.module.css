@@ -586,6 +586,18 @@ button.chip:hover {
 .rowBtn:disabled {
   cursor: default;
 }
+/* Rows sit edge to edge in clipped cards: draw the focus ring inside, or only its top and bottom show. */
+.rowBtn:focus-visible {
+  outline-offset: -2px;
+}
+/* The savings target under the spending target, set apart by a hairline. */
+.saveTarget {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--divider);
+}
 .hoverRow:hover {
   background: var(--hover);
 }

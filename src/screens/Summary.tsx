@@ -57,9 +57,15 @@ export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismi
   const target = ofIncome(SAVINGS_TARGET_PCT);
   const id = toISO(cycle.start);
   const thisCycle = (
-    <ThisCycle cycle={cycle} budget={budget} onOpenSettings={onOpenSettings} onShowCycle={() => onShowTransactions('cycle')} onDismissBill={onDismissBill} />
+    <ThisCycle
+      cycle={cycle}
+      budget={budget}
+      onOpenSettings={onOpenSettings}
+      onShowCycle={() => onShowTransactions('cycle')}
+      onMarkSavings={() => onShowTransactions('cycle', TRANSFER_CATEGORY)}
+      onDismissBill={onDismissBill}
+    />
   );
-  const savings = <SavingsCard cycle={cycle} budget={budget} compact={phone} onMark={() => onShowTransactions('cycle', TRANSFER_CATEGORY)} />;
   const today = <TodayCard cycle={cycle} budget={budget} compact={phone} onSeeAll={() => onShowTransactions('today')} />;
   const comingUp = (
     <ComingUpCard cycle={cycle} budget={budget} onDismissBill={onDismissBill} limit={phone ? 1 : 4} onSeeAll={() => onShowTransactions('today')} />
@@ -75,7 +81,6 @@ export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismi
           <section className={s.summarySide} style={{ alignSelf: 'stretch' }} aria-label="At a glance">
             {today}
             {comingUp}
-            {savings}
           </section>
           <WhereItWent cycle={cycle} budget={budget} onOpenCategory={onOpenCategory} />
           {budget.cards.length > 0 && <CreditCards budget={budget} />}
@@ -99,7 +104,6 @@ export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismi
         <div className={s.summaryGrid}>
           <div className={s.summaryCycle}>{thisCycle}</div>
           <aside className={s.summarySide} aria-label="At a glance">
-            {savings}
             {today}
             {comingUp}
             <VsLastCycleCard cycle={cycle} budget={budget} />
@@ -113,6 +117,20 @@ export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismi
       )}
     </div>
   );
+}
+
+/**
+ * Your usual day lately: the middle (median) of the last 7 full days' variable spending, so one big purchase
+ * doesn't make an ordinary week look expensive. None on the cycle's first day.
+ */
+export function usualDay(cycle: Cycle, b: Budget) {
+  const from = Math.max(0, cycle.dayIdx - 7);
+  if (cycle.dayIdx <= from) return null;
+  const days = new Array<number>(cycle.dayIdx - from).fill(0);
+  for (const t of b.txs) if (t.offset >= from && t.offset < cycle.dayIdx && categoryByName(t.cat)?.type === 'variable') days[t.offset - from] += t.net;
+  days.sort((x, y) => x - y);
+  const m = days.length >> 1;
+  return days.length % 2 ? days[m] : (days[m - 1] + days[m]) / 2;
 }
 
 /** Days in a row, back from today, where variable spending stayed within its even daily share. */
@@ -159,6 +177,13 @@ type Row = {
   byCategory?: boolean;
   /** A one-line row with nothing to open and no amount (e.g. "No more bills before payday"). */
   quiet?: boolean;
+  /** "−" or "=" before the label, so the lines read as a sum. */
+  sign?: string;
+  /** Part of the line above (the spending budget's lines). */
+  indent?: boolean;
+  /** Shown even when it's zero. */
+  keep?: boolean;
+  ink?: string;
 };
 
 function ThisCycle({
@@ -166,12 +191,14 @@ function ThisCycle({
   budget: b,
   onOpenSettings,
   onShowCycle,
+  onMarkSavings,
   onDismissBill,
 }: {
   cycle: Cycle;
   budget: Budget;
   onOpenSettings: () => void;
   onShowCycle: () => void;
+  onMarkSavings: () => void;
   onDismissBill: (b: Bill) => void;
 }) {
   const { full, short, ofIncome, settings } = useSettings();
@@ -253,33 +280,66 @@ function ThisCycle({
     </div>
   );
 
+  const left = Math.max(0, b.budget - b.spent - b.fixedDue);
+  const unplanned = b.income - savings - b.budget;
+  // Where your income goes, as a sum: income − savings target − spending budget = not planned.
+  // The spending budget's own lines (spent, due, left) sit indented under it.
   const rows: Row[] = [
-    { id: 'inc', label: 'Income', value: full(b.income), items: b.txs.filter(t => t.isIncome && !t.reimbursesId).map(txItem) },
+    { id: 'inc', label: 'Monthly income', value: full(b.income), items: b.txs.filter(t => t.isIncome && !t.reimbursesId).map(txItem), keep: true },
     {
       id: 'save',
-      label: 'Savings',
-      value: `${fit(b.saved)} / ${fit(savings)}`,
+      sign: '−',
+      label: 'Savings target',
+      value: full(savings),
       items: b.txs.filter(t => t.isSavings || t.isInvestment).map(txItem),
       summary: savingsSummary,
+      keep: true,
     },
-    { id: 'fixed', label: 'Fixed bills paid', value: full(b.fixedSpent), items: fixedItems },
-    { id: 'var', label: 'Variable spending', value: full(b.varSpent), items: varItems, byCategory: true },
+    { id: 'budget', sign: '−', label: 'Spending budget', value: full(b.budget), items: [], keep: true },
+    { id: 'fixed', indent: true, label: 'Fixed bills paid', value: full(b.fixedSpent), items: fixedItems },
+    { id: 'var', indent: true, label: 'Variable spending', value: full(b.varSpent), items: varItems, byCategory: true },
     billItems.length
-      ? { id: 'due', label: 'Bills still due', value: full(b.fixedDue), items: billItems }
-      : { id: 'due', label: 'No more bills before payday', items: [], quiet: true },
-    // Same figure as "After bills" above: bills still due are already spoken for.
-    { id: 'left', label: 'Left after bills', value: full(Math.max(0, b.budget - b.spent - b.fixedDue)), items: [], strong: true },
-  ].filter((r: Row) => r.quiet || r.strong || r.id === 'inc' || r.items.length > 0 || r.summary || r.value !== full(0));
+      ? { id: 'due', indent: true, label: 'Bills still due', value: full(b.fixedDue), items: billItems }
+      : { id: 'due', indent: true, label: 'No more bills before payday', items: [], quiet: true },
+    { id: 'left', indent: true, label: 'Left after bills', value: full(left), items: [], strong: true },
+    {
+      id: 'unplanned',
+      sign: '=',
+      label: unplanned >= 0 ? 'Not planned' : 'Planned beyond income',
+      value: full(Math.abs(unplanned)),
+      items: [],
+      keep: true,
+      ink: unplanned >= 0 ? C.textSoft : C.redInk,
+    },
+  ].filter((r: Row) => r.quiet || r.strong || r.keep || r.items.length > 0 || r.summary || r.value !== full(0));
 
   const safeShown = useCountUp(b.safeDay);
   // Budget and savings both come out of income: together they can't be more than all of it.
   const plannedPct = budgetPct + SAVINGS_TARGET_PCT;
-  const overPace = b.spent - b.paceToday;
   const ending = cycle.daysLeft <= 2;
-  const statusInk = b.spent > b.budget ? C.redInk : ending ? C.textMuted : overPace > 0 ? C.amberInk : C.accent800;
-  // The bar is the spending budget, coloured by what it went on (largest first).
-  const segs = b.cats.filter(c => c.spent > 0).sort((x, y) => y.spent - x.spent);
-  const scale = Math.max(b.budget, b.spent);
+  const usual = usualDay(cycle, b);
+  const over = b.spent - b.budget;
+  // One status, agreeing with the daily target: over budget, nothing left, your usual day against the target, or on track.
+  const status =
+    over > 0
+      ? { ink: C.redInk, text: `Over budget by ${full(over)}` }
+      : left <= 0
+        ? { ink: C.redInk, text: 'Nothing left for spending before payday' }
+        : usual == null
+          ? { ink: C.textMuted, text: 'Stay at or under this each day to finish on budget' }
+          : usual > b.safeDay * 1.05
+            ? { ink: C.amberInk, text: `Your usual day lately is ${short(usual)}, ${short(usual - b.safeDay)} more than this` }
+            : { ink: C.accent800, text: `On track · your usual day lately is ${short(usual)}` };
+  // The budget bar: spent, bills still due, what's left. Over budget, the spent part fills it in red.
+  const scale = Math.max(b.budget, b.spent + b.fixedDue, 1);
+  const usedPct = b.budget ? Math.round((b.spent / b.budget) * 100) : 0;
+  const parts = [
+    { key: 'spent', label: 'Spent', value: b.spent, color: over > 0 ? C.red : C.accent600 },
+    { key: 'due', label: 'Bills due', value: b.fixedDue, color: C.amber },
+    { key: 'left', label: 'Left', value: left, color: 'transparent' },
+  ];
+  const saveTarget = ofIncome(SAVINGS_TARGET_PCT);
+  const savedPct = saveTarget > 0 ? Math.min(100, (b.saved / saveTarget) * 100) : 0;
 
   return (
     <Card style={{ gap: phone ? 20 : 24, overflow: 'hidden' }}>
@@ -295,63 +355,73 @@ function ThisCycle({
         </div>
       )}
       {ending && <CycleWrapUp cycle={cycle} budget={b} />}
-      <div style={{ display: 'flex' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flex: 1, minWidth: 0 }}>
-          {/* One number first: what you can spend today and stay on budget. */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span className={s.statLabel}>Safe today</span>
-            <span style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: 36, lineHeight: 1.05, color: b.safeDay > 0 ? C.text : C.redInk }}>{full(safeShown)}</span>
-          </div>
-          {/* Then three figures, label over number. */}
-          <div className={s.statRow}>
-            <div className={s.stat}>
-              <span className={s.statLabel}>After bills</span>
-              <span className={s.statValue}>{fit(Math.max(0, b.budget - b.spent - b.fixedDue))}</span>
-            </div>
-            <div className={s.stat} title={`Next payday ${dayLabel(cycle.next)}`}>
-              <span className={s.statLabel}>Payday</span>
-              <span className={s.statValue}>
-                {cycle.daysLeft} {cycle.daysLeft === 1 ? 'day' : 'days'}
-              </span>
-            </div>
-            <button type="button" className={`${s.stat} ${s.statBtn}`} onClick={onShowCycle} title={`See this cycle's transactions · budget is ${budgetPct}% of income`}>
-              <span className={s.statLabel}>
-                Spent <Icon d={IC.arrowRight} size={11} />
-              </span>
-              <span className={s.statValue}>
-                {fit(b.spent)}
-                <span style={{ color: C.textMuted, fontWeight: 500 }}> / {fit(b.budget).replace(/^Rp /, '')}</span>
-              </span>
-            </button>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div
-              className={s.track}
-              style={{ height: 14, display: 'flex', overflow: 'visible' }}
-              role="img"
-              aria-label={'Spent by category: ' + segs.map(c => `${c.name} ${full(c.spent)}`).join(', ')}
-            >
-              <div style={{ display: 'flex', width: '100%', height: '100%', borderRadius: 999, overflow: 'hidden', gap: 2 }}>
-                {segs.map(c => (
-                  <div key={c.name} title={`${c.name} ${full(c.spent)}`} style={{ flex: 'none', width: pc((c.spent / scale) * 100), background: c.color }} />
-                ))}
-              </div>
-              <div className={s.tick} style={{ top: -5, bottom: -5, width: 4, left: pc((b.paceToday / scale) * 100) }} />
-            </div>
-            {/* One status: over budget, else what's left at the end of the cycle, else the pace. */}
-            <span
-              title={`${Math.round((b.spent / b.budget) * 100)}% of the budget used · pace target today ${full(b.paceToday)}`}
-              style={{ fontSize: 13, fontWeight: 600, color: statusInk }}
-            >
-              {b.spent > b.budget
-                ? `+${short(b.spent - b.budget)} over budget`
-                : ending
-                  ? `${short(Math.max(0, b.budget - b.spent))} left until payday`
-                  : overPace > 0
-                    ? `+${short(overPace)} over pace`
-                    : `${short(-overPace)} under pace`}
+
+      {/* Target 1: what you can spend a day and still finish on budget. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span className={s.statLabel}>Spend at most</span>
+        <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: 36, lineHeight: 1.05, color: b.safeDay > 0 ? C.text : C.redInk }}>{full(safeShown)}</span>
+          <span style={{ fontSize: 16, color: C.textSoft }}>a day</span>
+        </span>
+        <span style={{ fontSize: 14, color: C.textSoft }}>
+          until payday, <span style={{ whiteSpace: 'nowrap' }}>{dayLabel(cycle.next)}</span> ·{' '}
+          <span style={{ whiteSpace: 'nowrap' }}>
+            {full(left)} left after bills ÷ {cycle.daysLeft} {cycle.daysLeft === 1 ? 'day' : 'days'}
+          </span>
+        </span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: status.ink }}>{status.text}</span>
+      </div>
+
+      {/* The budget, in three parts that add up to it. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div
+          className={s.track}
+          style={{ height: 12, display: 'flex', gap: 2, overflow: 'hidden' }}
+          role="img"
+          aria-label={`Budget ${full(b.budget)}: spent ${full(b.spent)}, bills due ${full(b.fixedDue)}, left ${full(left)}`}
+        >
+          {parts
+            .filter(x => x.value > 0 && x.key !== 'left')
+            .map(x => (
+              <span key={x.key} style={{ flex: 'none', width: pc((x.value / scale) * 100), background: x.color }} />
+            ))}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 16px', fontSize: 13, color: C.textSoft }}>
+          {parts.filter(x => x.key !== 'due' || x.value > 0).map(x => (
+            <span key={x.key} style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+              <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 2, background: x.key === 'left' ? 'transparent' : x.color, border: x.key === 'left' ? `1.5px solid ${C.textFaint}` : undefined }} />
+              {x.label} <strong style={{ color: C.text, fontWeight: 600 }}>{fit(x.value)}</strong>
             </span>
-          </div>
+          ))}
+          <button type="button" className={s.linkBtn} onClick={onShowCycle} style={{ marginLeft: 'auto', fontSize: 13 }} title="See this cycle's transactions">
+            {usedPct}% of {fit(b.budget)} used <Icon d={IC.arrowRight} size={12} />
+          </button>
+        </div>
+      </div>
+
+      {/* Target 2: what to move to savings this cycle (investing comes out of it). */}
+      <div className={s.saveTarget}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+          <span className={s.statLabel} style={{ marginRight: 'auto' }}>
+            Save this cycle
+          </span>
+          <span style={{ fontSize: 14, color: C.textSoft, whiteSpace: 'nowrap' }}>
+            <strong style={{ color: b.saved >= saveTarget && saveTarget > 0 ? C.accent800 : C.text, fontWeight: 600 }}>{fit(b.saved)}</strong> of {fit(saveTarget)}
+            {b.saved >= saveTarget && saveTarget > 0 ? ' ✓' : ''}
+          </span>
+        </div>
+        <span className={s.track} style={{ display: 'block', height: 6 }}>
+          <span className={s.fill} style={{ width: pc(savedPct), background: C.accent600 }} />
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px 12px', flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
+          <span style={{ marginRight: 'auto' }}>
+            {SAVINGS_TARGET_PCT}% of income · invest {fit(investPlan)} of it ({fit(b.invested)} so far)
+          </span>
+          {b.saved < saveTarget && (
+            <button type="button" className={s.linkBtn} onClick={onMarkSavings} style={{ fontSize: 13 }}>
+              {b.saved > 0 ? 'Mark another transfer' : 'Mark your savings transfer'} <Icon d={IC.arrowRight} size={12} />
+            </button>
+          )}
         </div>
       </div>
       <div className={s.bleed}>
@@ -367,7 +437,7 @@ function ThisCycle({
           const isOpen = open === r.id && has;
           if (r.quiet)
             return (
-              <div key={r.id} style={{ padding: '12px var(--pad)', fontSize: 13, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div key={r.id} style={{ padding: r.indent ? '10px var(--pad) 10px calc(var(--pad) + 22px)' : '12px var(--pad)', fontSize: 13, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon d={IC.calendar} size={15} />
                 {r.label}
               </div>
@@ -381,10 +451,19 @@ function ThisCycle({
                 aria-expanded={has ? isOpen : undefined}
                 onClick={() => has && setOpen(isOpen ? null : r.id)}
                 title={has ? (r.items.length ? count(r.items.length) : undefined) : undefined}
-                style={{ padding: '10px var(--pad)', fontWeight: r.strong ? 600 : 500, background: r.strong ? 'color-mix(in srgb, var(--accent-500) 9%, transparent)' : undefined, minHeight: 46 }}
+                style={{
+                  padding: r.indent ? '8px var(--pad) 8px calc(var(--pad) + 22px)' : '10px var(--pad)',
+                  fontWeight: r.strong ? 600 : 500,
+                  background: r.strong ? 'color-mix(in srgb, var(--accent-500) 9%, transparent)' : undefined,
+                  minHeight: r.indent ? 40 : 46,
+                  borderTop: r.sign === '=' ? `1px solid ${C.divider}` : undefined,
+                }}
               >
-                <span style={{ fontSize: 15, marginRight: 'auto', minWidth: 0 }}>{r.label}</span>
-                <span style={{ fontSize: 15, color: r.strong ? C.accent800 : C.text, whiteSpace: 'nowrap', flex: 'none' }}>{r.value}</span>
+                <span style={{ fontSize: r.indent ? 14 : 15, marginRight: 'auto', minWidth: 0, color: r.indent && !r.strong ? C.textSoft : undefined }}>
+                  {r.sign && <span style={{ display: 'inline-block', width: 18, color: C.textMuted }}>{r.sign}</span>}
+                  {r.label}
+                </span>
+                <span style={{ fontSize: r.indent ? 14 : 15, color: r.ink ?? (r.strong ? C.accent800 : C.text), whiteSpace: 'nowrap', flex: 'none' }}>{r.value}</span>
                 <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ opacity: has ? 1 : 0, transform: isOpen ? 'rotate(180deg)' : 'none' }} />
               </button>
               {isOpen && (
@@ -431,89 +510,6 @@ function SideRow({ mark, title, sub, value, ink = C.text, action }: { mark: Reac
   );
 }
 
-/** Savings ring: what you moved with "Transfer (savings)" against the target. `compact` (phones) puts it beside the text. */
-function SavingsCard({ cycle, budget: b, compact, onMark }: { cycle: Cycle; budget: Budget; compact?: boolean; onMark: () => void }) {
-  const { full, short, ofIncome } = useSettings();
-  const target = ofIncome(SAVINGS_TARGET_PCT);
-  const onTarget = b.saved >= target && target > 0;
-  const none = b.saved <= 0;
-  // Grey until something is saved; amber only when the cycle is nearly over and you're still short.
-  const ink = onTarget ? C.accent800 : none ? C.textMuted : cycle.daysLeft <= 7 ? C.amberInk : C.accent700;
-  const ring = onTarget ? C.mint[5] : cycle.daysLeft <= 7 && !none ? C.amber : C.accent600;
-  const deg = Math.max(0, Math.min(100, (b.saved / Math.max(1, target)) * 100)) * 3.6;
-  const size = compact ? 64 : 136;
-  const hole = compact ? 50 : 106;
-  const pct = none ? '0%' : b.savedPct.toFixed(compact ? 0 : 1) + '%';
-  const ringStyle = (px: number) => ({
-    flex: 'none',
-    width: px,
-    height: px,
-    borderRadius: '50%',
-    background: `conic-gradient(${ring} 0deg ${deg}deg, ${C.divider} ${deg}deg 360deg)`,
-    display: 'grid',
-    placeItems: 'center',
-  });
-  // Phones: one row (small ring, saved / target, and the button when nothing is marked yet).
-  if (compact)
-    return (
-      <section className={s.sideCard} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <div role="img" aria-label={`Saved ${b.savedPct.toFixed(1)}% of income this cycle against a ${SAVINGS_TARGET_PCT}% target`} style={ringStyle(32)}>
-          <div style={{ width: 22, height: 22, borderRadius: '50%', background: C.surface }} />
-        </div>
-        <span style={{ display: 'flex', flexDirection: 'column', gap: 1, marginRight: 'auto', minWidth: 0 }}>
-          <h3 className={s.sideTitle}>Savings</h3>
-          <span style={{ fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>
-            <strong style={{ color: ink, fontWeight: 600 }}>{short(b.saved)}</strong> / {short(target)}
-            {onTarget ? ' ✓' : ''}
-          </span>
-        </span>
-        {none ? (
-          <button type="button" className={s.btnOutline} onClick={onMark} title="Set a transfer's category to Transfer (savings)" style={{ flex: 'none' }}>
-            Mark transfer
-          </button>
-        ) : (
-          <span style={{ fontSize: 15, fontWeight: 600, color: ink }}>{pct}</span>
-        )}
-      </section>
-    );
-  return (
-    <section className={s.sideCard}>
-      <SideHead title="Savings" sub={`Target ${SAVINGS_TARGET_PCT}% of income · ${compact ? short(target) : full(target)}`} />
-      <div
-        style={
-          compact
-            ? { display: 'flex', alignItems: 'center', gap: 14 }
-            : { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center' }
-        }
-      >
-        <div
-          role="img"
-          aria-label={`Saved ${b.savedPct.toFixed(1)}% of income this cycle against a ${SAVINGS_TARGET_PCT}% target`}
-          style={{ flex: 'none', width: size, height: size, borderRadius: '50%', background: `conic-gradient(${ring} 0deg ${deg}deg, ${C.divider} ${deg}deg 360deg)`, display: 'grid', placeItems: 'center' }}
-        >
-          <div style={{ width: hole, height: hole, borderRadius: '50%', background: C.surface, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: compact ? 15 : 24, color: ink }}>{pct}</span>
-            {!compact && <span style={{ fontSize: 12, color: C.textMuted }}>of income saved</span>}
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: compact ? 'flex-start' : 'center', gap: 8, minWidth: 0 }}>
-          {none ? (
-            <>
-              <span style={{ fontSize: 13, color: C.textSoft }}>No savings transfer yet this cycle.</span>
-              <button type="button" className={s.btnOutline} onClick={onMark}>
-                Mark your savings transfer
-              </button>
-            </>
-          ) : (
-            <span style={{ fontSize: 13, color: C.textSoft }}>
-              {full(b.saved)} saved · {onTarget ? 'target reached ✓' : `${short(target - b.saved)} to go`}
-            </span>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
 
 /** Today's spending and income, newest first. Moves between your own accounts aren't spending, so they're only counted. */
 function TodayCard({ cycle, budget: b, compact, onSeeAll }: { cycle: Cycle; budget: Budget; compact?: boolean; onSeeAll: () => void }) {
