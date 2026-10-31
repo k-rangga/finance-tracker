@@ -2116,6 +2116,11 @@ textarea.input {
   font-size: 14px;
   line-height: 1.5;
 }
+.chatMeta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .chatAction {
   display: flex;
   flex-direction: column;

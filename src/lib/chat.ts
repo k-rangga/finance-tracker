@@ -11,9 +11,10 @@ export type ChatAction =
   | { type: 'recategorize'; txIds: string[]; category: string; sub?: string | null; why?: string }
   | { type: 'move_limit'; from: string; to: string; amount: number; why?: string };
 
-export type ChatMessage = { role: 'user' | 'model'; text: string; actions?: ChatAction[] };
+/** A reply also carries the model that wrote it and how long you waited, in seconds. */
+export type ChatMessage = { role: 'user' | 'model'; text: string; actions?: ChatAction[]; model?: string; secs?: number };
 
-export type ChatAnswer = { reply: string; actions: ChatAction[] } | { error: 'no_key' | 'api' | 'blocked'; detail?: string };
+export type ChatAnswer = { reply: string; actions: ChatAction[]; model?: string } | { error: 'no_key' | 'api' | 'blocked'; detail?: string };
 
 export const askGemini = (messages: ChatMessage[], context: object) =>
   run<ChatAnswer>('askGemini', { messages: messages.map(m => ({ role: m.role, text: m.text })), context });

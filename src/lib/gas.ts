@@ -181,6 +181,7 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       return {
         reply: `(Dev stand-in, not Gemini) You've spent **${n(c.spent)}** of **${n(c.budget)}**.\n- ${worst?.name ?? 'Nothing'} is furthest over its limit.\n- To finish on budget, keep to about **${n(c.perDayToFinishOnBudget)}** a day.`,
         actions,
+        model: 'gemini-3.5-flash-lite',
       };
     }
     case 'quotes': {

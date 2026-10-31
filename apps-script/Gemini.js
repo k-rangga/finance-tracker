@@ -8,7 +8,8 @@
  *   GEMINI_MODEL    optional; defaults to GEMINI_DEFAULT_MODEL
  */
 
-const GEMINI_DEFAULT_MODEL = 'gemini-3.8-flash';
+// Flash-Lite: a budgeting answer in seconds. Set GEMINI_MODEL to 'gemini-3.8-flash' for deeper (slower) answers.
+const GEMINI_DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 
 const GEMINI_SYSTEM = [
   'You are the budgeting assistant inside a personal spending tracker used by one person in Indonesia.',
@@ -64,10 +65,10 @@ function askGemini_(p) {
   try {
     // Some models wrap JSON in a code fence even when asked not to.
     const out = JSON.parse(text.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, ''));
-    return { reply: String(out.reply || ''), actions: Array.isArray(out.actions) ? out.actions.slice(0, 5) : [] };
+    return { reply: String(out.reply || ''), actions: Array.isArray(out.actions) ? out.actions.slice(0, 5) : [], model: model };
   } catch (e) {
     // Not the JSON we asked for: show it as a plain answer.
-    return { reply: text, actions: [] };
+    return { reply: text, actions: [], model: model };
   }
 }
 

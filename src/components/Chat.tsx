@@ -15,6 +15,13 @@ import { tidyName } from '../lib/format';
 /** Stop waiting after this long; Apps Script would still finish, but the answer is dropped. */
 const TIMEOUT_MS = 75_000;
 
+/** "Answered in 4s · Flash-Lite" under a reply. */
+function answeredIn(m: ChatMessage) {
+  const secs = m.secs! < 10 ? Math.max(0.1, m.secs!).toFixed(1).replace(/\.0$/, '') : String(Math.round(m.secs!));
+  const model = m.model?.replace(/^gemini-[\d.]+-/, '').replace(/(^|-)(\w)/g, (_, d, c) => (d ? ' ' : '') + c.toUpperCase()).replace(' Lite', '-Lite');
+  return `Answered in ${secs}s${model ? ' · ' + model : ''}`;
+}
+
 const STARTERS = ['Why am I over budget?', 'How do I finish this cycle on budget?', 'Which merchants should I cut back on?', 'Sort my Buffer transactions'];
 
 type Props = {
@@ -56,13 +63,14 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
     setBusy(true);
     setWaited(0);
     const id = ++asking.current;
+    const started = Date.now();
     const timeout = new Promise<'slow'>(r => setTimeout(() => r('slow'), TIMEOUT_MS));
     try {
       const a = await Promise.race([askGemini(next, chatContext({ cycle, budget, settings, notes, withNotes })), timeout]);
       if (id !== asking.current) return;
       if (a === 'slow') setProblem({ kind: 'slow' });
       else if ('error' in a) setProblem({ kind: a.error, detail: a.detail });
-      else setMessages([...next, { role: 'model', text: a.reply, actions: a.actions }]);
+      else setMessages([...next, { role: 'model', text: a.reply, actions: a.actions, model: a.model, secs: (Date.now() - started) / 1000 }]);
     } catch (e) {
       if (id === asking.current) setProblem({ kind: 'network', detail: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -141,6 +149,7 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
                 {(m.actions ?? []).map((a, j) => (
                   <ActionCard key={j} action={a} allTxs={allTxs} />
                 ))}
+                {m.secs != null && <span className={s.chatMeta}>{answeredIn(m)}</span>}
               </div>
             ),
           )}
