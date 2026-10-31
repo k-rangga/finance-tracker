@@ -30,6 +30,10 @@ export type UserData = {
   installments: Record<string, InstallmentPlan>;
   /** Category for every transaction from a merchant: { merchant as written in the category_rules tab: category }. */
   rules: Record<string, string>;
+  /** Sub-category named by a rule: { merchant as written in the tab: sub-category }. */
+  ruleSubs: Record<string, string>;
+  /** Sub-category you picked for a transaction: { txId: sub-category }. */
+  subs: Record<string, string>;
   journal: Trade[];
   /** Avg up / avg down buys and notes on journal entries. */
   updates: TradeUpdate[];
@@ -58,7 +62,9 @@ export type Backend = {
   /** Pay a purchase in installments; `null` makes it one purchase again. */
   setInstallment(txId: string, plan: InstallmentPlan | null): Promise<void>;
   /** { merchant: category, or null to drop the rule }. */
-  setRules(rules: Record<string, string | null>): Promise<void>;
+  setRules(rules: Record<string, string | null>, subs?: Record<string, string | null>): Promise<void>;
+  /** `sub: null` clears it. */
+  setSub(txId: string, sub: string | null): Promise<void>;
   saveTrade(t: Trade): Promise<void>;
   saveUpdate(u: TradeUpdate): Promise<void>;
   deleteUpdate(id: string): Promise<void>;
@@ -192,6 +198,8 @@ type State = {
   removed?: string[];
   installments?: Record<string, InstallmentPlan>;
   rules?: Record<string, string>;
+  ruleSubs?: Record<string, string>;
+  subs?: Record<string, string>;
   trades: TradeRow[];
   updates?: UpdateRow[];
   prices: Prices | null;
@@ -214,6 +222,8 @@ export const backend: Backend = {
       removed: s.removed ?? [],
       installments: s.installments ?? {},
       rules: s.rules ?? {},
+      ruleSubs: s.ruleSubs ?? {},
+      subs: s.subs ?? {},
       journal: s.trades.map(toTrade).sort((a, b) => b.d.localeCompare(a.d)),
       updates: (s.updates ?? []).map(toUpdate),
       prices: s.prices ?? defaultPrices(),
@@ -230,7 +240,8 @@ export const backend: Backend = {
   setNote: async (txId, note) => void (await run('setNote', { txId, note })),
   setRemoved: async (txId, removed) => void (await run('setRemoved', { txId, removed })),
   setInstallment: async (txId, plan) => void (await run('setInstallment', { txId, plan })),
-  setRules: async rules => void (await run('setRules', { rules })),
+  setRules: async (rules, subs) => void (await run('setRules', { rules, subs })),
+  setSub: async (txId, sub) => void (await run('setSub', { txId, sub })),
   saveTrade: async t => void (await run('saveTrade', { trade: toRow(t) })),
   saveUpdate: async x => void (await run('saveTradeUpdate', { update: toUpdateRow(x) })),
   deleteUpdate: async id => void (await run('deleteTradeUpdate', { id })),

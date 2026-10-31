@@ -81,7 +81,7 @@ export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismi
             <button type="button" className={s.rowBtn} aria-expanded={more} onClick={() => setMore(!more)} style={{ padding: '14px 16px', minHeight: 48 }}>
               <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto' }}>
                 <span style={{ fontSize: 15, fontWeight: 600 }}>More</span>
-                <span style={{ fontSize: 13, color: C.textMuted }}>Compared with last cycle · weekly pace</span>
+                <span style={{ fontSize: 13, color: C.textMuted }}>Compared with last cycle · spending pace</span>
               </span>
               <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ transform: more ? 'rotate(180deg)' : 'none' }} />
             </button>
@@ -91,7 +91,7 @@ export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismi
               </div>
             )}
           </section>
-          {more && <WeeklyPace cycle={cycle} budget={budget} />}
+          {more && <SpendingPace cycle={cycle} budget={budget} />}
         </>
       ) : (
         <div className={s.summaryGrid}>
@@ -105,7 +105,7 @@ export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismi
           <div className={s.summaryRest}>
             {budget.cards.length > 0 && <CreditCards budget={budget} />}
             <WhereItWent cycle={cycle} budget={budget} onOpenCategory={onOpenCategory} />
-            <WeeklyPace cycle={cycle} budget={budget} />
+            <SpendingPace cycle={cycle} budget={budget} />
           </div>
         </div>
       )}
@@ -1083,171 +1083,115 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
   );
 }
 
-function WeeklyPace({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
+/**
+ * Spending so far, day by day (cumulative), and where it ends if you keep going: variable spending at your
+ * daily average plus the bills still due on their dates. One line against the budget.
+ */
+function SpendingPace({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
   const { full, short } = useSettings();
-  const [sel, setSel] = useState(cycle.weekIdx);
+  const box = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(600);
+  const [hover, setHover] = useState<number | null>(null);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-  const weeks = useMemo(() => {
-    const fixedNames = new Set(b.cats.filter(c => c.type === 'fixed').map(c => c.name));
-    let fc = 0;
-    let vc = 0;
-    let pj = 0;
-    return [0, 1, 2, 3].map(i => {
-      const first = i * 7;
-      const last = i === 3 ? cycle.cycleDays - 1 : i * 7 + 6;
-      const futureDays = Math.max(0, last - Math.max(first - 1, cycle.dayIdx));
-      const billsIn = sum(b.bills.filter(x => Math.min(3, Math.floor(cycle.offsetOf(x.date) / 7)) === i).map(x => x.amount));
-      const proj = b.velDay * futureDays + billsIn;
-      const fixedW = sum(b.cats.filter(c => fixedNames.has(c.name)).map(c => c.cur[i]));
-      const varW = sum(b.cats.filter(c => !fixedNames.has(c.name)).map(c => c.cur[i]));
-      fc += fixedW;
-      vc += varW;
-      pj += proj;
-      const cum = fc + vc + pj;
-      return {
-        i,
-        label: 'Week ' + (i + 1),
-        range: dayMonth(cycle.dateOf(first)) + ' – ' + dayMonth(cycle.dateOf(last)),
-        isFuture: first > cycle.dayIdx,
-        hasProj: proj > 0.5,
-        weekSpend: fixedW + varW,
-        proj,
-        fc,
-        vc,
-        pj,
-        cum,
-        ideal: fc + b.varBudget * Math.min(1, (last + 1) / cycle.cycleDays),
-      };
-    });
-  }, [b, cycle]);
+  const days = cycle.cycleDays;
+  const today = cycle.dayIdx;
+  const points = useMemo(() => {
+    const byDay = new Array<number>(days).fill(0);
+    for (const t of b.txs) if (categoryByName(t.cat) && t.offset >= 0 && t.offset <= today) byDay[t.offset] += t.net;
+    for (const bill of b.bills) byDay[Math.min(days - 1, Math.max(today + 1, cycle.offsetOf(bill.date)))] += bill.amount;
+    let run = 0;
+    return byDay.map((v, o) => (run += v + (o > today ? b.velDay : 0)));
+  }, [b, cycle, days, today]);
 
-  const scale = Math.max(b.projTotal, b.budget) * 1.1;
-  const w = weeks[sel];
-  const diff = w.cum - w.ideal;
-  const projOver = b.projTotal > b.budget;
-  const thisW = b.weekTotal(cycle.weekIdx);
-  const lastW = cycle.weekIdx > 0 ? b.weekTotal(cycle.weekIdx - 1) : 0;
-  const wow = lastW ? ((thisW - lastW) / lastW) * 100 : 0;
-  const down = wow < 0;
+  const end = points[days - 1];
+  const over = end - b.budget;
+  const height = 170;
+  const pad = { top: 22, bottom: 4 };
+  const max = Math.max(end, b.budget, 1) * 1.06;
+  const x = (o: number) => (days > 1 ? (o / (days - 1)) * width : 0);
+  const y = (v: number) => pad.top + (1 - v / max) * (height - pad.top - pad.bottom);
+  const path = (from: number, to: number) => points.slice(from, to + 1).map((v, i) => `${i ? 'L' : 'M'}${x(from + i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+  const area = `${path(0, today)}L${x(today).toFixed(1)},${height}L0,${height}Z`;
+  const line = over > 0 ? C.redInk : C.accent600;
+  const pick = (clientX: number) => {
+    const r = box.current!.getBoundingClientRect();
+    setHover(Math.max(0, Math.min(days - 1, Math.round(((clientX - r.left) / r.width) * (days - 1)))));
+  };
+  const h = hover ?? today;
+  const billsLeft = sum(b.bills.map(x => x.amount));
 
   return (
-    <Card style={{ gap: 16 }}>
-      <CardHead title="Weekly pace" caption={`Cumulative spend · dashed line = ${Math.round((b.budget / b.income) * 100)}% budget`} />
-      {cycle.weekIdx > 0 && (
+    <Card style={{ gap: 14 }}>
+      <CardHead title="Spending pace" caption="Day by day, and where this cycle ends at this pace" />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span className={s.statLabel}>Ends at</span>
+        <span style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em' }}>{full(end)}</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: over > 0 ? C.redInk : C.accent800 }}>
+          {over > 0 ? `${short(over)} over budget` : `${short(-over)} under budget`}
+          <span style={{ fontWeight: 400, color: C.textMuted }}> · budget {short(b.budget)}</span>
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* What the pointer is on (today when it isn't on the chart). */}
+        <span style={{ fontSize: 13, color: C.textMuted, minHeight: 18 }} aria-live="polite">
+          <strong style={{ color: C.text, fontWeight: 600 }}>{dayLabel(cycle.dateOf(h))}</strong>
+          {h === today ? ' (today)' : ''} · {full(points[h])} {h > today ? 'at this pace' : 'spent so far'}
+        </span>
         <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            alignSelf: 'flex-start',
-            background: down ? C.accentTint : C.redTint,
-            color: down ? C.accent800 : C.redInk,
-            borderRadius: 999,
-            padding: '8px 16px 8px 8px',
-            fontSize: 13,
-          }}
+          ref={box}
+          data-own-gestures
+          style={{ position: 'relative', height, touchAction: 'pan-y' }}
+          onPointerMove={e => pick(e.clientX)}
+          onPointerDown={e => pick(e.clientX)}
+          onPointerLeave={() => setHover(null)}
         >
-          <span style={{ flex: 'none', width: 28, height: 28, borderRadius: '50%', background: C.surface, display: 'grid', placeItems: 'center' }}>
-            <Icon d={down ? IC.trendDown : IC.trend} size={16} />
-          </span>
-          <span>
-            <strong>
-              Week {cycle.weekIdx + 1} is {Math.abs(Math.round(wow))}% {down ? 'lower' : 'higher'} than week {cycle.weekIdx}
-            </strong>{' '}
-            · {full(thisW)} vs {full(lastW)}
+          <svg
+            width={width}
+            height={height}
+            role="img"
+            aria-label={`Spent ${full(points[today])} by today; at this pace ${full(end)} by ${dayLabel(cycle.dateOf(days - 1))}, against a budget of ${full(b.budget)}.`}
+            style={{ display: 'block', overflow: 'visible' }}
+          >
+            <path d={area} fill={C.accent500} opacity={0.12} />
+            <line x1={0} x2={width} y1={y(b.budget)} y2={y(b.budget)} stroke={C.textMuted} strokeWidth={1.5} strokeDasharray="4 4" />
+            <path d={path(0, today)} fill="none" stroke={C.accent600} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+            <path d={path(today, days - 1)} fill="none" stroke={line} strokeWidth={2} strokeDasharray="5 5" strokeLinejoin="round" />
+            <line x1={x(h)} x2={x(h)} y1={pad.top - 6} y2={height} stroke={C.textFaint} strokeWidth={1} />
+            <circle cx={x(h)} cy={y(points[h])} r={5} fill={h > today ? line : C.accent600} stroke={C.surface} strokeWidth={2} />
+            <circle cx={x(days - 1)} cy={y(end)} r={4} fill={line} stroke={C.surface} strokeWidth={2} />
+          </svg>
+          <span className={s.paceTag} style={{ top: Math.max(0, y(b.budget) - 22), right: 0 }}>
+            Budget {short(b.budget)}
           </span>
         </div>
-      )}
-      <div style={{ position: 'relative', height: 220, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16, alignItems: 'end' }}>
-        <div style={{ position: 'absolute', left: 0, right: 0, height: 0, borderTop: `2px dashed ${C.red}`, bottom: pc((b.budget / scale) * 100), zIndex: 2, pointerEvents: 'none' }} />
-        <span
-          style={{
-            position: 'absolute',
-            right: 0,
-            fontSize: 13,
-            fontWeight: 600,
-            color: C.redInk,
-            background: C.surface,
-            padding: '0 6px',
-            transform: 'translateY(50%)',
-            bottom: pc((b.budget / scale) * 100),
-            zIndex: 3,
-          }}
-        >
-          {short(b.budget)}
-        </span>
-        {weeks.map(wk => (
-          <button
-            key={wk.i}
-            type="button"
-            aria-label={`${wk.label}, cumulative ${short(wk.cum)}`}
-            aria-pressed={sel === wk.i}
-            onMouseEnter={() => setSel(wk.i)}
-            onClick={() => setSel(wk.i)}
-            style={{
-              position: 'relative',
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'flex-end',
-              border: 'none',
-              borderRadius: 10,
-              padding: '0 12px',
-              background: sel === wk.i ? C.divider : 'transparent',
-            }}
-          >
-            <div style={{ height: pc((wk.cum / scale) * 100), display: 'flex', flexDirection: 'column-reverse', borderRadius: 10, overflow: 'hidden' }}>
-              <div style={{ flex: 'none', height: pc((wk.fc / wk.cum) * 100), background: C.accent700 }} />
-              <div style={{ flex: 'none', height: pc((wk.vc / wk.cum) * 100), background: C.mint[5] }} />
-              <div style={{ flex: 'none', height: pc((wk.pj / wk.cum) * 100), background: `repeating-linear-gradient(135deg, ${C.mint[8]} 0 6px, ${C.accentHover} 6px 12px)` }} />
-            </div>
-            <div style={{ position: 'absolute', left: 6, right: 6, height: 3, borderRadius: 2, background: C.text, opacity: 0.55, bottom: pc((wk.ideal / scale) * 100) }} />
-          </button>
-        ))}
+        <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.textMuted }}>
+          <span>{dayMonth(cycle.start)}</span>
+          {/* Under today's point, unless it would sit on the start or end date. */}
+          {x(today) > 56 && x(today) < width - 56 && <span style={{ position: 'absolute', left: x(today), transform: 'translateX(-50%)', fontWeight: 600, color: C.text }}>Today</span>}
+          <span>{dayMonth(cycle.dateOf(days - 1))}</span>
+        </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16 }}>
-        {weeks.map(wk => (
-          <div key={wk.i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: 13, fontWeight: sel === wk.i ? 700 : 500 }}>
-            <span>{wk.label}</span>
-            <span style={{ color: C.textMuted, fontWeight: 500 }}>{short(wk.cum)}</span>
-          </div>
-        ))}
-      </div>
-      <div className={s.note} style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 13 }} aria-live="polite">
-        <span style={{ fontWeight: 600 }}>
-          {w.label} · {w.range}
-          {w.isFuture ? ' · projected' : ''}
-        </span>
-        <span>
-          {w.isFuture ? 'Projected spend ' + short(w.proj) : 'Spent ' + short(w.weekSpend) + (w.hasProj ? ' + ' + short(w.proj) + ' projected' : '')} · cumulative {short(w.cum)} · ideal{' '}
-          {short(w.ideal)}
-        </span>
-        <span style={{ fontWeight: 600, color: (w.isFuture ? projOver : diff > 0) ? C.redInk : C.accent800 }}>
-          {w.isFuture
-            ? projOver
-              ? `Ends ${short(b.projTotal - b.budget)} over budget at current pace`
-              : `Ends ${short(b.budget - b.projTotal)} under budget at current pace`
-            : diff > 0
-              ? `${short(diff)} ahead of ideal pace`
-              : `${short(-diff)} behind ideal pace`}
-        </span>
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 13, color: C.textSoft }}>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 13, color: C.textSoft }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Dot color={C.accent700} />
-          Fixed bills
+          <span style={{ width: 16, height: 3, borderRadius: 2, background: C.accent600 }} />
+          Spent
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Dot color={C.mint[5]} />
-          Variable
+          <span style={{ width: 16, borderTop: `2px dashed ${line}` }} />
+          At this pace: {short(b.velDay)}/day{billsLeft > 0 ? ` + ${short(billsLeft)} bills` : ''}
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Dot color={C.mint[8]} />
-          Projected
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 12, height: 3, borderRadius: 2, background: C.textMuted }} />
-          Ideal pace
+          <span style={{ width: 16, borderTop: `1.5px dashed ${C.textMuted}` }} />
+          Budget
         </span>
       </div>
     </Card>

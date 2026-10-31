@@ -14,7 +14,7 @@ import { dayLabel, dayMonth, parseISO, sum, tidyName, toISO } from '../lib/forma
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
-import { CATEGORIES, categoryByName, categoryLabel, CC_PAYMENT_CATEGORY, OTHER_CATEGORIES } from '../data/categories';
+import { CATEGORIES, catFilter, categoryByName, categoryLabel, CC_PAYMENT_CATEGORY, OTHER_CATEGORIES, parseCatFilter } from '../data/categories';
 import { canDismissBill, isCard, merchantKey, type Bill } from '../data/transactions';
 
 export type Range = 'today' | 'week' | 'last' | 'cycle' | 'custom';
@@ -56,7 +56,10 @@ function useFlipUp<T extends HTMLElement>(style?: CSSProperties) {
     const r = el.getBoundingClientRect();
     // Room the bottom tab bar takes on phones.
     const bottom = window.innerHeight - (window.innerWidth < 760 ? 104 : 16);
-    if (r.bottom > bottom && r.top - r.height - 48 > 0) setUp(true);
+    if (r.bottom <= bottom) return;
+    if (r.top - r.height - 48 > 0) setUp(true);
+    // Fits neither way: scroll the page until it clears the tab bar.
+    else window.scrollBy({ top: r.bottom - bottom, behavior: 'smooth' });
   }, []);
   return { ref, style: up ? { ...style, top: 'auto', bottom: '100%', marginTop: 0, marginBottom: 6 } : style };
 }
@@ -65,13 +68,13 @@ function useFlipUp<T extends HTMLElement>(style?: CSSProperties) {
 const iconPill = { flex: 'none', width: 44, height: 44, minHeight: 44, padding: 0, display: 'grid', placeItems: 'center' } as const;
 
 export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, setFilter, onRecat, onLink, onShare, onDismissBill }: Props) {
-  const { full } = useSettings();
+  const { full, settings } = useSettings();
   /** The row with an open popover: an income's "paid back for" picker or an expense's "my share" editor. */
   const [open, setOpen] = useState<{ id: string; kind: Popover } | null>(null);
   /** "New category" dialog, opened from a row's category menu; the new category is applied to that row. */
   const [creating, setCreating] = useState<{ name: string; tx: TxView } | null>(null);
   const [calOpen, setCalOpen] = useState(false);
-  const { installments, setInstallment, notes, rules, setRules } = useData();
+  const { installments, setInstallment, notes, rules, ruleSubs, setRules, setSub } = useData();
   /** The purchase whose installment plan is open in the dialog. */
   const [planFor, setPlanFor] = useState<string | null>(null);
   const planTx = planFor ? allTxs.find(x => x.id === planFor) : undefined;
@@ -107,19 +110,26 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
     onRemove(t.id, true);
     setToast({ text: `Removed ${t.title}`, action: 'Undo', run: () => onRemove(t.id, false) });
   };
-  /** Re-categorise a row and remember it for the merchant: its other and future transactions follow. */
-  const recategorise = (t: TxView, to: string) => {
+  /**
+   * Re-categorise a row (and pick its sub-category) and remember both for the merchant: its other and future
+   * transactions follow. An installment payment's sub-category is set on its purchase, so every month follows.
+   */
+  const recategorise = (t: TxView, to: string, sub: string | null = null) => {
     const key = merchantKey(t.title);
-    onRecat(t.id, t.category, to);
+    if (to !== t.cat) onRecat(t.id, t.category, to);
+    setSub(t.plan?.of ?? t.id, sub);
     if (!key) return;
     // The rule it replaces, however it's written in the sheet.
     const prev = Object.entries(rules).find(([m]) => merchantKey(m) === key);
-    setRules({ [key]: to });
+    const prevSub = Object.entries(ruleSubs).find(([m]) => merchantKey(m) === key)?.[1] ?? null;
+    setRules({ [key]: to }, { [key]: sub });
     const others = allTxs.filter(x => x.id !== t.id && !x.isCcPayment && merchantKey(x.title) === key).length;
     setToast({
-      text: `${t.title} → ${categoryLabel(to)}` + (others ? ` for ${others} other ${others === 1 ? 'transaction' : 'transactions'} too, and future ones` : ' from now on'),
+      text:
+        `${t.title} → ${categoryLabel(to)}${sub ? ' · ' + sub : ''}` +
+        (others ? ` for ${others} other ${others === 1 ? 'transaction' : 'transactions'} too, and future ones` : ' from now on'),
       action: 'Just this one',
-      run: () => setRules(prev ? { [prev[0]]: prev[1] } : { [key]: null }),
+      run: () => (prev ? setRules({ [prev[0]]: prev[1] }, { [prev[0]]: prevSub }) : setRules({ [key]: null })),
     });
   };
   const expenses = budget.txs.filter(t => !t.isIncome && !t.isTransfer);
@@ -147,9 +157,11 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
       ? 'Last week was before this pay cycle'
       : span(lo, hi) + ((range === 'week' || range === 'last') && lo === 0 && (range === 'last' ? wStart - 7 : wStart) < 0 ? ' (from payday)' : '');
   const needle = q.trim().toLowerCase();
+  const pick = parseCatFilter(cat);
   /** Everything in the range that matches the filters: what the recap adds up. */
   const inRange = (range === 'custom' ? allTxs : budget.txs).filter(
-    t => t.offset >= lo && t.offset <= hi && (!cat || t.cat === cat) && (!needle || `${t.title} ${t.account} ${t.source} ${t.cat} ${notes[t.id] ?? ''}`.toLowerCase().includes(needle)),
+    t => t.offset >= lo && t.offset <= hi && (!cat || (t.cat === pick.cat && (!pick.sub || t.sub === pick.sub))) &&
+      (!needle || `${t.title} ${t.account} ${t.source} ${t.cat} ${t.sub ?? ''} ${notes[t.id] ?? ''}`.toLowerCase().includes(needle)),
   );
   /** What the list shows: the same, minus transfers between your accounts when you hide them. */
   const txs = filter.hideTransfers ? inRange.filter(t => !t.isTransfer) : inRange;
@@ -176,7 +188,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   )
     .filter(([, v]) => v > 0)
     .sort((x, y) => y[1] - x[1]);
-  const bills = budget.bills.filter(b => !cat || b.category === cat);
+  const bills = budget.bills.filter(b => !cat || b.category === pick.cat);
   /** The account most spending comes from: phones only name the account on rows paid from another one. */
   const usualAccount = useMemo(() => {
     const n = new Map<string, number>();
@@ -247,7 +259,10 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
               align="right"
               options={[
                 { value: '', label: phone ? 'All' : 'All categories' },
-                ...CATEGORIES.map(c => ({ value: c.name, label: c.name, dot: c.color, group: 'Spending' })),
+                ...CATEGORIES.flatMap(c => [
+                  { value: c.name, label: c.name, dot: c.color, group: 'Spending' },
+                  ...(settings.subcategories[c.name] ?? []).map(sub => ({ value: catFilter(c.name, sub), label: catFilter(c.name, sub), dot: c.color, group: 'Spending' })),
+                ]),
                 ...[...OTHER_CATEGORIES, CC_PAYMENT_CATEGORY].map(c => ({ value: c, label: categoryLabel(c), group: 'Not spending' })),
               ]}
               style={{ width: 'auto', minWidth: 0, maxWidth: phone ? 140 : 220, borderRadius: 8, fontSize: 14, padding: phone ? '9px 34px 9px 12px' : '9px 40px 9px 16px', minHeight: 44 }}
@@ -584,7 +599,7 @@ function Recap({
 
 type RowProps = {
   t: TxView;
-  onRecat: (t: TxView, cat: string) => void;
+  onRecat: (t: TxView, cat: string, sub?: string | null) => void;
   onLink: Props['onLink'];
   onShare: Props['onShare'];
   onRemove: () => void;
@@ -737,8 +752,9 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
         {popover === 'cat' && (
           <CategoryMenu
             current={t.cat}
-            onPick={cat => {
-              if (cat !== t.cat) onRecat(t, cat);
+            currentSub={t.sub}
+            onPick={(cat, sub) => {
+              if (cat !== t.cat || (sub ?? undefined) !== t.sub) onRecat(t, cat, sub);
               setPopover(null);
             }}
             onNew={onNewCategory}
@@ -945,12 +961,15 @@ function CategoryButton({ t, open, onToggle, plain }: { t: TxView; open: boolean
       className={plain ? s.catText : s.catPill}
       aria-haspopup="listbox"
       aria-expanded={open}
-      aria-label={`Category for ${t.title}: ${t.cat}`}
+      aria-label={`Category for ${t.title}: ${catFilter(t.cat, t.sub)}`}
       title={t.edited ? `Changed from ${categoryLabel(t.category)} · click to change` : 'Change category'}
       onClick={onToggle}
     >
       <span aria-hidden="true" style={{ flex: 'none', width: 7, height: 7, borderRadius: '50%', background: c?.color ?? C.textFaint, marginRight: 6 }} />
-      <span className={s.catPillText}>{t.cat}</span>
+      <span className={s.catPillText}>
+        {t.cat}
+        {t.sub && <span style={{ color: C.textMuted }}> · {t.sub}</span>}
+      </span>
       {!plain && (
         <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: `translateY(-50%)${open ? ' rotate(180deg)' : ''}`, pointerEvents: 'none' }} />
       )}
@@ -958,28 +977,61 @@ function CategoryButton({ t, open, onToggle, plain }: { t: TxView; open: boolean
   );
 }
 
-type MenuItem = { key: string; label: string; value?: string; icon?: string; tint?: string; ink?: string; group: 'spend' | 'other' | 'new' };
+type MenuItem = { key: string; label: string; value?: string; sub?: string; icon?: string; tint?: string; ink?: string; group: 'spend' | 'sub' | 'other' | 'new' };
 
-/** Searchable category list: budget categories, then "Not spending", then "New category". Arrow keys + Enter work. */
-function CategoryMenu({ current, onPick, onNew }: { current: string; onPick: (cat: string) => void; onNew: (name: string) => void }) {
+/**
+ * Searchable category list: budget categories (each with its sub-categories indented under it), then
+ * "Not spending", then "New category". Arrow keys + Enter work.
+ */
+function CategoryMenu({
+  current,
+  currentSub,
+  onPick,
+  onNew,
+}: {
+  current: string;
+  currentSub?: string;
+  onPick: (cat: string, sub: string | null) => void;
+  onNew: (name: string) => void;
+}) {
+  const { settings } = useSettings();
   const [q, setQ] = useState('');
-  // Start on the current category, so Enter right away keeps it.
-  const [active, setActive] = useState(() => Math.max(0, CATEGORIES.findIndex(c => c.name === current)));
+  /** The highlighted row; until you move, the current category (or sub-category), so Enter right away keeps it. */
+  const [active, setActive] = useState(-1);
   const listRef = useRef<HTMLDivElement>(null);
   const flip = useFlipUp<HTMLDivElement>({ width: 'min(300px, 100vw - 48px)' });
   const needle = q.trim().toLowerCase();
   const match = (label: string) => !needle || label.toLowerCase().includes(needle);
   const items: MenuItem[] = [
-    ...CATEGORIES.filter(c => match(c.name)).map(c => ({ key: c.name, label: c.name, value: c.name, icon: c.icon, tint: c.tint, ink: c.ink, group: 'spend' as const })),
+    ...CATEGORIES.flatMap(c => {
+      const subs = settings.subcategories[c.name] ?? [];
+      // A category shows when it or one of its sub-categories matches; then all its sub-categories that match too.
+      const own = match(c.name);
+      const shown = subs.filter(x => own || match(x));
+      if (!own && !shown.length) return [];
+      return [
+        { key: c.name, label: c.name, value: c.name, icon: c.icon, tint: c.tint, ink: c.ink, group: 'spend' as const },
+        ...shown.map(x => ({ key: c.name + '›' + x, label: x, value: c.name, sub: x, group: 'sub' as const })),
+      ];
+    }),
     ...OTHER_CATEGORIES.map(o => ({ o, label: categoryLabel(o) }))
       .filter(x => match(x.label))
       .map(x => ({ key: x.o, label: x.label, value: x.o, icon: x.o === 'Transfer' ? IC.transfer : x.o === 'Savings' ? IC.piggy : x.o === 'Investment' ? IC.trend : IC.coins, group: 'other' as const })),
   ];
   const exact = items.some(i => i.label.toLowerCase() === needle || i.value?.toLowerCase() === needle);
   items.push({ key: '+new', label: needle && !exact ? `Create “${q.trim()}”` : 'New category…', group: 'new' });
-  const at = Math.min(active, items.length - 1);
+  const isCurrent = (i: MenuItem) => i.value === current && (i.sub ?? undefined) === (currentSub ?? undefined);
+  const at = active >= 0 ? Math.min(active, items.length - 1) : Math.max(0, items.findIndex(isCurrent));
 
-  const choose = (i: MenuItem) => (i.group === 'new' ? onNew(exact ? '' : q.trim()) : i.value && onPick(i.value));
+  const choose = (i: MenuItem) => (i.group === 'new' ? onNew(exact ? '' : q.trim()) : i.value && onPick(i.value, i.sub ?? null));
+  // Open on the current one, wherever it is in the list.
+  useEffect(() => {
+    // Scroll the list only (scrollIntoView would move the page too).
+    const list = listRef.current;
+    const el = list?.querySelectorAll('[role=option]')[at];
+    if (list && el) list.scrollTop += el.getBoundingClientRect().top - list.getBoundingClientRect().top - list.clientHeight / 2 + 18;
+    // Only on opening.
+  }, []);
   const onKey = (e: ReactKeyboardEvent) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
@@ -1021,13 +1073,15 @@ function CategoryMenu({ current, onPick, onNew }: { current: string; onPick: (ca
             <div
               id={'cat-opt-' + n}
               role="option"
-              aria-selected={i.value === current}
-              className={s.pickRow + (n === at ? ' ' + s.pickRowActive : '') + (i.value === current ? ' ' + s.pickRowOn : '')}
+              aria-selected={isCurrent(i)}
+              className={s.pickRow + (n === at ? ' ' + s.pickRowActive : '') + (isCurrent(i) ? ' ' + s.pickRowOn : '')}
               onMouseEnter={() => setActive(n)}
               onMouseDown={e => e.preventDefault()}
               onClick={() => choose(i)}
+              // Sub-categories sit indented under their category, without an icon of their own.
+              style={i.group === 'sub' ? { paddingLeft: 48, minHeight: 36 } : undefined}
             >
-              {i.group === 'new' ? (
+              {i.group === 'sub' ? null : i.group === 'new' ? (
                 <span className={s.menuIcon} style={{ background: C.accentTint, color: C.accent800 }}>
                   <Icon d={IC.plus} size={14} />
                 </span>
@@ -1036,8 +1090,17 @@ function CategoryMenu({ current, onPick, onNew }: { current: string; onPick: (ca
                   <Icon d={i.icon ?? IC.coins} size={14} />
                 </span>
               )}
-              <span style={{ marginRight: 'auto', fontSize: 14, fontWeight: i.group === 'new' ? 700 : 600, color: i.group === 'new' ? C.accent600 : C.text }}>{i.label}</span>
-              {i.value === current && <Icon d="M20 6 9 17l-5-5" size={16} color={C.accent600} />}
+              <span
+                style={{
+                  marginRight: 'auto',
+                  fontSize: i.group === 'sub' ? 13 : 14,
+                  fontWeight: i.group === 'new' ? 700 : i.group === 'sub' ? 500 : 600,
+                  color: i.group === 'new' ? C.accent600 : i.group === 'sub' ? C.textSoft : C.text,
+                }}
+              >
+                {i.label}
+              </span>
+              {isCurrent(i) && <Icon d="M20 6 9 17l-5-5" size={16} color={C.accent600} />}
             </div>
           </div>
         ))}

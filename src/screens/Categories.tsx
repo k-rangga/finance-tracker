@@ -8,7 +8,7 @@ import { dayMonth, pc, sum, tidyName } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
-import { builtInCategory } from '../data/categories';
+import { builtInCategory, catFilter } from '../data/categories';
 
 type Mode = 'cycle' | 'week';
 
@@ -354,11 +354,38 @@ function CategoryDetail({
   onShowTransactions: (cat: string) => void;
   onEditCategory: (name: string) => void;
 }) {
-  const { full, short } = useSettings();
+  const { full, short, settings } = useSettings();
   const { c, cur, last, mine } = r;
   const top = [...mine].sort((x, y) => y.net - x.net).slice(0, 3);
+  // What it went on inside the category, biggest first; untagged spending is "Other".
+  const subNames = settings.subcategories[c.name] ?? [];
+  const bySub = subNames.length
+    ? [...subNames, null]
+        .map(sub => ({ sub, total: sum(mine.filter(t => (t.sub ?? null) === sub).map(t => t.net)) }))
+        .filter(x => x.total > 0)
+        .sort((x, y) => y.total - x.total)
+    : [];
   return (
     <div className={`fade-in ${s.catDetail}`}>
+      {bySub.length > 0 && cur > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span className={s.statLabel}>By sub-category</span>
+          {bySub.map(x => (
+            <button key={x.sub ?? ''} type="button" className={s.subRow} onClick={() => onShowTransactions(catFilter(c.name, x.sub))} title={`See ${x.sub ?? 'other ' + c.name.toLowerCase()} transactions`}>
+              <span style={{ display: 'flex', alignItems: 'baseline', gap: 10, fontSize: 14 }}>
+                <span className={s.ellipsis} style={{ marginRight: 'auto', minWidth: 0, color: x.sub ? C.text : C.textMuted }}>
+                  {x.sub ?? 'Other'}
+                </span>
+                <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{short(x.total)}</span>
+                <span style={{ fontSize: 13, color: C.textMuted, minWidth: 36, textAlign: 'right' }}>{Math.round((x.total / cur) * 100)}%</span>
+              </span>
+              <span className={s.track} style={{ display: 'block', height: 4 }}>
+                <span className={s.fill} style={{ width: pc((x.total / cur) * 100), background: x.sub ? c.color : C.textFaint }} />
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
       {top.length === 0 ? (
         <span style={{ fontSize: 13, color: C.textMuted }}>Nothing spent here {mode === 'cycle' ? 'this cycle' : 'this week'}.</span>
       ) : (

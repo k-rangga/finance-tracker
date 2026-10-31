@@ -11,7 +11,7 @@ import { computeBudget, txViews } from './lib/budget';
 import { addDays, dayLabel, dayMonth, startOfToday, tidyName, toISO } from './lib/format';
 import { useSettings } from './lib/settings';
 import { useData } from './lib/data';
-import { billKey, expectedBills, inCycle, installmentBills, installmentPayments, toTransaction, withMerchantRules, type Bill } from './data/transactions';
+import { billKey, expectedBills, inCycle, installmentBills, installmentPayments, resolveSubs, toTransaction, withMerchantRules, type Bill } from './data/transactions';
 import { INSTALLMENT_CATEGORY } from './data/categories';
 import { Summary } from './screens/Summary';
 import { Categories } from './screens/Categories';
@@ -37,7 +37,7 @@ export default function App() {
     const t = storage.getRaw(KEYS.tab) as Tab | null;
     return t && TABS.some(x => x.key === t) ? t : 'summary';
   });
-  const { recat: fixed, links, shares, removed, installments, rules, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email, refreshImports } = useData();
+  const { recat: fixed, links, shares, removed, installments, rules, ruleSubs, subs: picked, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email, refreshImports } = useData();
   // Transactions remembers your last dates, category and search on this device.
   const [txFilter, setTxFilterState] = useState<ActivityFilter>(() => storage.get<ActivityFilter>(KEYS.txFilter, { range: 'week', cat: '', q: '' }));
   const setTxFilter = useCallback((f: ActivityFilter) => {
@@ -70,6 +70,8 @@ export default function App() {
     for (const id of Object.keys(installments)) out[id] = INSTALLMENT_CATEGORY;
     return out;
   }, [fixedAndRules, installments]);
+  /** Sub-categories: yours, else your rules', else a guess from the merchant name. */
+  const subs = useMemo(() => resolveSubs(all, t => recat[t.id] ?? t.category, picked, ruleSubs, settings.subcategories), [all, recat, picked, ruleSubs, settings.subcategories]);
   const transactions = useMemo(() => inCycle(all, cycle), [all, cycle]);
   const prevTransactions = useMemo(() => all.filter(t => t.date >= prevCycle.start && t.date < cycle.start), [all, prevCycle, cycle]);
   const bills = useMemo(
@@ -96,11 +98,11 @@ export default function App() {
     setBillUndo({ text: `${tidyName(b.title)} removed from bills`, run: () => update({ dismissedBills: before }) });
   };
   const budget = useMemo(
-    () => computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, income: settings.income, warnAt: settings.warnAt }),
-    [transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, settings.income, settings.warnAt, settings.savingsPct, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
+    () => computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, cycle, income: settings.income, warnAt: settings.warnAt }),
+    [transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, cycle, settings.income, settings.warnAt, settings.savingsPct, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
   );
   /** Every synced transaction, for the Transactions screen's own date range. */
-  const allTxs = useMemo(() => txViews(all, all, { recat, links, shares, cycle }).txs, [all, recat, links, shares, cycle]);
+  const allTxs = useMemo(() => txViews(all, all, { recat, links, shares, cycle, subs }).txs, [all, recat, links, shares, cycle, subs]);
   const removedTxs = useMemo(
     () => txViews(imported.filter(t => removedIds.has(t.id)), imported, { recat, links, shares, cycle }).txs,
     [imported, removedIds, recat, links, shares, cycle],

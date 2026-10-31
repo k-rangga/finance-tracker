@@ -21,9 +21,11 @@ const TABLES = {
   /**
    * Merchant → category: every transaction from a merchant takes its rule's category (unless you fixed it by hand).
    * Edit it here too (by hand or with Gemini in Sheets): the merchant may be part of the name ("tunas toyota"),
-   * the category must be one of the app's (any case).
+   * the category must be one of the app's (any case), and `sub` (optional) one of that category's sub-categories.
    */
-  category_rules: ['merchant', 'category', 'updated_at'],
+  category_rules: ['merchant', 'category', 'updated_at', 'sub'],
+  /** Sub-category you picked for a transaction (a label inside its category; limits stay on the category). */
+  subs: ['tx_id', 'sub', 'updated_at'],
   trades: [
     'id', 'market', 'ticker', 'name', 'buy_date', 'price', 'quantity', 'fee', 'style', 'conviction', 'target', 'stop',
     'catalyst', 'catalyst_date', 'thesis', 'tags', 'leverage', 'direction',

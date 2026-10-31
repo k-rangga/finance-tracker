@@ -40,6 +40,8 @@ const ACTIONS = {
     removed: readTable_('removed').map(r => r.tx_id),
     installments: installments_(),
     rules: categoryRules_(),
+    ruleSubs: ruleSubs_(),
+    subs: subs_(),
     trades: readTable_('trades'),
     updates: readTable_('trade_updates'),
     prices: props_('prices', null),
@@ -79,9 +81,14 @@ const ACTIONS = {
     else upsertRow_('installments', 'tx_id', { tx_id: p.txId, start: p.plan.start, amounts: JSON.stringify(p.plan.amounts), updated_at: new Date().toISOString() });
     return true;
   },
-  /** { merchant: category, or null to drop the rule }. */
+  /** { merchant: category, or null to drop the rule }; `subs` (optional) { merchant: sub-category, or null to clear }. */
   setRules: p => {
-    setRules_(p.rules || {});
+    setRules_(p.rules || {}, p.subs || {});
+    return true;
+  },
+  setSub: p => {
+    if (!p.sub) deleteRow_('subs', 'tx_id', p.txId);
+    else upsertRow_('subs', 'tx_id', { tx_id: p.txId, sub: String(p.sub).slice(0, 40), updated_at: new Date().toISOString() });
     return true;
   },
   setRemoved: p => {
@@ -156,6 +163,23 @@ function categoryRules_() {
   return out;
 }
 
+/** { merchant as written in the tab: sub-category }, for rules that name one. */
+function ruleSubs_() {
+  const out = {};
+  readTable_('category_rules').forEach(r => {
+    if (r.merchant && r.sub) out[r.merchant] = r.sub;
+  });
+  return out;
+}
+
+function subs_() {
+  const out = {};
+  readTable_('subs').forEach(r => {
+    out[r.tx_id] = r.sub;
+  });
+  return out;
+}
+
 /** Same as merchantKey in the app: "6202-Hero Kota Wisata" → "hero kota wisata". */
 function merchantKey_(s) {
   return String(s)
@@ -165,19 +189,27 @@ function merchantKey_(s) {
     .trim();
 }
 
-/** Set or drop rules; a row written another way ("Hero Kota Wisata") is the same merchant and is replaced. */
-function setRules_(rules) {
+/**
+ * Set or drop rules; a row written another way ("Hero Kota Wisata") is the same merchant and is replaced.
+ * A rule's sub-category is kept unless `subs` names the merchant (null clears it).
+ */
+function setRules_(rules, subs) {
+  subs = subs || {};
   const merchants = Object.keys(rules);
   if (!merchants.length) return;
   const changed = {};
   merchants.forEach(m => (changed[merchantKey_(m)] = true));
-  const stale = readColumn_('category_rules', 'merchant').filter(m => changed[merchantKey_(m)]);
-  if (stale.length) deleteWhere_('category_rules', 'merchant', stale);
+  const stale = readTable_('category_rules').filter(r => r.merchant && changed[merchantKey_(r.merchant)]);
+  const oldSub = {};
+  stale.forEach(r => (oldSub[merchantKey_(r.merchant)] = r.sub));
+  if (stale.length) deleteWhere_('category_rules', 'merchant', stale.map(r => r.merchant));
   const now = new Date().toISOString();
   appendNew_(
     'category_rules',
     'merchant',
-    merchants.filter(m => rules[m]).map(m => ({ merchant: m, category: rules[m], updated_at: now })),
+    merchants
+      .filter(m => rules[m])
+      .map(m => ({ merchant: m, category: rules[m], updated_at: now, sub: m in subs ? subs[m] || '' : oldSub[merchantKey_(m)] || '' })),
   );
 }
 

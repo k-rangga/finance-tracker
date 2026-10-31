@@ -28,7 +28,9 @@ type Ctx = UserData & {
   /** Pay a purchase in installments; `null` makes it one purchase again. */
   setInstallment: (txId: string, plan: InstallmentPlan | null) => void;
   /** Set merchant rules ({ merchant: category }); `null` drops one. Kept in the category_rules tab. */
-  setRules: (rules: Record<string, string | null>) => void;
+  setRules: (rules: Record<string, string | null>, subs?: Record<string, string | null>) => void;
+  /** Your sub-category for a transaction; `null` clears it. */
+  setSub: (txId: string, sub: string | null) => void;
   saveTrade: (t: Trade) => void;
   saveUpdate: (u: TradeUpdate) => void;
   deleteUpdate: (id: string) => void;
@@ -131,16 +133,34 @@ export function DataProvider({ backend, children, loading, failed }: { backend: 
         });
         write(backend.setInstallment(txId, plan));
       },
-      setRules: patch => {
+      setRules: (patch, subPatch = {}) => {
         // A rule typed another way in the sheet ("Hero Kota Wisata") is the same merchant: replace it.
         const changed = new Set(Object.keys(patch).map(merchantKey));
         setData(d => {
           if (!d) return d;
           const rules = Object.fromEntries(Object.entries(d.rules).filter(([m]) => !changed.has(merchantKey(m))));
-          for (const [m, cat] of Object.entries(patch)) if (cat) rules[m] = cat;
-          return { ...d, rules };
+          const kept = Object.entries(d.ruleSubs).filter(([m]) => changed.has(merchantKey(m)));
+          const ruleSubs = Object.fromEntries(Object.entries(d.ruleSubs).filter(([m]) => !changed.has(merchantKey(m))));
+          for (const [m, cat] of Object.entries(patch)) {
+            if (!cat) continue;
+            rules[m] = cat;
+            // The rule keeps its sub-category unless this change names one.
+            const sub = m in subPatch ? subPatch[m] : kept.find(([k]) => merchantKey(k) === merchantKey(m))?.[1];
+            if (sub) ruleSubs[m] = sub;
+          }
+          return { ...d, rules, ruleSubs };
         });
-        write(backend.setRules(patch));
+        write(backend.setRules(patch, subPatch));
+      },
+      setSub: (txId, sub) => {
+        setData(d => {
+          if (!d) return d;
+          const subs = { ...d.subs };
+          if (sub) subs[txId] = sub;
+          else delete subs[txId];
+          return { ...d, subs };
+        });
+        write(backend.setSub(txId, sub));
       },
       saveTrade: t => {
         setData(d => d && { ...d, journal: d.journal.some(x => x.id === t.id) ? d.journal.map(x => (x.id === t.id ? t : x)) : [t, ...d.journal] });

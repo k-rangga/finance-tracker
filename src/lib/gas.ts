@@ -44,6 +44,8 @@ type Dev = Record<string, unknown> & {
   removed?: string[];
   installments?: Record<string, unknown>;
   rules?: Record<string, string>;
+  ruleSubs?: Record<string, string>;
+  subs?: Record<string, string>;
   trades: Record<string, unknown>[];
   updates?: { id: string }[];
   snapshots: { day: string }[];
@@ -73,7 +75,7 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
   const gmail = { google_email: 'dev@localhost', label_name: (d.label as string) ?? null, last_synced_at: null, last_sync_status: null, last_sync_count: null };
   switch (action) {
     case 'getState':
-      return { email: 'dev@localhost', settings: d.settings ?? null, recat: d.overrides, links: d.links ?? {}, shares: d.shares ?? {}, notes: d.notes ?? {}, removed: d.removed ?? [], installments: d.installments ?? {}, rules: d.rules ?? {}, trades: d.trades, updates: d.updates ?? [], prices: d.prices ?? null, snaps: d.snapshots, txRows: d.txRows ?? [], gmail };
+      return { email: 'dev@localhost', settings: d.settings ?? null, recat: d.overrides, links: d.links ?? {}, shares: d.shares ?? {}, notes: d.notes ?? {}, removed: d.removed ?? [], installments: d.installments ?? {}, rules: d.rules ?? {}, ruleSubs: d.ruleSubs ?? {}, subs: d.subs ?? {}, trades: d.trades, updates: d.updates ?? [], prices: d.prices ?? null, snaps: d.snapshots, txRows: d.txRows ?? [], gmail };
     case 'getImports':
       return { txRows: d.txRows ?? [], gmail };
     case 'saveSettings':
@@ -110,10 +112,22 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
     }
     case 'setRules': {
       const rules = (d.rules ??= {});
+      const ruleSubs = (d.ruleSubs ??= {});
+      const subs = (q.subs ?? {}) as Record<string, string | null>;
       for (const [m, cat] of Object.entries(q.rules as Record<string, string | null>)) {
+        const old = Object.keys(ruleSubs).find(k => k.toLowerCase() === m.toLowerCase());
+        const sub = m in subs ? subs[m] : old ? ruleSubs[old] : null;
         for (const k of Object.keys(rules)) if (k.toLowerCase() === m.toLowerCase()) delete rules[k];
+        for (const k of Object.keys(ruleSubs)) if (k.toLowerCase() === m.toLowerCase()) delete ruleSubs[k];
         if (cat) rules[m] = cat;
+        if (cat && sub) ruleSubs[m] = sub;
       }
+      return save();
+    }
+    case 'setSub': {
+      const subs = (d.subs ??= {});
+      if (q.sub) subs[q.txId as string] = q.sub as string;
+      else delete subs[q.txId as string];
       return save();
     }
     case 'setRemoved': {

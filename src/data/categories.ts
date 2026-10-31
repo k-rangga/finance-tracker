@@ -94,6 +94,33 @@ const BUILT_IN: Category[] = [
   { name: 'Interest & fees', type: 'variable', limitPct: 0.5, ...HUES[13], icon: IC.card },
 ];
 
+/** Sub-categories to start with; you can change them in each category's edit dialog. */
+export const DEFAULT_SUBCATEGORIES: Record<string, string[]> = {
+  Transport: ['Fuel', 'Parking & toll', 'Rides & transit'],
+  Shopping: ['Clothes', 'Home', 'Electronics'],
+  Maintenance: ['Car', 'Home'],
+};
+
+/** A category filter can name a sub-category too: "Transport › Fuel". */
+const SUB_SEP = ' › ';
+export const catFilter = (cat: string, sub?: string | null) => (sub ? cat + SUB_SEP + sub : cat);
+export const parseCatFilter = (v: string) => {
+  const [cat, sub] = v.split(SUB_SEP);
+  return { cat, sub: sub as string | undefined };
+};
+
+/** A guess from the merchant's name when you haven't picked a sub-category and no rule names one. */
+export const AUTO_SUBS: [category: string, sub: string, match: RegExp][] = [
+  ['Transport', 'Fuel', /\b(pertamina|shell|spbu|bensin|bbm|fuel|vivo|bp akr)\b/i],
+  ['Transport', 'Parking & toll', /\b(parkir|parking|e-?toll|tol|flazz|e-?money|tapcash|brizzi|jasa ?marga)\b/i],
+  ['Transport', 'Rides & transit', /\b(grab|gojek|goride|gocar|grabbike|grabcar|bluebird|taxi|taksi|maxim|krl|mrt|lrt|transjakarta|commuter|kai|damri)\b/i],
+  ['Maintenance', 'Car', /\b(toyota|honda|auto ?2000|bengkel|bodyrepai\w*|tambal ban|spare ?parts?|servis|ganti oli)\b/i],
+  ['Maintenance', 'Home', /\b(cuci ac|service ac|tukang|plumber|ace hardware|mr ?diy)\b/i],
+  ['Shopping', 'Clothes', /\b(uniqlo|zara|h&m|zalora|erigo|cotton ink|sepatu|shoes|baju)\b/i],
+  ['Shopping', 'Home', /\b(ikea|informa|ace hardware|mr ?diy|kawan lama)\b/i],
+  ['Shopping', 'Electronics', /\b(ibox|erafone|digimap|samsung|electronic\w*|elektronik)\b/i],
+];
+
 /**
  * Built-in categories (with your limit and colour changes) followed by yours.
  * Reassigned by `applyCategorySettings`; imports see the new list.

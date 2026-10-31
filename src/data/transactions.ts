@@ -1,6 +1,6 @@
 import type { Cycle } from '../lib/cycle';
 import { parseISO, type Currency } from '../lib/format';
-import { CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INTEREST_CATEGORY, INVESTMENT_CATEGORY, OTHER_CATEGORIES, SAVINGS_CATEGORY, TRANSFER_CATEGORY } from './categories';
+import { AUTO_SUBS, CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INTEREST_CATEGORY, INVESTMENT_CATEGORY, OTHER_CATEGORIES, SAVINGS_CATEGORY, TRANSFER_CATEGORY } from './categories';
 
 export type Transaction = {
   id: string;
@@ -144,12 +144,7 @@ export const merchantKey = (title: string) =>
  */
 export function withMerchantRules(txs: Transaction[], recat: Record<string, string>, rules: Record<string, string>): Record<string, string> {
   const names = [...CATEGORIES.map(c => c.name), ...OTHER_CATEGORIES];
-  const list = Object.entries(rules)
-    .map(([m, c]) => [merchantKey(m), names.find(n => n.toLowerCase() === c.trim().toLowerCase())] as const)
-    .filter((r): r is readonly [string, string] => !!r[0] && !!r[1])
-    .sort((a, b) => b[0].length - a[0].length);
-  const exact = new Map(list);
-  const ruleFor = (key: string) => exact.get(key) ?? list.find(([k]) => ` ${key} `.includes(` ${k} `))?.[1];
+  const ruleFor = ruleMatcher(rules, c => names.find(n => n.toLowerCase() === c.trim().toLowerCase()));
   const out: Record<string, string> = {};
   for (const t of txs) {
     if (t.id in recat || t.category === CC_PAYMENT_CATEGORY) continue;
@@ -157,6 +152,45 @@ export function withMerchantRules(txs: Transaction[], recat: Record<string, stri
     if (r && r !== t.category) out[t.id] = r;
   }
   return { ...out, ...recat };
+}
+
+/**
+ * Looks up a merchant key in rules typed by hand or by the app: exact first, else the longest rule whose words
+ * appear in the name. `value` cleans a rule's value; rules it turns into nothing are skipped.
+ */
+function ruleMatcher(rules: Record<string, string>, value: (v: string) => string | undefined) {
+  const list = Object.entries(rules)
+    .map(([m, v]) => [merchantKey(m), value(v)] as const)
+    .filter((r): r is readonly [string, string] => !!r[0] && !!r[1])
+    .sort((a, b) => b[0].length - a[0].length);
+  const exact = new Map(list);
+  return (key: string) => exact.get(key) ?? list.find(([k]) => ` ${key} `.includes(` ${k} `))?.[1];
+}
+
+/**
+ * Each spending transaction's sub-category: the one you picked, else its merchant rule's, else a guess from the
+ * name (AUTO_SUBS). Only sub-categories in its category's list count, so a sub-category you removed, or one left
+ * behind when you moved the transaction to another category, quietly drops. An installment payment takes its
+ * purchase's.
+ */
+export function resolveSubs(
+  txs: Transaction[],
+  catOf: (t: Transaction) => string,
+  picked: Record<string, string>,
+  ruleSubs: Record<string, string>,
+  lists: Record<string, string[]>,
+): Record<string, string> {
+  const ruleFor = ruleMatcher(ruleSubs, v => v.trim());
+  const valid = (cat: string, sub: string | undefined) => (sub ? lists[cat]?.find(x => x.toLowerCase() === sub.toLowerCase()) : undefined);
+  const out: Record<string, string> = {};
+  for (const t of txs) {
+    const cat = catOf(t);
+    if (!lists[cat]?.length) continue;
+    const guess = AUTO_SUBS.find(([c, , re]) => c === cat && re.test(t.title))?.[1];
+    const sub = valid(cat, picked[t.id] ?? (t.plan ? picked[t.plan.of] : undefined)) ?? valid(cat, ruleFor(merchantKey(t.title))) ?? valid(cat, guess);
+    if (sub) out[t.id] = sub;
+  }
+  return out;
 }
 
 /** Transactions dated within a cycle, up to and including today. */

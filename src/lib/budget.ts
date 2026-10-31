@@ -29,6 +29,8 @@ export function categoryStatus(used: number, c: Pick<Category, 'type' | 'color'>
 export type TxView = Transaction & {
   /** Effective category after the user's re-categorisation. */
   cat: string;
+  /** Sub-category inside `cat`, when it has one (see resolveSubs). */
+  sub?: string;
   offset: number;
   week: number;
   edited: boolean;
@@ -169,7 +171,7 @@ function reimbursements(all: Transaction[], recat: Record<string, string>, links
 export function txViews(
   transactions: Transaction[],
   context: Transaction[],
-  { recat, links, shares, cycle }: { recat: Record<string, string>; links: Record<string, string>; shares: Record<string, number>; cycle: Cycle },
+  { recat, links, shares, cycle, subs = {} }: { recat: Record<string, string>; links: Record<string, string>; shares: Record<string, number>; cycle: Cycle; subs?: Record<string, string> },
 ) {
   const { valid, back } = reimbursements(context, recat, links);
   const shareOf = (t: Transaction) => (shares[t.id] == null ? undefined : Math.round(shares[t.id] * t.amount * 100) / 100);
@@ -185,6 +187,7 @@ export function txViews(
       return {
         ...t,
         cat,
+        sub: subs[t.id],
         offset,
         week: weekOf(offset),
         edited: cat !== t.category,
@@ -218,13 +221,15 @@ export function computeBudget(args: {
   links: Record<string, string>;
   /** Your share of an expense as a fraction of its amount: { txId: 0–1 }. */
   shares: Record<string, number>;
+  /** Each transaction's sub-category (see resolveSubs). */
+  subs?: Record<string, string>;
   cycle: Cycle;
   income: number;
   warnAt: number;
 }): Budget {
-  const { transactions, prevTransactions, prevCycle, bills, recat, links, shares, cycle, income, warnAt } = args;
+  const { transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, cycle, income, warnAt } = args;
   const ofIncome = (p: number) => (p / 100) * income;
-  const { txs, netOf } = txViews(transactions, [...transactions, ...prevTransactions], { recat, links, shares, cycle });
+  const { txs, netOf } = txViews(transactions, [...transactions, ...prevTransactions], { recat, links, shares, cycle, subs });
 
   const weekFrac = Math.min(1, (cycle.dayIdx - cycle.weekIdx * 7 + 1) / 7);
   const cats: CatView[] = CATEGORIES.map(c => {

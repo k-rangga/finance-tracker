@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, useRef, type ReactNode } from 'react';
 import { fmtFull, fmtShort, type Currency } from './format';
 import { useData } from './data';
-import { applyCategorySettings, setSavingsTarget, type CustomCategory } from '../data/categories';
+import { applyCategorySettings, DEFAULT_SUBCATEGORIES, setSavingsTarget, type CustomCategory } from '../data/categories';
 
 export type Settings = {
   /** What the Summary greeting calls you; empty for a greeting without a name. */
@@ -25,6 +25,8 @@ export type Settings = {
   limitOverrides: Record<string, number>;
   /** Your colours for built-in categories, by name. */
   colorOverrides: Record<string, string>;
+  /** Sub-categories per category (labels inside it; the limit stays on the category). */
+  subcategories: Record<string, string[]>;
   /** Predicted bills you said aren't due this cycle, by `billKey`. Older cycles' keys are dropped. */
   dismissedBills: string[];
 };
@@ -46,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   limitOverrides: {},
   colorOverrides: {},
   dismissedBills: [],
+  subcategories: DEFAULT_SUBCATEGORIES,
 };
 
 type Ctx = {

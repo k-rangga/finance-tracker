@@ -1352,6 +1352,17 @@ textarea.input {
   }
 }
 
+/* Label riding on the pace chart's budget line. */
+.paceTag {
+  position: absolute;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface);
+  padding: 0 4px;
+  pointer-events: none;
+}
+
 /* ---------- Where it went: treemap ---------- */
 .treemap {
   position: relative;
@@ -1653,6 +1664,22 @@ textarea.input {
   text-align: right;
   white-space: nowrap;
 }
+/* One sub-category inside an opened category: name, amount, share, a thin bar. Opens its transactions. */
+.subRow {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.subRow:hover {
+  opacity: 0.8;
+}
 /* Buffer: what Gmail couldn't place, one tap from sorting. */
 .catSortLink {
   display: inline-flex;
@@ -1751,6 +1778,34 @@ textarea.input {
 }
 .billMark[data-state='due'] {
   color: var(--amber-ink);
+}
+
+/* A sub-category in the category dialog, with its remove button. */
+.subChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 6px 4px 12px;
+  border-radius: 999px;
+  background: var(--divider);
+  color: var(--text);
+}
+.subChip button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.subChip button:hover {
+  background: var(--hover);
+  color: var(--red-ink);
 }
 
 /* ---------- Due-date chip ---------- */

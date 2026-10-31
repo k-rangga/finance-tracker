@@ -77,6 +77,21 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
   const [color, setColor] = useState(existing?.color ?? current?.color ?? nextHue(CATEGORIES).color);
   const [err, setErr] = useState('');
   const [deleting, setDeleting] = useState(false);
+  /** Sub-categories: labels inside this category (they share its limit). */
+  const [subs, setSubs] = useState<string[]>(() => settings.subcategories[editing ?? ''] ?? []);
+  const [subText, setSubText] = useState('');
+  const addSub = () => {
+    const n = subText.trim().slice(0, 40);
+    if (n && !subs.some(x => x.toLowerCase() === n.toLowerCase())) setSubs([...subs, n]);
+    setSubText('');
+  };
+  /** Settings' sub-category lists with this category's saved under `name` (and dropped from its old name). */
+  const withSubs = (name: string | null) => {
+    const all = { ...settings.subcategories };
+    if (editing) delete all[editing];
+    if (name && subs.length) all[name] = subs;
+    return all;
+  };
 
   const draft: CustomCategory = { name: name.trim() || 'New category', type, limitPct, icon, color };
   const preview = { ...toCategory(draft), ...(builtIn ? { icon: builtIn.icon } : {}) };
@@ -100,7 +115,7 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
       const colors = { ...settings.colorOverrides, [builtIn.name]: color };
       if (Math.abs(limitPct - builtIn.limitPct) < 1e-9) delete limits[builtIn.name];
       if (color === builtIn.color) delete colors[builtIn.name];
-      update({ limitOverrides: limits, colorOverrides: colors });
+      update({ limitOverrides: limits, colorOverrides: colors, subcategories: withSubs(builtIn.name) });
       onSaved?.(builtIn.name);
       return onClose();
     }
@@ -110,13 +125,13 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
     if (!(limitPct >= 0 && limitPct <= 100)) return setErr('The limit must be between 0 and 100% of income.');
     const next = { ...draft, name: n };
     if (existing) {
-      update({ customCategories: settings.customCategories.map(c => (c.name === existing.name ? next : c)) });
+      update({ customCategories: settings.customCategories.map(c => (c.name === existing.name ? next : c)), subcategories: withSubs(n) });
       if (n !== existing.name) {
         move(n);
         moveRules(n);
       }
     } else {
-      update({ customCategories: [...settings.customCategories, next] });
+      update({ customCategories: [...settings.customCategories, next], subcategories: withSubs(n) });
     }
     onSaved?.(n);
     onClose();
@@ -132,7 +147,7 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
         onDelete={to => {
           move(to);
           moveRules(to);
-          update({ customCategories: settings.customCategories.filter(c => c.name !== existing.name) });
+          update({ customCategories: settings.customCategories.filter(c => c.name !== existing.name), subcategories: withSubs(null) });
           onClose();
         }}
       />
@@ -205,6 +220,40 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
             </>
           )}
         </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span className={s.label}>Sub-categories</span>
+        {subs.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {subs.map(x => (
+              <span key={x} className={s.subChip}>
+                {x}
+                <button type="button" aria-label={`Remove ${x}`} onClick={() => setSubs(subs.filter(y => y !== x))}>
+                  <Icon d={IC.close} size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            className={s.input}
+            value={subText}
+            maxLength={40}
+            placeholder={subs.length ? 'Add another' : 'e.g. Fuel, Parking'}
+            aria-label="New sub-category"
+            onChange={e => setSubText(e.target.value)}
+            onKeyDown={e => {
+              if (e.key !== 'Enter') return;
+              e.preventDefault();
+              addSub();
+            }}
+          />
+          <button type="button" className={s.btnOutline} onClick={addSub} disabled={!subText.trim()} style={{ flex: 'none' }}>
+            Add
+          </button>
+        </div>
+        <span style={{ fontSize: 13, color: C.textMuted }}>Labels inside this category: they share its limit. Pick one from a transaction's category menu.</span>
       </div>
       {!builtIn && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
