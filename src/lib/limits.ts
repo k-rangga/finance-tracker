@@ -8,8 +8,8 @@ export function useSetLimits() {
     const limits = { ...settings.limitOverrides };
     let customs = settings.customCategories;
     for (const [name, raw] of Object.entries(patch)) {
-      // Two decimals of a percent is finer than any amount you'd notice, and keeps the stored numbers clean.
-      const pct = Math.round(raw * 100) / 100;
+      // Four decimals of a percent keeps an amount you typed (Rp 3.100.000) exact, without float noise.
+      const pct = Math.round(raw * 1e4) / 1e4;
       const b = builtInCategory(name);
       if (!b) customs = customs.map(c => (c.name === name ? { ...c, limitPct: pct } : c));
       // Only store what differs from the default, so defaults can still change later.
