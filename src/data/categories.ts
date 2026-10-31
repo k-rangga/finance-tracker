@@ -85,7 +85,9 @@ const BUILT_IN: Category[] = [
   { name: 'Dining', type: 'variable', limitPct: 2, ...HUES[5], icon: IC.utensils },
   { name: 'Cafe', type: 'variable', limitPct: 1, ...HUES[11], icon: IC.coffee },
   { name: 'Take out', type: 'variable', limitPct: 1, ...HUES[14], icon: IC.takeout },
-  { name: 'Transport', type: 'variable', limitPct: 4, ...HUES[6], icon: IC.nav },
+  { name: 'Transport', type: 'variable', limitPct: 3, ...HUES[6], icon: IC.nav },
+  // Car service and repairs (and home fixes): irregular, so kept apart from everyday transport.
+  { name: 'Maintenance', type: 'variable', limitPct: 1, ...HUES[10], icon: IC.wrench },
   { name: 'Shopping', type: 'variable', limitPct: 3, ...HUES[7], icon: IC.bag },
   { name: 'Buffer', type: 'variable', limitPct: 1.5, ...HUES[8], icon: IC.wallet },
   // Installment interest and card fees, kept apart so they don't inflate what you bought.

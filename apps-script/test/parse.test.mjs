@@ -64,7 +64,7 @@ const cases = [
   [
     'blu debit card at a shop → spend',
     parse('FW: Your Transaction with blu Was Successful', ME, fwd('blu <receipts@blubybcadigital.id>', 'Your Transaction with blu Was Successful', '[Blu]\nHi Budi,\nThank you for using blu for your transaction.\nTotal\nRp600.000,00\n\n[https://bcadigital.co.id/email_/bank_/1-BCADigital.jpg]\nBudi Santoso\nbluAccount\n[https://bcadigital.co.id/email_/icon-arrow-grey-1.png]\n[https://bcadigital.co.id/email_/bank_/default_bank.jpg]\nTUNAS TOYOTA BODYREPAIR\nbluDebit Card\nTransaction Type\nEDC Debit\nblu Ref. No.\n000000000105\n#teamblu')),
-    { kind: 'spend', amount: 600000, title: 'Tunas Toyota Bodyrepair', category: 'Transport' },
+    { kind: 'spend', amount: 600000, title: 'Tunas Toyota Bodyrepair', category: 'Maintenance' },
   ],
   [
     'blu transfer to own Mandiri → Transfer',

@@ -35,7 +35,9 @@ const CATEGORY_RULES = [
   ['Take out', /\b(grabfood|gofood|shopeefood|take ?away|take ?out|bungkus)\b/i],
   ['Cafe', /\b(cafe|caf[eé]|coffee|kopi|tuku|starbucks|janji jiwa|bakery|patisserie|boba|chatime|mixue|teh|tea)\b/i],
   ['Dining', /\b(restaurant|restoran|resto|rm|mcdonald|kfc|dining|warung|bakso|pentol|mie|bakmi|kwetiau|nasi|ayam|bebek|geprek|pecel|padang|sate|soto|martabak|kebab|roti|dimsum|sushi|ramen|pizza|burger|bowls?|food ?court|food)\b/i],
-  ['Transport', /\b(goride|gocar|grabbike|grabcar|bluebird|taxi|taksi|krl|mrt|lrt|stasiun|transjakarta|busway|bus|feeder|damri|commuter|pertamina|shell|spbu|bensin|fuel|bbm|parkir|parking|e-?toll|tol|flazz|e-?money|tapcash|brizzi|kai|tiket kereta|toyota|honda|bengkel|bodyrepai\w*)\b/i],
+  // Car service and repairs, before Transport (which keeps fuel, tolls and rides).
+  ['Maintenance', /\b(toyota|honda|auto ?2000|bengkel|bodyrepai\w*|servis|spare ?parts?|tambal ban|cuci ac|service ac)\b/i],
+  ['Transport', /\b(goride|gocar|grabbike|grabcar|bluebird|taxi|taksi|krl|mrt|lrt|stasiun|transjakarta|busway|bus|feeder|damri|commuter|pertamina|shell|spbu|bensin|fuel|bbm|parkir|parking|e-?toll|tol|flazz|e-?money|tapcash|brizzi|kai|tiket kereta)\b/i],
   ['Shopping', /\b(tokopedia|shopee|lazada|blibli|zalora|bukalapak|amazon|uniqlo|ikea|ace hardware|pesanan|order|grabexpress)\b/i],
 ];
 

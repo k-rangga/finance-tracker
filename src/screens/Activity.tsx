@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { DismissBill, DueChip, IconChip } from '../components/ui';
 import { Logo } from '../components/Logo';
@@ -42,6 +42,24 @@ type Props = {
 };
 
 type Popover = 'link' | 'share' | 'cat' | 'more' | 'note';
+
+/**
+ * A row popover that would end behind the phone tab bar (or below the window) opens upward instead.
+ * Spread `ref` and `style` onto the popover.
+ */
+function useFlipUp<T extends HTMLElement>(style?: CSSProperties) {
+  const ref = useRef<T>(null);
+  const [up, setUp] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    // Room the bottom tab bar takes on phones.
+    const bottom = window.innerHeight - (window.innerWidth < 760 ? 104 : 16);
+    if (r.bottom > bottom && r.top - r.height - 48 > 0) setUp(true);
+  }, []);
+  return { ref, style: up ? { ...style, top: 'auto', bottom: '100%', marginTop: 0, marginBottom: 6 } : style };
+}
 
 /** Square icon button in the phone filter row. */
 const iconPill = { flex: 'none', width: 44, height: 44, minHeight: 44, padding: 0, display: 'grid', placeItems: 'center' } as const;
@@ -760,7 +778,7 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
           <Icon d={IC.more} size={18} strokeWidth={3} />
         </button>
         {popover === 'more' && (
-          <div className={s.picker} role="menu" style={{ left: 'auto', right: 0, width: 210 }}>
+          <MoreMenu>
             {more.map(([label, run]) => (
               <button
                 key={label}
@@ -776,9 +794,19 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
                 {label}
               </button>
             ))}
-          </div>
+          </MoreMenu>
         )}
       </div>
+    </div>
+  );
+}
+
+/** The row's ⋯ menu. */
+function MoreMenu({ children }: { children: ReactNode }) {
+  const flip = useFlipUp<HTMLDivElement>({ left: 'auto', right: 0, width: 210 });
+  return (
+    <div ref={flip.ref} className={s.picker} role="menu" style={flip.style}>
+      {children}
     </div>
   );
 }
@@ -789,11 +817,12 @@ function Picker({ income, expenses, onPick }: { income: TxView; expenses: TxView
   const [q, setQ] = useState('');
   const needle = q.trim().toLowerCase();
   const suggested = needle ? undefined : expenses.find(e => e.amount === income.amount);
+  const flip = useFlipUp<HTMLDivElement>();
   const list = needle
     ? expenses.filter(e => `${e.title} ${e.cat} ${e.source}`.toLowerCase().includes(needle))
     : (suggested ? [suggested, ...expenses.filter(e => e !== suggested)] : expenses).slice(0, 5);
   return (
-    <div className={s.picker} role="dialog" aria-label={`Expense paid back by ${income.title}`}>
+    <div ref={flip.ref} className={s.picker} style={flip.style} role="dialog" aria-label={`Expense paid back by ${income.title}`}>
       <label className={s.pickSearch}>
         <Icon d={IC.search} size={15} color={C.textMuted} />
         <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search the expense this pays back" aria-label="Search the expense this pays back" />
@@ -820,8 +849,10 @@ function Picker({ income, expenses, onPick }: { income: TxView; expenses: TxView
 /** Your own remark on a transaction: what it was for, the occasion. Saving it empty removes it. */
 function NoteEditor({ t, note, onSave }: { t: TxView; note: string; onSave: (note: string) => void }) {
   const [text, setText] = useState(note);
+  const flip = useFlipUp<HTMLFormElement>({ padding: 12, gap: 10 });
   return (
     <form
+      ref={flip.ref}
       className={s.picker}
       role="dialog"
       aria-label={`Note on ${t.title}`}
@@ -829,7 +860,7 @@ function NoteEditor({ t, note, onSave }: { t: TxView; note: string; onSave: (not
         e.preventDefault();
         onSave(text);
       }}
-      style={{ padding: 12, gap: 10 }}
+      style={flip.style}
     >
       <span style={{ fontSize: 13, color: C.textMuted }}>What was it for? It shows under the name, and search finds it.</span>
       <input
@@ -863,8 +894,10 @@ function ShareEditor({ t, onSave }: { t: TxView; onSave: (ratio: number | null) 
   const value = settings.currency === 'IDR' ? Number(text.replace(/\D/g, '')) : Number(text.replace(/[^\d.]/g, ''));
   const valid = text.trim() !== '' && Number.isFinite(value) && value >= 0 && value <= t.amount;
   const save = () => valid && onSave(value >= t.amount ? null : value / t.amount);
+  const flip = useFlipUp<HTMLFormElement>({ padding: 12, gap: 10 });
   return (
     <form
+      ref={flip.ref}
       className={s.picker}
       role="dialog"
       aria-label={`Your share of ${t.title}`}
@@ -872,7 +905,7 @@ function ShareEditor({ t, onSave }: { t: TxView; onSave: (ratio: number | null) 
         e.preventDefault();
         save();
       }}
-      style={{ padding: 12, gap: 10 }}
+      style={flip.style}
     >
       <span style={{ fontSize: 13, color: C.textMuted }}>
         You paid {full(t.amount)}. How much of it was yours? Only your share counts as spending.
@@ -937,6 +970,7 @@ function CategoryMenu({ current, onPick, onNew }: { current: string; onPick: (ca
   // Start on the current category, so Enter right away keeps it.
   const [active, setActive] = useState(() => Math.max(0, CATEGORIES.findIndex(c => c.name === current)));
   const listRef = useRef<HTMLDivElement>(null);
+  const flip = useFlipUp<HTMLDivElement>({ width: 'min(300px, 100vw - 48px)' });
   const needle = q.trim().toLowerCase();
   const match = (label: string) => !needle || label.toLowerCase().includes(needle);
   const items: MenuItem[] = [
@@ -963,7 +997,7 @@ function CategoryMenu({ current, onPick, onNew }: { current: string; onPick: (ca
   };
 
   return (
-    <div className={s.picker} style={{ width: 'min(300px, 100vw - 48px)' }}>
+    <div ref={flip.ref} className={s.picker} style={flip.style}>
       <label className={s.pickSearch}>
         <Icon d={IC.search} size={15} color={C.textMuted} />
         <input

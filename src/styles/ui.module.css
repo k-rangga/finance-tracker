@@ -921,12 +921,6 @@ textarea.input {
   letter-spacing: 0.04em;
   color: var(--accent-600);
 }
-@media (max-width: 480px) {
-  /* Start under the row icon so the popover fits the screen. */
-  .picker {
-    left: -52px;
-  }
-}
 
 /* Your note beside the category, in place of the account: plain secondary text, one line, click to edit. */
 .txNote {
