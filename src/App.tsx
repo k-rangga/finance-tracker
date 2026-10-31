@@ -19,6 +19,7 @@ import { Activity, type ActivityFilter } from './screens/Activity';
 import { SavingsPlan } from './screens/SavingsPlan';
 import { Invest } from './screens/invest/Invest';
 import { Chat } from './components/Chat';
+import { useIsPhone } from './lib/media';
 import { PULL_TO_SYNC, usePageGestures } from './lib/gestures';
 import { syncNow } from './lib/gmail';
 
@@ -126,6 +127,18 @@ export default function App() {
     }
     setTimeout(() => setSyncNote(null), 2200);
   };
+  /** Phones: the header sticks to the top; what else sticks (Transactions' filters) sits under it. */
+  // A state ref: the header appears after loading, and the effect must see it when it does.
+  const [header, headerRef] = useState<HTMLElement | null>(null);
+  const phone = useIsPhone();
+  useEffect(() => {
+    const el = header;
+    const root = document.documentElement.style;
+    if (!el || !phone) return void root.setProperty('--sticky-top', '0px');
+    const ro = new ResizeObserver(() => root.setProperty('--sticky-top', el.offsetHeight + 'px'));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [header, phone]);
   const { pull, handlers } = usePageGestures({
     onSwipe: dir => {
       const next = TABS[TABS.findIndex(x => x.key === tab) + dir];
@@ -234,7 +247,7 @@ export default function App() {
           </div>
         )}
         <div className={s.content}>
-          <header className={s.header}>
+          <header ref={headerRef} className={s.header}>
             <div className={s.headerTitle}>
               <div className={s.headerLine}>
                 <h1 className={s.h1}>{current.label}</h1>

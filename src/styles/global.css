@@ -119,6 +119,18 @@ body {
   font-size: 15px;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
+  /* No double-tap zoom (taps respond at once); pinch-zoom still works. */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* iPhones zoom in when you tap a field with text under 16px, and stay zoomed: phones get 16px fields. */
+@media (max-width: 759px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
 }
 
 button,
