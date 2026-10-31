@@ -948,6 +948,12 @@ textarea.input {
   padding: 8px 16px;
   min-height: 34px;
 }
+.btnOutlineSm {
+  composes: btnOutline;
+  font-size: 13px;
+  padding: 7px 14px;
+  min-height: 34px;
+}
 .btnPrimarySm:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -1599,37 +1605,13 @@ textarea.input {
   letter-spacing: 0;
   padding: 0 4px;
 }
-.catLegend {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-muted);
-  padding-left: 6px;
-}
-.catLegendTick {
-  display: inline-block;
-  width: 3px;
-  height: 12px;
-  border-radius: 2px;
-  background: var(--text);
-}
-.catLegendLast {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  margin-left: 10px;
-  border-radius: 50%;
-  background: var(--surface);
-  border: 2px solid var(--text-muted);
-}
-/* One line per category on wide screens; three short lines on phones. */
+/* One line per category: icon, name, bar, amount, share used. Phones put the bar on a second line. */
 .catRow {
   display: grid;
-  grid-template-columns: 32px minmax(120px, 190px) minmax(80px, 1fr) auto 96px 112px 16px;
-  grid-template-areas: 'icon name bar amount status change chev';
+  grid-template-columns: 32px minmax(120px, 200px) minmax(80px, 1fr) auto 52px 16px;
+  grid-template-areas: 'icon name bar amount pct chev';
   align-items: center;
-  gap: 4px 14px;
+  gap: 6px 14px;
   width: 100%;
   padding: 10px 20px;
   border: none;
@@ -1649,8 +1631,8 @@ textarea.input {
 .catName {
   grid-area: name;
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  align-items: baseline;
+  gap: 8px;
   min-width: 0;
 }
 .catBar {
@@ -1664,12 +1646,33 @@ textarea.input {
   white-space: nowrap;
   text-align: right;
 }
-.catStatus {
-  grid-area: status;
-}
-.catChange {
-  grid-area: change;
+.catPct {
+  grid-area: pct;
+  font-size: 14px;
+  font-weight: 600;
   text-align: right;
+  white-space: nowrap;
+}
+/* Buffer: what Gmail couldn't place, one tap from sorting. */
+.catSortLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 8px 66px;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-700);
+  cursor: pointer;
+}
+.catDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 2px 20px 16px 66px;
 }
 /* Last time's spend at the same point: a hollow dot on this time's bar. */
 .lastMark {
@@ -1685,12 +1688,17 @@ textarea.input {
 }
 @media (max-width: 759px) {
   .catRow {
-    grid-template-columns: 32px minmax(0, 1fr) auto 16px;
+    grid-template-columns: 32px minmax(0, 1fr) auto 40px 16px;
     grid-template-areas:
-      'icon name change chev'
-      '. bar bar bar'
-      '. status amount amount';
+      'icon name amount pct chev'
+      '. bar bar bar .';
     padding: 10px 16px;
+  }
+  .catSortLink {
+    margin-left: 62px;
+  }
+  .catDetail {
+    padding: 2px 16px 16px 62px;
   }
 }
 .catFold {
@@ -1730,25 +1738,18 @@ textarea.input {
 .billRow:hover {
   background: var(--hover);
 }
-/* Checklist mark: filled when paid, calendar when due, empty when not seen yet. */
-.billCheck {
+/* Paid: a green tick. Due or not seen yet: a muted calendar (amber text says when it's soon). */
+.billMark {
   flex: none;
-  width: 22px;
-  height: 22px;
-  margin: 0 5px;
-  border-radius: 50%;
-  border: 1.5px solid var(--border-strong);
+  width: 32px;
   display: grid;
   place-items: center;
-  color: var(--text-muted);
+  color: var(--text-faint);
 }
-.billCheck[data-state='paid'] {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
-  color: var(--on-accent);
+.billMark[data-state='paid'] {
+  color: var(--accent-600);
 }
-.billCheck[data-state='due'] {
-  border-color: var(--amber);
+.billMark[data-state='due'] {
   color: var(--amber-ink);
 }
 
