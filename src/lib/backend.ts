@@ -47,6 +47,7 @@ export type UserData = {
 };
 
 export type Receipt = { fileId: string; name: string };
+export type ReceiptFile = { name: string; mime: string; data: string };
 
 export type Backend = {
   load(since: Date): Promise<UserData>;
@@ -71,6 +72,8 @@ export type Backend = {
   setSub(txId: string, sub: string | null): Promise<void>;
   /** Upload a receipt (base64) for a transaction, replacing its earlier one. */
   attachReceipt(txId: string, file: { name: string; mime: string; data: string }): Promise<Receipt>;
+  /** The receipt file itself, to show in the app. */
+  getReceipt(txId: string): Promise<ReceiptFile>;
   /** Unlink a transaction's receipt and move the file to Drive's trash. */
   removeReceipt(txId: string): Promise<void>;
   saveTrade(t: Trade): Promise<void>;
@@ -253,6 +256,7 @@ export const backend: Backend = {
   setRules: async (rules, subs) => void (await run('setRules', { rules, subs })),
   setSub: async (txId, sub) => void (await run('setSub', { txId, sub })),
   attachReceipt: (txId, file) => run('attachReceipt', { txId, ...file }),
+  getReceipt: txId => run('getReceipt', { txId }),
   removeReceipt: async txId => void (await run('removeReceipt', { txId })),
   saveTrade: async t => void (await run('saveTrade', { trade: toRow(t) })),
   saveUpdate: async x => void (await run('saveTradeUpdate', { update: toUpdateRow(x) })),

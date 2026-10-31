@@ -134,6 +134,13 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       save();
       return { fileId: r.fileId, name: r.name };
     }
+    case 'getReceipt': {
+      const r = d.receipts?.[q.txId as string];
+      if (!r?.url) throw new Error('No receipt for this transaction.');
+      await new Promise(res => setTimeout(res, 400));
+      const [, mime, data] = r.url.match(/^data:([^;]+);base64,(.*)$/) ?? [];
+      return { name: r.name, mime, data };
+    }
     case 'removeReceipt': {
       delete (d.receipts ??= {})[q.txId as string];
       return save();

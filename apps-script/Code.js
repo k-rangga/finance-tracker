@@ -122,6 +122,7 @@ const ACTIONS = {
 
   askGemini: p => askGemini_(p),
   attachReceipt: p => attachReceipt_(p),
+  getReceipt: p => getReceipt_(p),
   removeReceipt: p => removeReceipt_(p),
 
   listLabels: () => listLabels_(),

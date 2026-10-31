@@ -46,6 +46,14 @@ function attachReceipt_(p) {
   return { fileId: file.getId(), name: file.getName() };
 }
 
+/** p: { txId } → { name, mime, data (base64) }: the file itself, so the page can show it without leaving the app. */
+function getReceipt_(p) {
+  const r = readTable_('receipts').filter(x => x.tx_id === p.txId)[0];
+  if (!r) throw new Error('No receipt for this transaction.');
+  const blob = DriveApp.getFileById(r.file_id).getBlob();
+  return { name: r.name, mime: blob.getContentType(), data: Utilities.base64Encode(blob.getBytes()) };
+}
+
 /** The receipt goes to Drive's trash (recoverable there for 30 days), and is unlinked. */
 function removeReceipt_(p) {
   const old = readTable_('receipts').filter(r => r.tx_id === p.txId)[0];

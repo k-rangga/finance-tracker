@@ -2116,6 +2116,28 @@ textarea.input {
   font-size: 14px;
   line-height: 1.5;
 }
+.receiptView {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  background: var(--bg);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.receiptView img {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+}
+.receiptView iframe {
+  width: 100%;
+  height: 70vh;
+  border: 0;
+  background: #fff;
+}
+
 .chatMeta {
   font-size: 11px;
   color: var(--text-muted);

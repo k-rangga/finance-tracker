@@ -13,7 +13,8 @@ import type { Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth, parseISO, sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
-import { readReceipt, receiptName, receiptTxId, receiptUrl } from '../lib/receipt';
+import { readReceipt, receiptName, receiptTxId } from '../lib/receipt';
+import { ReceiptPreview } from '../components/ReceiptPreview';
 import { C } from '../lib/tokens';
 import { CATEGORIES, catFilter, categoryByName, categoryLabel, CC_PAYMENT_CATEGORY, OTHER_CATEGORIES, parseCatFilter } from '../data/categories';
 import { canDismissBill, isCard, merchantKey, type Bill } from '../data/transactions';
@@ -641,13 +642,8 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
       setUploading(false);
     }
   };
-  const viewReceipt = () => {
-    if (!receipt) return;
-    const url = receiptUrl(receipt);
-    // A data URL (local preview only) can't be opened directly; show it in a blank window instead.
-    if (url.startsWith('data:')) window.open('', '_blank')?.document.write(`<img src="${url}" style="max-width:100%">`);
-    else window.open(url, '_blank', 'noopener');
-  };
+  const [viewing, setViewing] = useState(false);
+  const viewReceipt = () => receipt && setViewing(true);
   const { full } = useSettings();
   const note = notes[t.id];
   const c = categoryByName(t.cat);
@@ -815,6 +811,9 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
             <button type="button" className={s.receiptBtn} onClick={viewReceipt} aria-label={`View receipt for ${t.title}`} title={receipt.name}>
               <Icon d={IC.clip} size={13} />
             </button>
+          ) : null}
+          {viewing && receipt ? (
+            <ReceiptPreview txId={receiptTxId(t)} receipt={receipt} title={`${tidyName(t.title)} · ${dayMonth(t.date)}`} onClose={() => setViewing(false)} />
           ) : null}
           {t.time}
           {note && where ? ` · ${where}` : ''}
