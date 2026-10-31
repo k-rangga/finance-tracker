@@ -2138,6 +2138,53 @@ textarea.input {
   background: #fff;
 }
 
+/* ---------- Subscriptions (Plan) ---------- */
+.subSuggest {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-800) 7%, transparent);
+}
+.subSuggestRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.subList {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--divider);
+}
+.subRow {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--divider);
+}
+.subRowMain {
+  composes: rowBtn;
+  padding: 12px 4px;
+  cursor: pointer;
+  font: inherit;
+}
+.subFlag {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  padding: 8px 12px;
+  margin: 0 0 12px 50px;
+  border-radius: 8px;
+}
+@media (max-width: 759px) {
+  .subFlag {
+    margin-left: 0;
+  }
+}
+
 .chatMeta {
   font-size: 11px;
   color: var(--text-muted);

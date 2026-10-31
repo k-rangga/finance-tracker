@@ -11,12 +11,14 @@ import { computeBudget, txViews } from './lib/budget';
 import { addDays, dayLabel, dayMonth, startOfToday, tidyName, toISO } from './lib/format';
 import { useSettings } from './lib/settings';
 import { useData } from './lib/data';
-import { billKey, expectedBills, inCycle, installmentBills, installmentPayments, resolveSubs, toTransaction, withMerchantRules, type Bill } from './data/transactions';
+import { billKey, merchantKey, expectedBills, inCycle, installmentBills, installmentPayments, resolveSubs, toTransaction, withMerchantRules, type Bill } from './data/transactions';
 import { INSTALLMENT_CATEGORY } from './data/categories';
 import { Summary } from './screens/Summary';
 import { Categories } from './screens/Categories';
 import { Activity, type ActivityFilter } from './screens/Activity';
 import { SavingsPlan } from './screens/SavingsPlan';
+import { Subscriptions } from './screens/Subscriptions';
+import { chargesBySub, subscriptionBills, subState } from './lib/subscriptions';
 import { Invest } from './screens/invest/Invest';
 import { Chat } from './components/Chat';
 import { useIsPhone } from './lib/media';
@@ -39,7 +41,7 @@ export default function App() {
     const t = storage.getRaw(KEYS.tab) as Tab | null;
     return t && TABS.some(x => x.key === t) ? t : 'summary';
   });
-  const { recat: fixed, links, shares, removed, installments, rules, ruleSubs, subs: picked, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email, refreshImports } = useData();
+  const { recat: fixed, links, shares, removed, installments, rules, ruleSubs, subs: picked, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email, refreshImports, subscriptions } = useData();
   // Transactions remembers your last dates, category and search on this device.
   const [txFilter, setTxFilterState] = useState<ActivityFilter>(() => storage.get<ActivityFilter>(KEYS.txFilter, { range: 'week', cat: '', q: '' }));
   const setTxFilter = useCallback((f: ActivityFilter) => {
@@ -78,15 +80,25 @@ export default function App() {
   const subs = useMemo(() => resolveSubs(all, t => recat[t.id] ?? t.category, picked, ruleSubs, settings.subcategories), [all, recat, picked, ruleSubs, settings.subcategories]);
   const transactions = useMemo(() => inCycle(all, cycle), [all, cycle]);
   const prevTransactions = useMemo(() => all.filter(t => t.date >= prevCycle.start && t.date < cycle.start), [all, prevCycle, cycle]);
-  const bills = useMemo(
-    () =>
-      [
-        ...expectedBills(prevTransactions, prevCycle, transactions, cycle, recat).filter(b => !settings.dismissedBills.includes(billKey(toISO(cycle.start), b))),
-        ...installmentBills(payments, cycle),
-      ].sort((x, y) => x.date.getTime() - y.date.getTime()),
+  /** Each subscription's charges and where it stands: next billing date, missed, new price. */
+  const subCharges = useMemo(() => chargesBySub(subscriptions, all), [subscriptions, all]);
+  const subStates = useMemo(() => Object.fromEntries(Object.entries(subscriptions).map(([id, x]) => [id, subState(x, subCharges.get(id) ?? [], today)])), [subscriptions, subCharges, today]);
+  const catOf = useCallback((t: { id: string; category: string }) => recat[t.id] ?? t.category, [recat]);
+  const bills = useMemo(() => {
+    // A subscription's billing dates replace the guess from last cycle's charge of the same merchant.
+    const subKeys = Object.values(subscriptions).map(x => merchantKey(x.merchant)).filter(Boolean);
+    const isSub = (title: string) => subKeys.some(k => ` ${merchantKey(title)} `.includes(` ${k} `));
+    const subCat = (id: string) => {
+      const last = subCharges.get(id)?.[0];
+      return last ? catOf(last) : 'Subscriptions';
+    };
+    return [
+      ...expectedBills(prevTransactions, prevCycle, transactions, cycle, recat).filter(b => !isSub(b.title) && !settings.dismissedBills.includes(billKey(toISO(cycle.start), b))),
+      ...installmentBills(payments, cycle),
+      ...subscriptionBills(subscriptions, subStates, cycle, subCat),
+    ].sort((x, y) => x.date.getTime() - y.date.getTime());
     // Custom categories change which categories are fixed bills.
-    [prevTransactions, prevCycle, transactions, cycle, recat, payments, settings.customCategories, settings.dismissedBills],
-  );
+  }, [prevTransactions, prevCycle, transactions, cycle, recat, payments, settings.customCategories, settings.dismissedBills, subscriptions, subStates, subCharges, catOf]);
   /** "Not a bill this cycle": hides a predicted bill until payday, with a few seconds to undo. */
   const [billUndo, setBillUndo] = useState<{ text: string; run: () => void } | null>(null);
   useEffect(() => {
@@ -331,7 +343,11 @@ export default function App() {
               <Categories cycle={cycle} budget={budget} open={openCat} setOpen={setOpenCat} onShowTransactions={showTransactions} onEditCategory={name => setCatDialog({ editing: name })} onNewCategory={() => setCatDialog({})} />
             )}
             {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} onDismissBill={dismissBill} />}
-            {tab === 'plan' && <SavingsPlan cycle={cycle} budget={budget} onOpenInvest={() => setTab('invest')} />}
+            {tab === 'plan' && (
+              <SavingsPlan cycle={cycle} budget={budget} onOpenInvest={() => setTab('invest')}>
+                <Subscriptions budget={budget} states={subStates} txs={all} catOf={catOf} />
+              </SavingsPlan>
+            )}
             {tab === 'invest' && <Invest cycle={cycle} />}
           </div>
         </div>

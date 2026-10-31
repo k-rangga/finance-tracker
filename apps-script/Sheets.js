@@ -28,6 +28,12 @@ const TABLES = {
   subs: ['tx_id', 'sub', 'updated_at'],
   /** Receipt files in your Drive receipts folder, one per transaction (see Receipts.js). */
   receipts: ['tx_id', 'file_id', 'name', 'mime', 'uploaded_at'],
+  /**
+   * Things you pay for on repeat. `merchant` is the receipt name it's matched by; `every` is month, year or week;
+   * `next` is a billing date you set (YYYY-MM-DD), moved on by each matching charge; `status` active, trial (`next` is
+   * when the trial ends and the first charge comes) or cancelled.
+   */
+  subscriptions: ['id', 'name', 'merchant', 'amount', 'every', 'next', 'account', 'status', 'updated_at'],
   trades: [
     'id', 'market', 'ticker', 'name', 'buy_date', 'price', 'quantity', 'fee', 'style', 'conviction', 'target', 'stop',
     'catalyst', 'catalyst_date', 'thesis', 'tags', 'leverage', 'direction',

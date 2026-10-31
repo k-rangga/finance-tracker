@@ -43,6 +43,7 @@ type Dev = Record<string, unknown> & {
   notes?: Record<string, string>;
   removed?: string[];
   installments?: Record<string, unknown>;
+  subscriptions?: Record<string, unknown>;
   rules?: Record<string, string>;
   ruleSubs?: Record<string, string>;
   subs?: Record<string, string>;
@@ -77,7 +78,7 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
   const gmail = { google_email: 'dev@localhost', label_name: (d.label as string) ?? null, last_synced_at: null, last_sync_status: null, last_sync_count: null };
   switch (action) {
     case 'getState':
-      return { email: 'dev@localhost', settings: d.settings ?? null, recat: d.overrides, links: d.links ?? {}, shares: d.shares ?? {}, notes: d.notes ?? {}, removed: d.removed ?? [], installments: d.installments ?? {}, rules: d.rules ?? {}, ruleSubs: d.ruleSubs ?? {}, subs: d.subs ?? {}, receipts: d.receipts ?? {}, trades: d.trades, updates: d.updates ?? [], prices: d.prices ?? null, snaps: d.snapshots, txRows: d.txRows ?? [], gmail };
+      return { email: 'dev@localhost', settings: d.settings ?? null, recat: d.overrides, links: d.links ?? {}, shares: d.shares ?? {}, notes: d.notes ?? {}, removed: d.removed ?? [], installments: d.installments ?? {}, rules: d.rules ?? {}, ruleSubs: d.ruleSubs ?? {}, subs: d.subs ?? {}, receipts: d.receipts ?? {}, subscriptions: d.subscriptions ?? {}, trades: d.trades, updates: d.updates ?? [], prices: d.prices ?? null, snaps: d.snapshots, txRows: d.txRows ?? [], gmail };
     case 'getImports':
       return { txRows: d.txRows ?? [], gmail };
     case 'saveSettings':
@@ -104,6 +105,12 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       const note = String(q.note ?? '').trim();
       if (note) notes[q.txId as string] = note;
       else delete notes[q.txId as string];
+      return save();
+    }
+    case 'setSubscription': {
+      const list = (d.subscriptions ??= {});
+      if (q.sub) list[q.id as string] = q.sub;
+      else delete list[q.id as string];
       return save();
     }
     case 'setInstallment': {

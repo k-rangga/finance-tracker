@@ -27,6 +27,8 @@ export type Settings = {
   colorOverrides: Record<string, string>;
   /** Google Drive folder (link or id) receipts are saved to. */
   receiptsFolder: string;
+  /** Merchants (merchant keys) you said aren't subscriptions, so they aren't suggested again. */
+  notSubscriptions: string[];
   /** Sub-categories per category (labels inside it; the limit stays on the category). */
   subcategories: Record<string, string[]>;
   /** Predicted bills you said aren't due this cycle, by `billKey`. Older cycles' keys are dropped. */
@@ -52,6 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dismissedBills: [],
   subcategories: DEFAULT_SUBCATEGORIES,
   receiptsFolder: '',
+  notSubscriptions: [],
 };
 
 type Ctx = {

@@ -43,6 +43,7 @@ const ACTIONS = {
     ruleSubs: ruleSubs_(),
     subs: subs_(),
     receipts: receipts_(),
+    subscriptions: subscriptions_(),
     trades: readTable_('trades'),
     updates: readTable_('trade_updates'),
     prices: props_('prices', null),
@@ -75,6 +76,25 @@ const ACTIONS = {
     const note = String(p.note || '').trim().slice(0, 500);
     if (!note) deleteRow_('notes', 'tx_id', p.txId);
     else upsertRow_('notes', 'tx_id', { tx_id: p.txId, note: note, updated_at: new Date().toISOString() });
+    return true;
+  },
+  /** p: { id, sub } — `sub: null` deletes it. */
+  setSubscription: p => {
+    if (!p.sub) deleteRow_('subscriptions', 'id', p.id);
+    else {
+      const x = p.sub;
+      upsertRow_('subscriptions', 'id', {
+        id: p.id,
+        name: x.name,
+        merchant: x.merchant,
+        amount: x.amount,
+        every: x.every,
+        next: x.next,
+        account: x.account || '',
+        status: x.status,
+        updated_at: new Date().toISOString(),
+      });
+    }
     return true;
   },
   setInstallment: p => {
@@ -232,6 +252,25 @@ function links_() {
   const out = {};
   readTable_('links').forEach(r => {
     out[r.income_id] = r.expense_id;
+  });
+  return out;
+}
+
+/** { id: subscription }. Dates come back as text (a hand-typed date may be a Date cell). */
+function subscriptions_() {
+  const day = v => (v instanceof Date ? Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd') : String(v || ''));
+  const out = {};
+  readTable_('subscriptions').forEach(r => {
+    if (!r.id || !r.name) return;
+    out[r.id] = {
+      name: String(r.name),
+      merchant: String(r.merchant || r.name),
+      amount: Number(r.amount) || 0,
+      every: ['month', 'year', 'week'].indexOf(r.every) >= 0 ? r.every : 'month',
+      next: day(r.next),
+      account: String(r.account || ''),
+      status: ['active', 'trial', 'cancelled'].indexOf(r.status) >= 0 ? r.status : 'active',
+    };
   });
   return out;
 }

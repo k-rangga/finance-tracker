@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { Card, CardHead, Dot } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
@@ -9,9 +9,10 @@ import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
 import { SAVINGS_TARGET_PCT } from '../data/categories';
 
-type Props = { cycle: Cycle; budget: Budget; onOpenInvest: () => void };
+/** `children` sit under the action plan (Subscriptions). */
+type Props = { cycle: Cycle; budget: Budget; onOpenInvest: () => void; children?: ReactNode };
 
-export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
+export function SavingsPlan({ cycle, budget: b, onOpenInvest, children }: Props) {
   const { full, short, ofIncome, settings } = useSettings();
   const save = ofIncome(SAVINGS_TARGET_PCT);
   const gap = b.projTotal - b.budget;
@@ -91,6 +92,8 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest }: Props) {
           ))}
         </ol>
       </section>
+
+      {children}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 380px), 1fr))', gap: 24, alignItems: 'start' }}>
         <Card style={{ gap: 14 }}>

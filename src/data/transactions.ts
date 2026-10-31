@@ -92,8 +92,8 @@ export type Bill = { date: Date; title: string; category: string; amount: number
 /** A predicted bill's identity within one cycle (`cycleId` = the cycle's start as ISO), for dismissing it. */
 export const billKey = (cycleId: string, b: Bill) => `${cycleId}|${b.title.toLowerCase()}|${b.amount}`;
 
-/** Installment payments come from your plan; only bills predicted from last cycle can be dismissed. */
-export const canDismissBill = (b: Bill) => b.source !== 'Installment';
+/** Installment payments and subscriptions come from your plans; only bills predicted from last cycle can be dismissed. */
+export const canDismissBill = (b: Bill) => b.source !== 'Installment' && b.source !== 'Subscription';
 
 /** A row of the `transactions` table, as imported from Gmail. */
 export type TxRow = {

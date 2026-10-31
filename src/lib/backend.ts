@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, type Settings } from './settings';
 import { addDays, startOfToday, toISO } from './format';
 import type { Market, Prices, Snap, Trade, TradeUpdate } from '../screens/invest/model';
 import type { InstallmentPlan, TxRow } from '../data/transactions';
+import type { Subscription } from './subscriptions';
 
 export type GmailConnection = {
   google_email: string | null;
@@ -34,6 +35,8 @@ export type UserData = {
   ruleSubs: Record<string, string>;
   /** Sub-category you picked for a transaction: { txId: sub-category }. */
   subs: Record<string, string>;
+  /** Things you pay for on repeat, by id. */
+  subscriptions: Record<string, Subscription>;
   /** Receipt file in your Drive receipts folder, by transaction id. */
   receipts: Record<string, Receipt>;
   journal: Trade[];
@@ -70,6 +73,8 @@ export type Backend = {
   setRules(rules: Record<string, string | null>, subs?: Record<string, string | null>): Promise<void>;
   /** `sub: null` clears it. */
   setSub(txId: string, sub: string | null): Promise<void>;
+  /** `sub: null` deletes it. */
+  setSubscription(id: string, sub: Subscription | null): Promise<void>;
   /** Upload a receipt (base64) for a transaction, replacing its earlier one. */
   attachReceipt(txId: string, file: { name: string; mime: string; data: string }): Promise<Receipt>;
   /** The receipt file itself, to show in the app. */
@@ -212,6 +217,7 @@ type State = {
   ruleSubs?: Record<string, string>;
   subs?: Record<string, string>;
   receipts?: Record<string, Receipt>;
+  subscriptions?: Record<string, Subscription>;
   trades: TradeRow[];
   updates?: UpdateRow[];
   prices: Prices | null;
@@ -237,6 +243,7 @@ export const backend: Backend = {
       ruleSubs: s.ruleSubs ?? {},
       subs: s.subs ?? {},
       receipts: s.receipts ?? {},
+      subscriptions: s.subscriptions ?? {},
       journal: s.trades.map(toTrade).sort((a, b) => b.d.localeCompare(a.d)),
       updates: (s.updates ?? []).map(toUpdate),
       prices: s.prices ?? defaultPrices(),
@@ -255,6 +262,7 @@ export const backend: Backend = {
   setInstallment: async (txId, plan) => void (await run('setInstallment', { txId, plan })),
   setRules: async (rules, subs) => void (await run('setRules', { rules, subs })),
   setSub: async (txId, sub) => void (await run('setSub', { txId, sub })),
+  setSubscription: async (id, sub) => void (await run('setSubscription', { id, sub })),
   attachReceipt: (txId, file) => run('attachReceipt', { txId, ...file }),
   getReceipt: txId => run('getReceipt', { txId }),
   removeReceipt: async txId => void (await run('removeReceipt', { txId })),
