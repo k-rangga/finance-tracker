@@ -44,6 +44,10 @@ type Dev = Record<string, unknown> & {
   removed?: string[];
   installments?: Record<string, unknown>;
   subscriptions?: Record<string, unknown>;
+  /** Hyperliquid stand-in: fills (load your export into this to try the Perps tab), notes, and an address. */
+  perpFills?: unknown[];
+  perpNotes?: Record<string, unknown>;
+  perpAddress?: string;
   rules?: Record<string, string>;
   ruleSubs?: Record<string, string>;
   subs?: Record<string, string>;
@@ -105,6 +109,16 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       const note = String(q.note ?? '').trim();
       if (note) notes[q.txId as string] = note;
       else delete notes[q.txId as string];
+      return save();
+    }
+    case 'getPerps':
+    case 'syncPerps':
+      await new Promise(r => setTimeout(r, action === 'syncPerps' ? 600 : 0));
+      return { address: d.perpAddress ?? '', syncedAt: d.perpAddress ? Date.now() : null, fills: d.perpFills ?? [], notes: d.perpNotes ?? {} };
+    case 'setPerpNote': {
+      const notes = (d.perpNotes ??= {});
+      if (q.note) notes[q.tradeId as string] = q.note;
+      else delete notes[q.tradeId as string];
       return save();
     }
     case 'setSubscription': {

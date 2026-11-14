@@ -42,6 +42,15 @@ const TABLES = {
   snapshots: ['day', 'value', 'contributed'],
   /** Avg up / avg down buys and notes on a journal entry. */
   trade_updates: ['id', 'trade_id', 'at', 'kind', 'price', 'quantity', 'fee', 'note', 'created_at'],
+  /**
+   * Settings you type in the sheet, one per row. `hyperliquid_address`: the wallet whose Hyperliquid trades are
+   * journaled (a public address, read-only; replace the placeholder with yours).
+   */
+  config: ['key', 'value', 'note'],
+  /** Hyperliquid fills (one per row, as the exchange reports them), merged into trades in the app. `time` is in ms. */
+  perp_fills: ['tid', 'time', 'coin', 'dir', 'px', 'sz', 'fee', 'closed_pnl', 'start_position', 'hash'],
+  /** Your journal on a merged trade (`trade_id` = its first fill's tid): setup, mistakes, a 1–5 rating, notes. */
+  perp_notes: ['trade_id', 'setup', 'mistakes', 'rating', 'note', 'updated_at'],
   /** Gmail messages already read that weren't receipts, so they aren't downloaded again. */
   skipped: ['id', 'subject', 'seen_at', 'reason'],
 };
@@ -51,6 +60,8 @@ const NUMERIC = {
   trades: ['price', 'quantity', 'fee', 'conviction', 'target', 'stop', 'leverage', 'exit_price', 'rating'],
   snapshots: ['value', 'contributed'],
   trade_updates: ['price', 'quantity', 'fee'],
+  perp_fills: ['time', 'px', 'sz', 'fee', 'closed_pnl', 'start_position'],
+  perp_notes: ['rating'],
 };
 
 let SS_ = null;

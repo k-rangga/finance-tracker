@@ -53,6 +53,7 @@ function isSyncHour_(hour) {
  * and only syncs at SYNC_HOURS, unless an import is already running or waiting to continue.
  */
 function scheduledSync() {
+  scheduledPerpSync_();
   if (!gmailState_().label) return;
   if (!isSyncHour_(Number(Utilities.formatDate(new Date(), TZ, 'H')))) return;
   const running = Number(PropertiesService.getScriptProperties().getProperty(RUN_FLAG) || 0);

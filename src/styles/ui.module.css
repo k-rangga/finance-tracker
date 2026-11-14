@@ -2138,6 +2138,22 @@ textarea.input {
   background: #fff;
 }
 
+/* ---------- Perps (Invest) ---------- */
+.perpSide {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--accent-800);
+  background: var(--accent-tint);
+}
+.perpSide[data-side='Short'] {
+  color: var(--red-ink);
+  background: var(--red-tint);
+}
+
 /* ---------- Action plan (Plan) ---------- */
 .stepList {
   list-style: none;

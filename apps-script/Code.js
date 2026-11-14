@@ -143,6 +143,13 @@ const ACTIONS = {
   askGemini: p => askGemini_(p),
   attachReceipt: p => attachReceipt_(p),
   getReceipt: p => getReceipt_(p),
+  getPerps: () => perpState_(),
+  /** Sync, then everything the Perps tab shows. */
+  syncPerps: () => {
+    syncPerps_();
+    return perpState_();
+  },
+  setPerpNote: p => setPerpNote_(p),
   removeReceipt: p => removeReceipt_(p),
 
   listLabels: () => listLabels_(),
@@ -162,6 +169,7 @@ function setup() {
 function ensureSetup_() {
   ss_();
   ensureSyncTrigger_();
+  ensurePerpConfig_();
   // Once: merge card alerts with merchant receipts imported before the merge existed (later syncs do it themselves).
   if (!props_('cardMergeV1', false)) {
     restoreCardAccounts_();

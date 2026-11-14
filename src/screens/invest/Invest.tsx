@@ -13,8 +13,9 @@ import { Journal, type JournalFilter, type PriceRefresh } from './Journal';
 import { Review } from './Review';
 import { PriceModal } from './PriceModal';
 import { EntryModal } from './EntryModal';
+import { Perps } from './Perps';
 
-type Sub = 'portfolio' | 'progress' | 'journal' | 'review';
+type Sub = 'portfolio' | 'progress' | 'journal' | 'review' | 'perps';
 
 /** Google Finance prices are refreshed on open when older than this. */
 const QUOTE_MAX_AGE_MS = 30 * 60 * 1000;
@@ -24,6 +25,7 @@ const SUBS: [Sub, string][] = [
   ['progress', 'Progress'],
   ['journal', 'Journal'],
   ['review', 'Review'],
+  ['perps', 'Perps'],
 ];
 
 /** Money formatters for rupiah amounts, shown in the display currency. */
@@ -116,10 +118,12 @@ export function Invest({ cycle }: { cycle: Cycle }) {
             </button>
           ))}
         </div>
-        <button type="button" className={s.btnPrimary} style={{ marginBottom: 6 }} onClick={() => setFormOpen(true)}>
-          <Icon d={IC.plus} size={18} />
-          New entry
-        </button>
+        {sub !== 'perps' && (
+          <button type="button" className={s.btnPrimary} style={{ marginBottom: 6 }} onClick={() => setFormOpen(true)}>
+            <Icon d={IC.plus} size={18} />
+            New entry
+          </button>
+        )}
       </div>
 
       {sub === 'portfolio' && <Portfolio cycle={cycle} P={P} prices={prices} refresh={priceRefresh} onOpenPrices={() => setPxOpen(true)} onOpenTrade={goJournal} />}
@@ -146,6 +150,7 @@ export function Invest({ cycle }: { cycle: Cycle }) {
           prices={priceRefresh}
         />
       )}
+      {sub === 'perps' && <Perps />}
       {sub === 'review' && <Review today={cycle.today} P={P} onOpenTrade={goJournal} />}
 
       {pxOpen && (
