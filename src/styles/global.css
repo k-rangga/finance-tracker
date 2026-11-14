@@ -29,7 +29,8 @@
   --amber-tint: #fbf1dc;
   --amber-row: #fdfaf2;
   --shadow: 0 10px 30px rgba(31, 30, 28, 0.12);
-  --font: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  /* Inter: easy to read small, and its digits line up in columns. */
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
   color-scheme: light;
 }
 
@@ -211,6 +212,11 @@ p {
 @media (prefers-reduced-motion: no-preference) {
   .fade-in {
     animation: fade 160ms ease-out;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
   @keyframes fade {
     from {

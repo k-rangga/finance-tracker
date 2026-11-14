@@ -207,10 +207,10 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  /* Labels shrink a little on narrow phones so "Categories" still fits its fifth of the bar. */
-  font-size: clamp(10.5px, 2.9vw, 13px);
+  /* Labels shrink a little on narrow phones so "Transactions" still fits its fifth of the bar (Inter runs wide). */
+  font-size: clamp(10px, 2.75vw, 12.5px);
   letter-spacing: -0.01em;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-muted);
   background: transparent;
   padding: 6px 1px;
@@ -2141,6 +2141,154 @@ textarea.input {
   height: 70vh;
   border: 0;
   background: #fff;
+}
+
+/* ---------- Investment journal: account switch, summary, filters, trade rows ---------- */
+.invHead {
+  display: flex;
+  align-items: center;
+  gap: 12px 20px;
+  flex-wrap: wrap;
+}
+.invHead .subTabList {
+  box-shadow: none;
+}
+.invStrip {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px 32px;
+  flex-wrap: wrap;
+  padding: 4px 0 4px;
+}
+.invStat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.invStatLabel {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.invStatValue {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.invStatus {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: right;
+}
+.invFilters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.invSearch {
+  flex: 1 1 200px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.invSearch input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  color: var(--text);
+}
+.invSearch:focus-within {
+  border-color: var(--accent-600);
+}
+.tradeRow {
+  composes: rowBtn;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 22px;
+  cursor: pointer;
+  font: inherit;
+}
+.tradeRow > :first-child {
+  margin-top: 6px;
+}
+.tradeMain {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.tradeName {
+  font-size: 16px;
+  font-weight: 600;
+}
+.tradeTag {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.tradeLine {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.tradeTags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  margin-top: 2px;
+}
+.tradeChip {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--divider);
+  color: var(--text-soft);
+}
+.tradeNums {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex: none;
+  white-space: nowrap;
+}
+.tradeRow > svg:last-child {
+  margin-top: 4px;
+}
+@media (max-width: 759px) {
+  .invHead > span:last-child {
+    margin-left: 0;
+  }
+  .invStatValue {
+    font-size: 19px;
+  }
+  .invStatus {
+    margin-left: 0;
+    align-items: flex-start;
+    text-align: left;
+    flex-basis: 100%;
+  }
+  .tradeRow {
+    padding: 14px 16px;
+    gap: 10px;
+  }
 }
 
 /* ---------- Perps (Invest) ---------- */

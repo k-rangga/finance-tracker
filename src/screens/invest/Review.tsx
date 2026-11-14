@@ -1,25 +1,17 @@
-import { useState } from 'react';
 import s from '../../styles/ui.module.css';
-import { Card, CardHead, Pills, Stat } from '../../components/ui';
+import { Card, CardHead, Stat } from '../../components/ui';
 import { fullDate } from '../../lib/format';
 import { C, plInk } from '../../lib/tokens';
 import { fmtR } from './model';
-import { useInvestFmt } from './Invest';
-import { reviewStats, SOURCE_NAME, type AnyTrade, type Group, type Source } from './trades';
-
-type Period = 'all' | 'year' | '30' | '7';
+import { reviewStats, type AnyTrade, type Group } from './trades';
 
 /**
- * How well you trade, from every closed trade (typed-in and Hyperliquid alike): the numbers, what they say, and
- * where the results come from — by name, side, setup and the mistakes you tagged.
+ * How well you trade, from one account's closed trades in the chosen period: three numbers, what they say, and
+ * where the results come from — by name, side, setup and the mistakes you tagged. `dS` shows money in the
+ * account's own currency (items are in rupiah).
  */
-export function Review({ today, items }: { today: Date; items: AnyTrade[] }) {
-  const { dS } = useInvestFmt();
-  const [source, setSource] = useState<'all' | Source>('all');
-  const [period, setPeriod] = useState<Period>('all');
-
-  const from = period === 'all' ? 0 : period === 'year' ? new Date(today.getFullYear(), 0, 1).getTime() : today.getTime() - Number(period) * 864e5;
-  const closed = items.filter(t => t.closed && t.closed.getTime() >= from && (source === 'all' || t.source === source));
+export function Review({ today, items, from, dS }: { today: Date; items: AnyTrade[]; from: number; dS: (idr: number, signed?: boolean) => string }) {
+  const closed = items.filter(t => t.closed && t.closed.getTime() >= from);
   const st = reviewStats(closed);
   const nextReview = new Date(today.getFullYear(), today.getMonth() + 1, 1);
   const n = (k: number) => k + (k === 1 ? ' trade' : ' trades');
@@ -51,45 +43,20 @@ export function Review({ today, items }: { today: Date; items: AnyTrade[] }) {
 
   return (
     <div className={s.stack}>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Pills<'all' | Source>
-          label="Source"
-          items={[
-            ['all', 'All'],
-            ['manual', SOURCE_NAME.manual],
-            ['perp', SOURCE_NAME.perp],
-          ]}
-          value={source}
-          onChange={setSource}
-        />
-        <Pills<Period>
-          label="Period"
-          items={[
-            ['all', 'All time'],
-            ['year', 'This year'],
-            ['30', '30 days'],
-            ['7', '7 days'],
-          ]}
-          value={period}
-          onChange={setPeriod}
-        />
-      </div>
-
       <Card style={{ gap: 24 }}>
-        <CardHead title="Closed trades" caption={`Monthly review on the 1st · next ${fullDate(nextReview)}`} />
-        <div className={s.stats}>
-          <Stat label="Net P/L" value={st.count ? dS(st.pnl, true) : '—'} ink={plInk(st.pnl)} sub={`${n(st.count)} · after fees${st.funding ? ' and funding' : ''}`} />
+        <CardHead title="How you trade" caption={`${n(st.count)} closed · monthly review on the 1st, next ${fullDate(nextReview)}`} />
+        <div className={s.stats} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))' }}>
+          <Stat label="Net P/L" value={st.count ? dS(st.pnl, true) : '—'} ink={plInk(st.pnl)} sub={`after fees${st.funding ? ' and funding' : ''}`} />
           <Stat label="Win rate" value={st.winRate == null ? '—' : Math.round(st.winRate) + '%'} sub={st.count ? `avg win ${dS(st.avgWin)} · avg loss ${dS(st.avgLoss)}` : 'No closed trades'} />
           <Stat
             label="Won per 1 lost"
             value={st.perLost == null ? '—' : st.perLost.toFixed(2)}
             ink={st.perLost == null ? undefined : st.perLost >= 1 ? C.accent800 : C.redInk}
-            sub={st.perLost == null ? 'No losses yet' : st.perLost >= 1 ? 'Above 1: making money' : 'Below 1: losing money'}
-          />
-          <Stat
-            label="Followed plan"
-            value={st.followedPct == null ? '—' : Math.round(st.followedPct) + '%'}
-            sub={st.answered ? `of ${n(st.answered)} reviewed${st.avgR != null ? ` · avg ${fmtR(st.avgR)}` : ''}` : 'No reviews yet'}
+            sub={
+              (st.perLost == null ? 'No losses yet' : st.perLost >= 1 ? 'Above 1: making money' : 'Below 1: losing money') +
+              (st.followedPct != null ? ` · plan followed ${Math.round(st.followedPct)}%` : '') +
+              (st.avgR != null ? ` · avg ${fmtR(st.avgR)}` : '')
+            }
           />
         </div>
         {findings.length > 0 && (
@@ -102,7 +69,7 @@ export function Review({ today, items }: { today: Date; items: AnyTrade[] }) {
             ))}
           </div>
         )}
-        {!st.count && <div className={s.note}>Close a position, or sync Hyperliquid, to start your review history.</div>}
+        {!st.count && <div className={s.note}>No closed trades in this period yet.</div>}
       </Card>
 
       {st.count > 0 && (

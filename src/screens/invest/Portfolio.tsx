@@ -1,22 +1,31 @@
 import s from '../../styles/ui.module.css';
-import { Card, CardHead, Dot, Stat } from '../../components/ui';
+import { Card, CardHead, Dot } from '../../components/ui';
 import { payday, type Cycle } from '../../lib/cycle';
-import { dayLabel, dayMonth, diffDays, fmtPct, parseISO, pc, addDays, sum } from '../../lib/format';
+import { dayLabel, dayMonth, diffDays, parseISO, pc, addDays, sum } from '../../lib/format';
 import { useSettings } from '../../lib/settings';
-import { C, plInk } from '../../lib/tokens';
-import { buyFee, levOf, levTag, liqOf, MARKETS, MK_COLOR, MK_NAME, nat, qtyLabel, type Market, type Portfolio as PortfolioModel, type Prices } from './model';
+import { C } from '../../lib/tokens';
+import { buyFee, levOf, MARKETS, MK_COLOR, MK_NAME, type Market, type Portfolio as PortfolioModel, type Prices } from './model';
 import { useInvestFmt } from './Invest';
-import type { PriceRefresh } from './Journal';
 
-/** `hl`: the Hyperliquid account in rupiah (value, open P/L, this year's closed trades), when it's connected. */
-type HlTotals = { equity: number; unrealized: number; realized: number; closed: number } | null;
-type Props = { cycle: Cycle; P: PortfolioModel; hl: HlTotals; prices: Prices; refresh: PriceRefresh; onOpenPrices: () => void; onOpenTrade: (id: string) => void };
+/** "Prices updated 4 days ago · Google Finance checked 09:28", and whether the weekly update is overdue. */
+export function priceNote(prices: Prices, today: Date) {
+  const age = diffDays(parseISO(prices.at), today);
+  const stale = age > 7;
+  const text =
+    'Prices updated ' +
+    (age <= 0 ? 'today' : age === 1 ? 'yesterday' : age + ' days ago') +
+    (prices.quotedAt
+      ? ' · Google Finance checked ' + new Date(prices.quotedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+      : stale
+        ? ' · weekly update overdue'
+        : ' · next update ' + dayMonth(addDays(parseISO(prices.at), 7)));
+  return { text, stale };
+}
 
-
-
-export function Portfolio({ cycle, P, hl, prices, refresh, onOpenPrices, onOpenTrade }: Props) {
+/** Stocks & crypto insights: how the money is spread across markets against your caps, and what goes in each payday. */
+export function Portfolio({ cycle, P }: { cycle: Cycle; P: PortfolioModel }) {
   const { settings, full, short, ofIncome } = useSettings();
-  const { dF, dS } = useInvestFmt();
+  const { dS } = useInvestFmt();
   const caps: Record<Market, number> = { IDX: settings.idxCap, US: settings.usCap, Crypto: settings.cryptoCap };
 
   const alloc = MARKETS.map(m => {
@@ -28,24 +37,6 @@ export function Portfolio({ cycle, P, hl, prices, refresh, onOpenPrices, onOpenT
   const capWarn = overs.length
     ? overs.map(a => `${MK_NAME[a.m]} is ${Math.round(a.share)}% of the portfolio, above your ${caps[a.m]}% cap`).join('. ') + '. Pause new buys there or trim to rebalance.'
     : '';
-  // Everything you own: typed-in positions plus the Hyperliquid account (win rate and the rest live on Review).
-  const value = P.tot + (hl?.equity ?? 0);
-  const upl = P.upl + (hl?.unrealized ?? 0);
-  const realized = P.realized + (hl?.realized ?? 0);
-  const closedCount = P.done.filter(d => d.t.ex!.d.startsWith(String(cycle.today.getFullYear()))).length + (hl?.closed ?? 0);
-
-  const age = diffDays(parseISO(prices.at), cycle.today);
-  const stale = age > 7;
-  const pxNote =
-    'Prices updated ' +
-    (age <= 0 ? 'today' : age === 1 ? 'yesterday' : age + ' days ago') +
-    (prices.quotedAt
-      ? ' · Google Finance checked ' + new Date(prices.quotedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-      : stale
-        ? ' · weekly update overdue'
-        : ' · next update ' + dayMonth(addDays(parseISO(prices.at), 7)));
-
-  const rows = [...P.pos].sort((a, b) => b.val - a.val);
 
   // Money put into new positions in each of the last six pay cycles, as % of income.
   const trades = [...P.pos.map(p => p.t), ...P.done.map(d => d.t)];
@@ -61,22 +52,7 @@ export function Portfolio({ cycle, P, hl, prices, refresh, onOpenPrices, onOpenT
   return (
     <div className={s.stack}>
       <Card style={{ gap: 24 }}>
-        <CardHead title="Portfolio" caption={`Totals in ${settings.currency} · USD at Rp ${settings.fxRate.toLocaleString('id-ID')}`} />
-        <div className={s.stats}>
-          <Stat
-            label="Total value"
-            value={dS(value)}
-            sub={hl ? `${dS(P.tot)} positions · ${dS(hl.equity)} Hyperliquid` : `${dF(P.tot)} · ${P.pos.length} open ${P.pos.length === 1 ? 'position' : 'positions'}`}
-          />
-          <Stat
-            label="Unrealised P/L"
-            value={dS(upl, true)}
-            sub={hl ? `${dS(P.upl, true)} positions · ${dS(hl.unrealized, true)} Hyperliquid` : `${fmtPct(P.cost ? (P.upl / P.cost) * 100 : 0)} on ${dS(P.cost)} cost`}
-            ink={plInk(upl)}
-            subInk={hl ? undefined : plInk(upl)}
-          />
-          <Stat label={`Realised ${cycle.today.getFullYear()}`} value={dS(realized, true)} sub={`${closedCount} closed · after fees`} ink={plInk(realized)} />
-        </div>
+        <CardHead title="Allocation" caption={`${dS(P.tot)} in ${P.pos.length} open ${P.pos.length === 1 ? 'position' : 'positions'} · USD at Rp ${settings.fxRate.toLocaleString('id-ID')}`} />
         {capWarn && (
           <div role="status" style={{ background: C.amberTint, color: C.amberInk, borderRadius: 12, padding: '12px 16px', fontSize: 14, lineHeight: 1.5 }}>
             <strong>Over cap.</strong> {capWarn}
@@ -101,138 +77,6 @@ export function Portfolio({ cycle, P, hl, prices, refresh, onOpenPrices, onOpenT
         </div>
       </Card>
 
-      <section className={s.cardFlush}>
-        <div style={{ padding: '24px 28px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-          <h2 className={s.h2}>Holdings</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: stale ? C.amberInk : C.textMuted }}>{pxNote}</span>
-            <button type="button" className={s.btnOutline} onClick={refresh.refresh} disabled={refresh.busy}>
-              {refresh.busy ? 'Refreshing…' : 'Refresh prices'}
-            </button>
-            <button type="button" className={s.btnGhost} onClick={onOpenPrices}>
-              Enter prices
-            </button>
-          </div>
-          {refresh.msg && (
-            <span role="status" style={{ flexBasis: '100%', fontSize: 13, color: C.textMuted }}>
-              {refresh.msg}
-            </span>
-          )}
-          <span style={{ flexBasis: '100%', fontSize: 13, color: C.textMuted }}>Grey tick = entry, dot = last price · tap a row for its journal entry</span>
-        </div>
-        <div>
-          <div style={{ display: 'flex', flexDirection: 'column' }} role="table" aria-label="Holdings">
-            <div role="row" className={`${s.eyebrow} ${s.holdRow} ${s.holdHead}`}>
-              <span role="columnheader" className={s.hAsset}>Asset</span>
-              <span role="columnheader" className={s.hQty}>Qty</span>
-              <span role="columnheader" className={s.hLast}>Last / avg</span>
-              <span role="columnheader" className={s.hValue}>Value</span>
-              <span role="columnheader" className={s.hPl}>P/L</span>
-              <span role="columnheader" className={s.hPlan}>Stop → target</span>
-            </div>
-            {rows.length === 0 && (
-              <div style={{ padding: '32px 28px', borderTop: `1px solid ${C.border}`, fontSize: 14, color: C.textMuted }}>
-                No open positions. Use New entry to log your first buy.
-              </div>
-            )}
-            {rows.map(p => {
-              const t = p.t;
-              const hasPlan = !!(t.tg && t.sl);
-              /** % the last price is above the stop, for trades with a stop but no target. */
-              const toStop = t.sl ? ((p.last - t.sl) / t.sl) * 100 : 0;
-              let tag: [string, string, string] = ['In range', C.divider, C.textMuted];
-              let lastL = '0%';
-              let entryL = '0%';
-              if (hasPlan) {
-                const f = (v: number) => pc(((v - t.sl!) / (t.tg! - t.sl!)) * 100);
-                lastL = f(p.last);
-                entryL = f(t.px);
-                const g = (p.last - t.sl!) / (t.tg! - t.sl!);
-                if (g < 0) tag = ['Stop breached', C.redTint, C.redInk];
-                else if (Math.abs(p.last - t.sl!) / t.sl! <= 0.03) tag = ['Near stop', C.amberTint, C.amberInk];
-                else if (g >= 1) tag = ['Target hit', C.accentTint, C.accent800];
-                else if (Math.abs(t.tg! - p.last) / t.tg! <= 0.06) tag = ['Near target', C.accentTint, C.accent800];
-                if (levOf(t) > 1 && Math.abs(p.last - liqOf(t)) / p.last <= 0.1) tag = ['Near liquidation', C.redTint, C.redInk];
-              }
-              const ink = plInk(p.pl);
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="row"
-                  className={`${s.rowBtn} ${s.hoverRow} ${s.holdRow}`}
-                  onClick={() => onOpenTrade(t.id)}
-                >
-                  <span role="cell" className={s.hAsset} style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                    <Dot color={MK_COLOR[t.mk]} />
-                    <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                      <span style={{ fontWeight: 600 }}>{t.tk}</span>
-                      <span style={{ fontSize: 13, color: C.textMuted }}>
-                        {t.nm || t.mk}
-                        {levTag(t) ? ' · ' + levTag(t) : ''}
-                      </span>
-                    </span>
-                  </span>
-                  <span role="cell" className={s.hQty}>{qtyLabel(t)}</span>
-                  <span role="cell" className={s.hLast} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span>
-                      {nat(p.last, t.mk)}
-                      {!P.hasPrice(t) ? ' · no price' : prices.auto?.[t.tk] ? '' : ' · manual'}
-                    </span>
-                    <span style={{ fontSize: 13, color: C.textMuted }}>avg {nat(t.px, t.mk)}</span>
-                  </span>
-                  <span role="cell" className={s.hValue} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontWeight: 600 }}>{dS(p.val)}</span>
-                    <span style={{ fontSize: 13, color: C.textMuted }}>{Math.round((p.val / P.tot) * 100)}% of portfolio</span>
-                  </span>
-                  <span role="cell" className={s.hPl} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontWeight: 600, color: ink }}>{fmtPct(p.plp)}</span>
-                    <span style={{ fontSize: 13, color: ink }}>{dS(p.pl, true)}</span>
-                  </span>
-                  <span role="cell" className={s.hPlan}>
-                    {hasPlan ? (
-                      <span style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <span className={s.badge} style={{ alignSelf: 'flex-start', padding: '3px 10px', background: tag[1], color: tag[2] }}>
-                          {tag[0]}
-                        </span>
-                        <span style={{ position: 'relative', height: 6, borderRadius: 999, background: C.divider }}>
-                          <span style={{ position: 'absolute', top: -4, bottom: -4, width: 2, borderRadius: 2, background: C.greyDark, left: entryL }} />
-                          <span
-                            style={{
-                              position: 'absolute',
-                              top: '50%',
-                              width: 12,
-                              height: 12,
-                              borderRadius: '50%',
-                              border: '2px solid #fff',
-                              transform: 'translate(-50%,-50%)',
-                              background: ink,
-                              left: lastL,
-                            }}
-                          />
-                        </span>
-                        <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>
-                          <span>Stop {nat(t.sl!, t.mk)}</span>
-                          <span>Target {nat(t.tg!, t.mk)}</span>
-                        </span>
-                      </span>
-                    ) : t.sl ? (
-                      <span style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13, color: C.textMuted }}>
-                        <span style={{ whiteSpace: 'nowrap' }}>Stop {nat(t.sl, t.mk)} · no target</span>
-                        <span style={{ fontWeight: 600, color: toStop < 0 ? C.redInk : toStop <= 3 ? C.amberInk : C.textMuted }}>
-                          {toStop < 0 ? 'Stop breached' : `${toStop.toFixed(1)}% above stop`}
-                        </span>
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: 13, color: C.textMuted }}>{t.st === 'Long-term' ? 'Long-term · no exit levels' : 'No exit levels'}</span>
-                    )}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </section>
 
       <Card style={{ gap: 16 }}>
         <CardHead title="Contributions from savings" caption={`Dashed line = plan (${settings.investPct}% of income)`} />

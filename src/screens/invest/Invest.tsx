@@ -7,26 +7,31 @@ import { useSettings } from '../../lib/settings';
 import type { Cycle } from '../../lib/cycle';
 import { fetchQuotes } from '../../lib/backend';
 import { computePortfolio, effectiveTrade, type Trade } from './model';
-import { Portfolio } from './Portfolio';
+import { Portfolio, priceNote } from './Portfolio';
 import { Progress } from './Progress';
-import { ALL_TRADES, Journal, type JournalFilter, type PriceRefresh } from './Journal';
+import { HL_COLOR, Journal, needsReview } from './Journal';
 import { Review } from './Review';
 import { PriceModal } from './PriceModal';
 import { EntryModal } from './EntryModal';
-import { HyperliquidCard, usePerps } from './Perps';
-import { allTrades } from './trades';
+import { ConnectWallet, usePerps } from './Perps';
+import { allTrades, type Source } from './trades';
+import { Select } from '../../components/Select';
+import { usd } from '../../lib/perps';
+import { C, plInk } from '../../lib/tokens';
+import { storage } from '../../lib/storage';
 
-/** Three jobs: what you own, everything you traded, and how well you trade. */
-type Sub = 'overview' | 'trades' | 'review';
+/** Two accounts that never mix, each with its trades (the journal) and what they say (insights). */
+type View = 'trades' | 'insights';
+type Status = 'all' | 'open' | 'closed';
+type Period = 'all' | 'year' | '30' | '7';
+const WORLD_KEY = 'moneyTracker.investWorld';
+const WORLDS: [Source, string, string][] = [
+  ['manual', 'Stocks & crypto', '#2fc2a4'],
+  ['perp', 'Perps', HL_COLOR],
+];
 
 /** Google Finance prices are refreshed on open when older than this. */
 const QUOTE_MAX_AGE_MS = 30 * 60 * 1000;
-
-const SUBS: [Sub, string][] = [
-  ['overview', 'Overview'],
-  ['trades', 'Trades'],
-  ['review', 'Review'],
-];
 
 /** Money formatters for rupiah amounts, shown in the display currency. */
 export function useInvestFmt() {
@@ -47,8 +52,17 @@ export function Invest({ cycle }: { cycle: Cycle }) {
   // Positions with their avg ups/downs folded in; the stored entries stay as first bought.
   const journal = useMemo(() => stored.map(t => effectiveTrade(t, updates)), [stored, updates]);
   const [editing, setEditing] = useState<Trade | null>(null);
-  const [sub, setSub] = useState<Sub>('overview');
-  const [jf, setJf] = useState<JournalFilter>(ALL_TRADES);
+  const [world, setWorldState] = useState<Source>(() => (storage.getRaw(WORLD_KEY) === 'perp' ? 'perp' : 'manual'));
+  const setWorld = (w: Source) => {
+    storage.setRaw(WORLD_KEY, w);
+    setWorldState(w);
+  };
+  const [view, setView] = useState<View>('trades');
+  const [status, setStatus] = useState<Status>('all');
+  const [period, setPeriod] = useState<Period>('all');
+  const [q, setQ] = useState('');
+  const [toReview, setToReview] = useState(false);
+  const { dS } = useInvestFmt();
   const [jOpen, setJOpen] = useState<string | null>(null);
   const [pxOpen, setPxOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -57,17 +71,6 @@ export function Invest({ cycle }: { cycle: Cycle }) {
   // Hyperliquid, synced once for every tab; its trades join the typed-in ones in one list, in rupiah.
   const hl = usePerps();
   const items = useMemo(() => allTrades(P, journal, hl.trades, hl.notes, settings.fxRate), [P, journal, hl.trades, hl.notes, settings.fxRate]);
-  /** Overview's totals take in the Hyperliquid account: its value, what's open, and this year's closed trades (rupiah). */
-  const hlTotals = useMemo(() => {
-    if (!hl.state?.address) return null;
-    const year = cycle.today.getFullYear();
-    return {
-      equity: (hl.state.equity ?? 0) * settings.fxRate,
-      unrealized: (hl.state.positions ?? []).reduce((a, p) => a + p.unrealized, 0) * settings.fxRate,
-      realized: items.filter(t => t.source === 'perp' && t.closed && t.closed.getFullYear() === year).reduce((a, t) => a + t.pnl, 0),
-      closed: items.filter(t => t.source === 'perp' && t.closed && t.closed.getFullYear() === year).length,
-    };
-  }, [hl.state, items, settings.fxRate, cycle.today]);
 
   // Prices from Google Finance (GOOGLEFINANCE via the data spreadsheet). Symbols it can't price keep the typed price.
   const [quoting, setQuoting] = useState(false);
@@ -106,7 +109,6 @@ export function Invest({ cycle }: { cycle: Cycle }) {
     autoQuoted.current = true;
     if (!prices.quotedAt || Date.now() - new Date(prices.quotedAt).getTime() > QUOTE_MAX_AGE_MS) void refreshPrices(true);
   }, [P.openTks.length, prices.quotedAt, refreshPrices]);
-  const priceRefresh: PriceRefresh = { refresh: () => void refreshPrices(), busy: quoting, msg: quoteMsg };
 
   // Record one value snapshot per day so Progress builds a real history over time.
   const lastSnap = snaps[snaps.length - 1];
@@ -117,60 +119,200 @@ export function Invest({ cycle }: { cycle: Cycle }) {
   }, [P.tot, P.cost, P.realized, todayISO, lastSnap, saveSnapshot]);
 
   const goJournal = useCallback((id: string) => {
-    setSub('trades');
-    setJf(ALL_TRADES);
+    setWorldState('manual');
+    setView('trades');
+    setStatus('all');
+    setQ('');
+    setToReview(false);
     setJOpen('m:' + id);
   }, []);
 
+  // One account at a time: its trades, then the filters (period applies to Insights too).
+  const year = cycle.today.getFullYear();
+  const from = period === 'all' ? 0 : period === 'year' ? new Date(year, 0, 1).getTime() : cycle.today.getTime() - Number(period) * 864e5;
+  const mine = items.filter(t => t.source === world);
+  const reviewCount = mine.filter(t => needsReview(t) && t.closed!.getTime() >= from).length;
+  const needle = q.trim().toLowerCase();
+  const shown = mine.filter(
+    t =>
+      (status === 'all' || (status === 'open') === !t.closed) &&
+      (!t.closed || t.closed.getTime() >= from) &&
+      (!needle || t.name.toLowerCase().includes(needle) || (t.manual?.nm ?? '').toLowerCase().includes(needle)) &&
+      (!toReview || needsReview(t)),
+  );
+  const perps = world === 'perp';
+  /** Money in this account's own currency: rupiah for stocks (or your display currency), dollars for perps. */
+  const money = (idr: number, signed = false) => (perps ? usd(idr / settings.fxRate, signed) : dS(idr, signed));
+
+  // The three numbers on top: what's in the account, what's open, what's realised this year.
+  const realizedYear = mine.filter(t => t.closed && t.closed.getFullYear() === year).reduce((a, t) => a + t.pnl, 0);
+  const hlOpen = (hl.state?.positions ?? []).reduce((a, p) => a + p.unrealized, 0);
+  const strip: { label: string; value: string; ink?: string }[] = perps
+    ? [
+        { label: 'Account', value: hl.state?.equity != null ? usd(hl.state.equity) : '—' },
+        { label: 'Open', value: usd(hlOpen, true), ink: plInk(hlOpen) },
+        { label: `Realised ${year}`, value: money(realizedYear, true), ink: plInk(realizedYear) },
+      ]
+    : [
+        { label: 'Value', value: dS(P.tot) },
+        { label: 'Open', value: dS(P.upl, true), ink: plInk(P.upl) },
+        { label: `Realised ${year}`, value: dS(P.realized, true), ink: plInk(P.realized) },
+      ];
+  const allAccounts = P.tot + (hl.state?.equity ?? 0) * settings.fxRate;
+  const px = priceNote(prices, cycle.today);
+  const status_ = perps
+    ? hl.error || (hl.state?.syncedAt ? `Synced ${new Date(hl.state.syncedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : '')
+    : quoteMsg || px.text;
+  const refreshing = perps ? hl.syncing : quoting;
+  const refresh = () => (perps ? void hl.sync() : void refreshPrices());
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div className={s.subTabs}>
-        <div className={s.subTabList} role="tablist" aria-label="Investment journal sections">
-          {SUBS.map(([k, l]) => (
-            <button key={k} type="button" role="tab" aria-selected={sub === k} className={sub === k ? s.subTabActive : s.subTab} onClick={() => setSub(k)}>
-              {l}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Which account, and which view of it. */}
+      <div className={s.invHead}>
+        <div className={s.pills} role="group" aria-label="Account">
+          {WORLDS.map(([k, label, ink]) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={world === k}
+              className={world === k ? s.optOn : s.opt}
+              onClick={() => {
+                setWorld(k);
+                setToReview(false);
+                setQ('');
+              }}
+            >
+              <span className={s.badgeDot} style={{ background: ink, display: 'inline-block', marginRight: 7, verticalAlign: 'middle' }} aria-hidden="true" />
+              {label}
             </button>
           ))}
         </div>
-        {sub !== 'review' && (
-          <button type="button" className={s.btnPrimary} style={{ marginBottom: 6 }} onClick={() => setFormOpen(true)}>
-            <Icon d={IC.plus} size={18} />
-            New entry
+        <div className={s.subTabList} role="tablist" aria-label="View">
+          {(['trades', 'insights'] as const).map(k => (
+            <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? s.subTabActive : s.subTab} onClick={() => setView(k)}>
+              {k === 'trades' ? 'Trades' : 'Insights'}
+            </button>
+          ))}
+        </div>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            className={s.iconBtn}
+            onClick={refresh}
+            disabled={refreshing}
+            aria-label={perps ? 'Sync Hyperliquid' : 'Refresh prices'}
+            title={perps ? 'Sync Hyperliquid' : 'Refresh prices'}
+          >
+            <Icon d={IC.refresh} size={16} style={refreshing ? { animation: 'spin 1s linear infinite' } : undefined} />
           </button>
-        )}
+          {!perps && (
+            <button type="button" className={s.btnPrimarySm} onClick={() => setFormOpen(true)} aria-label="New entry">
+              <Icon d={IC.plus} size={16} />
+              New entry
+            </button>
+          )}
+        </span>
       </div>
 
-      {sub === 'overview' && (
+      {perps && hl.state && !hl.state.address ? (
+        <ConnectWallet hl={hl} />
+      ) : (
         <>
-          <Portfolio cycle={cycle} P={P} hl={hlTotals} prices={prices} refresh={priceRefresh} onOpenPrices={() => setPxOpen(true)} onOpenTrade={goJournal} />
-          <HyperliquidCard hl={hl} />
-          <Progress today={cycle.today} snaps={snaps} />
+          {/* What's in the account now, in its own currency. */}
+          <div className={s.invStrip}>
+            {strip.map(x => (
+              <span key={x.label} className={s.invStat}>
+                <span className={s.invStatLabel}>{x.label}</span>
+                <span className={s.invStatValue} style={{ color: x.ink }}>
+                  {x.value}
+                </span>
+              </span>
+            ))}
+            <span className={s.invStatus}>
+              <span style={{ color: hl.error && perps ? C.redInk : px.stale && !perps ? C.amberInk : undefined }}>{status_}</span>
+              {!perps && (
+                <button type="button" className={s.linkBtn} style={{ fontSize: 13 }} onClick={() => setPxOpen(true)}>
+                  Enter prices
+                </button>
+              )}
+              <span>All accounts {dS(allAccounts)}</span>
+            </span>
+          </div>
+
+          {/* One filter bar: open or closed, when, which name, and what still needs a review. */}
+          <div className={s.invFilters}>
+            {view === 'trades' && (
+              <Select
+                ariaLabel="Open or closed"
+                value={status}
+                onChange={setStatus}
+                options={[
+                  { value: 'all' as const, label: 'Open & closed' },
+                  { value: 'open' as const, label: 'Open' },
+                  { value: 'closed' as const, label: 'Closed' },
+                ]}
+              />
+            )}
+            <Select
+              ariaLabel="Period"
+              value={period}
+              onChange={setPeriod}
+              options={[
+                { value: 'all' as const, label: 'All time' },
+                { value: 'year' as const, label: 'This year' },
+                { value: '30' as const, label: 'Last 30 days' },
+                { value: '7' as const, label: 'Last 7 days' },
+              ]}
+            />
+            {view === 'trades' && (
+              <>
+                <label className={s.invSearch}>
+                  <Icon d={IC.search} size={15} color={C.textMuted} />
+                  <input value={q} onChange={e => setQ(e.target.value)} placeholder={perps ? 'Search BTC, HYPE…' : 'Search BBCA, NVDA…'} aria-label="Search trades" />
+                </label>
+                {reviewCount > 0 && (
+                  <button type="button" className={toReview ? s.optOn : s.opt} aria-pressed={toReview} onClick={() => setToReview(!toReview)}>
+                    <span className={s.badgeDot} style={{ background: C.amber, display: 'inline-block', marginRight: 7, verticalAlign: 'middle' }} aria-hidden="true" />
+                    {reviewCount} to review
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+
+          {view === 'trades' ? (
+            <Journal
+              today={cycle.today}
+              todayISO={todayISO}
+              P={P}
+              items={shown}
+              hl={hl}
+              openId={jOpen}
+              setOpenId={setJOpen}
+              onClose={(id, ex) => {
+                const t = stored.find(x => x.id === id);
+                if (t) saveTrade({ ...t, ex });
+              }}
+              stored={stored}
+              updates={updates}
+              onEdit={setEditing}
+              onSaveUpdate={saveUpdate}
+              onDeleteUpdate={deleteUpdate}
+            />
+          ) : (
+            <>
+              <Review today={cycle.today} items={mine} from={from} dS={money} />
+              {!perps && (
+                <>
+                  <Portfolio cycle={cycle} P={P} />
+                  <Progress today={cycle.today} snaps={snaps} />
+                </>
+              )}
+            </>
+          )}
         </>
       )}
-      {sub === 'trades' && (
-        <Journal
-          today={cycle.today}
-          todayISO={todayISO}
-          P={P}
-          items={items}
-          hl={hl}
-          filter={jf}
-          setFilter={setJf}
-          openId={jOpen}
-          setOpenId={setJOpen}
-          onClose={(id, ex) => {
-            const t = stored.find(x => x.id === id);
-            if (t) saveTrade({ ...t, ex });
-          }}
-          stored={stored}
-          updates={updates}
-          onEdit={setEditing}
-          onSaveUpdate={saveUpdate}
-          onDeleteUpdate={deleteUpdate}
-          prices={priceRefresh}
-        />
-      )}
-      {sub === 'review' && <Review today={cycle.today} items={items} />}
 
       {pxOpen && (
         <PriceModal

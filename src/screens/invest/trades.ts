@@ -31,6 +31,7 @@ export type AnyTrade = {
   rating?: number;
   setup?: string;
   mistakes: string[];
+  lesson?: string;
   manual?: Trade;
   perp?: PerpTrade;
 };
@@ -62,6 +63,7 @@ export function allTrades(P: Portfolio, journal: Trade[], perps: PerpTrade[], no
       rating: t.ex?.rt,
       setup: t.ex?.su,
       mistakes: splitTags(t.ex?.mi),
+      lesson: t.ex?.ls || undefined,
       manual: t,
     };
   });
@@ -84,6 +86,7 @@ export function allTrades(P: Portfolio, journal: Trade[], perps: PerpTrade[], no
       rating: n?.rating || undefined,
       setup: n?.setup || undefined,
       mistakes: splitTags(n?.mistakes),
+      lesson: n?.note || undefined,
       perp: t,
     };
   });
