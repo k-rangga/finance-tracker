@@ -73,7 +73,10 @@ export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
   return (
     <Card style={{ gap: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <h2 className={s.h2}>Value vs contributions</h2>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <h2 className={s.h2}>Value vs contributions</h2>
+          <span className={s.caption}>Stocks & crypto positions, from your weekly price updates</span>
+        </div>
         <div style={{ display: 'flex', gap: 4, background: C.bg, borderRadius: 999, padding: 4 }} role="group" aria-label="Range">
           {(['3M', '6M', 'YTD', '1Y', 'All'] as Range[]).map(k => (
             <button
@@ -102,7 +105,6 @@ export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
         </div>
       </div>
       <div className={s.stats}>
-        <Stat label="Portfolio value" value={dS(fl.v)} sub={dF(fl.v) + ' · as of last price update'} />
         <Stat label="Total contributed" value={dS(fl.c)} sub={dS(fl.c - fs0.c, true) + ' added in this range'} />
         <Stat label="Total gain" value={dS(gNow, true)} sub={fmtPct((gNow / fl.c) * 100) + ' of contributions'} ink={plInk(gNow)} subInk={plInk(gNow)} />
         <Stat label="Gain in range" value={dS(gRange, true)} sub={'Since ' + fullDate(fs0.dt) + ', excluding deposits'} ink={plInk(gRange)} />

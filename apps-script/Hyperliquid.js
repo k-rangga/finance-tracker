@@ -55,10 +55,15 @@ function perpCoin_(coin, spot) {
   return m ? m[2] + ' (' + m[1] + ')' : coin;
 }
 
-/** New fills since the newest saved one. Returns { added, address, error? }. */
+/** New fills and funding since the newest saved. Returns { added, address }. */
 function syncPerps_() {
   const address = perpAddress_();
   if (!address) return { added: 0, address: '' };
+  // Once: fills saved before closed PnL was stored after fees are read again (the API still has them all).
+  if (!props_('perpNetV1', false)) {
+    clearTable_('perp_fills');
+    setProps_('perpNetV1', true);
+  }
   const saved = readColumn_('perp_fills', 'time').map(Number);
   let start = saved.length ? Math.max.apply(null, saved) : 0;
   let spot = null;
@@ -79,7 +84,8 @@ function syncPerps_() {
         px: f.px,
         sz: f.sz,
         fee: f.fee,
-        closed_pnl: f.closedPnl,
+        // The API's closed PnL is before the fill's fee; the export's (and the app's) is after.
+        closed_pnl: Number(f.closedPnl) - Number(f.fee),
         start_position: f.startPosition,
         hash: f.hash,
       }));
@@ -88,8 +94,66 @@ function syncPerps_() {
     if (fills.length < 2000 || last <= start) break;
     start = last;
   }
+  syncFunding_(address);
   setProps_('perpSyncedAt', Date.now());
   return { added: added, address: address };
+}
+
+/** Funding payments since the newest saved (500 per page). Part of what a position cost or earned. */
+function syncFunding_(address) {
+  const saved = readColumn_('perp_funding', 'time').map(Number);
+  let start = saved.length ? Math.max.apply(null, saved) : 0;
+  for (let page = 0; page < 40; page++) {
+    const rows = hlPost_({ type: 'userFunding', user: address, startTime: start });
+    if (!rows.length) break;
+    appendNew_(
+      'perp_funding',
+      'key',
+      rows.map(r => ({ key: r.hash + '|' + r.delta.coin, time: r.time, coin: perpCoin_(String(r.delta.coin), null), usdc: r.delta.usdc })),
+    );
+    const last = Math.max.apply(null, rows.map(r => r.time));
+    if (rows.length < 500 || last <= start) break;
+    start = last;
+  }
+}
+
+/**
+ * Open positions on every perp market (Hyperliquid's own and builder ones like xyz), with unrealized PnL, and the
+ * account's value across them: { positions, equity }.
+ */
+function perpPositions_(address) {
+  const dexes = [''].concat((hlPost_({ type: 'perpDexs' }) || []).filter(Boolean).map(d => d.name));
+  const res = UrlFetchApp.fetchAll(
+    dexes.map(dex => ({
+      url: HL_API,
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(dex ? { type: 'clearinghouseState', user: address, dex: dex } : { type: 'clearinghouseState', user: address }),
+      muteHttpExceptions: true,
+    })),
+  );
+  const out = [];
+  let equity = 0;
+  res.forEach(r => {
+    if (r.getResponseCode() !== 200) return;
+    const st = JSON.parse(r.getContentText());
+    equity += Number((st.marginSummary && st.marginSummary.accountValue) || 0);
+    (st.assetPositions || []).forEach(a => {
+      const p = a.position;
+      if (!p || !Number(p.szi)) return;
+      out.push({ coin: perpCoin_(String(p.coin), null), size: Number(p.szi), entry: Number(p.entryPx), unrealized: Number(p.unrealizedPnl) });
+    });
+  });
+  // Spot balances (USDC and tokens) aren't in these: the spot account's USDC is added; tokens are left out.
+  try {
+    const spot = hlPost_({ type: 'spotClearinghouseState', user: address });
+    (spot.balances || []).forEach(b => {
+      if (b.coin === 'USDC') equity += Number(b.total) || 0;
+    });
+  } catch (e) {
+    console.log('Hyperliquid spot balance failed: ' + e);
+  }
+  return { positions: out, equity: equity };
 }
 
 /** From the hourly run: a sync when the last one is a few hours old. Never stops the Gmail sync. */
@@ -105,11 +169,26 @@ function scheduledPerpSync_() {
 function perpState_() {
   const notes = {};
   readTable_('perp_notes').forEach(r => {
-    notes[r.trade_id] = { setup: r.setup || '', mistakes: r.mistakes || '', rating: r.rating || 0, note: r.note || '' };
+    notes[r.trade_id] = { setup: r.setup || '', mistakes: r.mistakes || '', rating: r.rating || 0, note: r.note || '', followed: r.followed || '' };
   });
+  const address = perpAddress_();
+  let positions = [];
+  let equity = null;
+  try {
+    if (address) {
+      const p = perpPositions_(address);
+      positions = p.positions;
+      equity = p.equity;
+    }
+  } catch (e) {
+    console.log('Hyperliquid positions failed: ' + e);
+  }
   return {
-    address: perpAddress_(),
+    address: address,
     syncedAt: Number(props_('perpSyncedAt', 0)) || null,
+    funding: readTable_('perp_funding').map(r => ({ time: r.time, coin: r.coin, usdc: r.usdc })),
+    positions: positions,
+    equity: equity,
     fills: readTable_('perp_fills').map(r => ({
       tid: r.tid, time: r.time, coin: r.coin, dir: r.dir, px: r.px, sz: r.sz, fee: r.fee, pnl: r.closed_pnl,
     })),
@@ -119,10 +198,11 @@ function perpState_() {
 
 function setPerpNote_(p) {
   const n = p.note;
-  if (!n || (!n.setup && !n.mistakes && !n.rating && !n.note)) deleteRow_('perp_notes', 'trade_id', p.tradeId);
+  if (!n || (!n.setup && !n.mistakes && !n.rating && !n.note && !n.followed)) deleteRow_('perp_notes', 'trade_id', p.tradeId);
   else
     upsertRow_('perp_notes', 'trade_id', {
       trade_id: p.tradeId, setup: n.setup || '', mistakes: n.mistakes || '', rating: n.rating || '', note: n.note || '', updated_at: new Date().toISOString(),
+      followed: n.followed || '',
     });
   return true;
 }

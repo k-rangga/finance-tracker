@@ -510,6 +510,11 @@ button.chip:hover {
   border-radius: 8px;
   padding: 9px 18px;
   min-height: 44px;
+  /* An icon sits centred beside the label, not on its baseline. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 .btnOutline:hover {
   background: var(--accent-tint);

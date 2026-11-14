@@ -25,7 +25,8 @@ export type Trade = {
   tags?: string;
   lev?: number;
   dir?: 'Long' | 'Short';
-  ex?: { px: number; d: string; fp?: FollowedPlan; rt?: number; ls?: string };
+  /** Closed: exit price and date, and the review: followed plan, rating, lesson, setup, mistakes (comma-separated). */
+  ex?: { px: number; d: string; fp?: FollowedPlan; rt?: number; ls?: string; su?: string; mi?: string };
 };
 
 /**

@@ -48,6 +48,9 @@ type Dev = Record<string, unknown> & {
   perpFills?: unknown[];
   perpNotes?: Record<string, unknown>;
   perpAddress?: string;
+  perpFunding?: unknown[];
+  perpPositions?: unknown[];
+  perpEquity?: number;
   rules?: Record<string, string>;
   ruleSubs?: Record<string, string>;
   subs?: Record<string, string>;
@@ -114,7 +117,7 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
     case 'getPerps':
     case 'syncPerps':
       await new Promise(r => setTimeout(r, action === 'syncPerps' ? 600 : 0));
-      return { address: d.perpAddress ?? '', syncedAt: d.perpAddress ? Date.now() : null, fills: d.perpFills ?? [], notes: d.perpNotes ?? {} };
+      return { address: d.perpAddress ?? '', syncedAt: d.perpAddress ? Date.now() : null, fills: d.perpFills ?? [], funding: d.perpFunding ?? [], positions: d.perpPositions ?? [], equity: d.perpEquity ?? null, notes: d.perpNotes ?? {} };
     case 'setPerpNote': {
       const notes = (d.perpNotes ??= {});
       if (q.note) notes[q.tradeId as string] = q.note;

@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import s from '../../styles/ui.module.css';
-import { Dot, Options } from '../../components/ui';
+import { Dot } from '../../components/ui';
+import { Select } from '../../components/Select';
+import { usd } from '../../lib/perps';
+import { useIsPhone } from '../../lib/media';
 import { IC, Icon } from '../../components/Icon';
 import { diffDays, fmtPct, parseISO } from '../../lib/format';
 import { C, plInk } from '../../lib/tokens';
@@ -24,14 +27,24 @@ import {
 } from './model';
 import { useInvestFmt } from './Invest';
 import { UpdateDetail, UpdateForm, UpdateTimeline } from './Updates';
+import { SOURCE_NAME, splitTags, type AnyTrade, type Source } from './trades';
+import { ReviewFields, type ReviewDraft } from './ReviewFields';
+import { PerpDetail, px, SyncLine, ConnectWallet, when, type Perps } from './Perps';
 
-export type JournalFilter = 'all' | 'open' | 'closed' | 'IDX' | 'US' | 'Crypto';
+/** Which trades show: by source, open or closed, and one ticker or coin (or all). */
+export type JournalFilter = { source: 'all' | Source; status: 'all' | 'open' | 'closed'; name: string };
+export const ALL_TRADES: JournalFilter = { source: 'all', status: 'all', name: '' };
+
+/** Hyperliquid's colour beside a trade, as markets have theirs. */
+const HL_COLOR = '#7c6cf0';
 
 type Props = {
   today: Date;
   todayISO: string;
   P: Portfolio;
-  journal: Trade[];
+  /** Typed-in entries and Hyperliquid trades together, newest first. */
+  items: AnyTrade[];
+  hl: Perps;
   filter: JournalFilter;
   setFilter: (f: JournalFilter) => void;
   openId: string | null;
@@ -56,74 +69,161 @@ export const FP_COLORS: Record<FollowedPlan, [string, string]> = {
   No: [C.redTint, C.redInk],
 };
 
-type CloseDraft = { px: string; d: string; fp: FollowedPlan; rt: number; ls: string };
+/** Closing a trade, or changing a closed one's review: exit price and date, then the review. */
+type CloseDraft = { px: string; d: string; review: ReviewDraft };
 
-export function Journal({ today, todayISO, P, journal, filter, setFilter, openId, setOpenId, onClose, stored, updates, onEdit, onSaveUpdate, onDeleteUpdate, prices }: Props) {
+const reviewOf = (ex?: Trade['ex']): ReviewDraft => ({ followed: ex?.fp ?? '', rating: ex?.rt ?? 0, setup: ex?.su ?? '', mistakes: splitTags(ex?.mi), note: ex?.ls ?? '' });
+
+export function Journal({ today, todayISO, P, items, hl, filter, setFilter, openId, setOpenId, onClose, stored, updates, onEdit, onSaveUpdate, onDeleteUpdate, prices }: Props) {
   const { dS } = useInvestFmt();
   /** Add/edit update form, and the detail view of one update. */
   const [form, setForm] = useState<{ t: Trade; editing?: TradeUpdate } | null>(null);
   const [detail, setDetail] = useState<{ t: Trade; u: TradeUpdate } | null>(null);
   const storedOf = (t: Trade) => stored.find(x => x.id === t.id) ?? t;
   const [closing, setClosing] = useState<string | null>(null);
-  const [cd, setCd] = useState<CloseDraft>({ px: '', d: todayISO, fp: 'Yes', rt: 3, ls: '' });
+  const [cd, setCd] = useState<CloseDraft>({ px: '', d: todayISO, review: reviewOf() });
   const [err, setErr] = useState('');
+  const phone = useIsPhone();
 
-  const count = (f: JournalFilter) => journal.filter(t => match(t, f)).length;
-  const list = journal.filter(t => match(t, filter)).sort((a, b) => b.d.localeCompare(a.d));
-  const filters: [JournalFilter, string][] = [
-    ['all', 'All'],
-    ['open', 'Open'],
-    ['closed', 'Closed'],
-    ['IDX', 'IDX'],
-    ['US', 'US'],
-    ['Crypto', 'Crypto'],
-  ];
+  const match = (t: AnyTrade, f: JournalFilter) =>
+    (f.source === 'all' || t.source === f.source) && (f.status === 'all' || (f.status === 'open') === !t.closed) && (!f.name || t.name === f.name);
+  const count = (patch: Partial<JournalFilter>) => items.filter(t => match(t, { ...filter, ...patch })).length;
+  const list = items.filter(t => match(t, filter));
+  const names = [...new Set(items.filter(t => match(t, { ...filter, name: '' })).map(t => t.name))].sort();
+  const set = (patch: Partial<JournalFilter>) => {
+    setFilter({ ...filter, ...patch });
+    setClosing(null);
+  };
 
   const startClose = (t: Trade) => {
     setClosing(t.id);
     setErr('');
-    setCd({ px: String(P.lastOf(t)), d: todayISO, fp: 'Yes', rt: 3, ls: '' });
+    setCd({ px: String(t.ex?.px ?? P.lastOf(t)), d: t.ex?.d ?? todayISO, review: reviewOf(t.ex) });
   };
   const saveClose = (t: Trade) => {
     const px = numIn(cd.px, t.mk);
     if (!(px > 0)) return setErr('Enter the exit price.');
-    onClose(t.id, { px, d: cd.d || todayISO, fp: cd.fp, rt: cd.rt, ls: cd.ls.trim() });
+    const r = cd.review;
+    onClose(t.id, { px, d: cd.d || todayISO, fp: r.followed || undefined, rt: r.rating || undefined, ls: r.note.trim(), su: r.setup || undefined, mi: r.mistakes.join(',') || undefined });
     setClosing(null);
+  };
+
+  /** A Hyperliquid trade, laid out like an entry's row: name, dates and size, side, return and P/L, result. */
+  const perpRow = (item: AnyTrade) => {
+    const t = item.perp!;
+    const isOpen = openId === item.key;
+    const st: [string, string, string] = !t.closed ? ['Open', C.divider, C.textMuted] : t.pnl > 0 ? ['Win', C.accentTint, C.accent800] : ['Loss', C.redTint, C.redInk];
+    return (
+      <div key={item.key} style={{ borderBottom: `1px solid ${C.divider}`, background: isOpen ? C.bg : 'transparent' }}>
+        <button
+          type="button"
+          className={`${s.rowBtn} ${s.hoverRow}`}
+          aria-expanded={isOpen}
+          onClick={() => setOpenId(isOpen ? null : item.key)}
+          style={{ gap: '12px 16px', flexWrap: 'wrap', padding: '18px 24px' }}
+        >
+          <Dot color={HL_COLOR} />
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 220px', minWidth: 0 }}>
+            <span style={{ fontSize: 16, fontWeight: 600 }}>
+              {t.coin} <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>Hyperliquid</span>
+            </span>
+            <span style={{ fontSize: 13, color: C.textMuted }}>
+              {(t.closed ? `${when(t.opened)} → ${when(t.closed)}` : 'Opened ' + when(t.opened)) + ` · ${px(t.maxSize)} @ ${px(t.entry)} · ${t.fills.length} fill${t.fills.length === 1 ? '' : 's'}`}
+            </span>
+          </span>
+          <span className={s.badge} style={{ background: C.divider, color: C.textSoft }}>
+            Perp · {t.side}
+            {t.liquidated ? ' · liquidated' : ''}
+          </span>
+          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, minWidth: 120 }}>
+            <span style={{ fontSize: 16, fontWeight: 600, color: item.ret == null ? C.textMuted : plInk(item.ret) }}>{item.ret == null ? '—' : fmtPct(item.ret)}</span>
+            <span style={{ fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>{t.closed ? 'Realised ' + usd(t.pnl, true) : 'Open on Overview'}</span>
+          </span>
+          <span className={s.badge} style={{ minWidth: 44, textAlign: 'center', background: st[1], color: st[2] }}>
+            {st[0]}
+          </span>
+          <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }} />
+        </button>
+        {isOpen && <PerpDetail key={t.id} t={t} note={hl.notes[t.id]} onSave={n => hl.saveNote(t.id, n)} />}
+      </div>
+    );
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Filters on the left, prices on the right, on one line when there's room. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <div className={s.pills} role="group" aria-label="Filter entries" style={{ marginRight: 'auto' }}>
-          {filters.map(([k, l]) => (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={filter === k}
-              className={filter === k ? s.optOn : s.opt}
-              onClick={() => {
-                setFilter(k);
-                setClosing(null);
-              }}
-            >
-              {l} · {count(k)}
+      {/* Where trades come from, open or closed, and one name: the same filters for every source. Phones get dropdowns. */}
+      {phone ? (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <Select
+              ariaLabel="Source"
+              value={filter.source}
+              onChange={v => set({ source: v, name: '' })}
+              options={(['all', 'manual', 'perp'] as const).map(k => ({ value: k, label: `${k === 'all' ? 'All' : SOURCE_NAME[k]} · ${count({ source: k, name: '' })}` }))}
+            />
+            <Select
+              ariaLabel="Status"
+              value={filter.status}
+              onChange={v => set({ status: v })}
+              options={[
+                { value: 'all' as const, label: 'Open & closed' },
+                { value: 'open' as const, label: 'Open' },
+                { value: 'closed' as const, label: 'Closed' },
+              ]}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Select ariaLabel="Ticker or coin" value={filter.name} onChange={name => set({ name })} options={[{ value: '', label: 'All names' }, ...names.map(n => ({ value: n, label: n }))]} style={{ flex: 1 }} />
+            {filter.source !== 'perp' && (
+              <button type="button" className={s.iconBtn} onClick={prices.refresh} disabled={prices.busy} aria-label="Refresh stock and crypto prices" title="Refresh prices">
+                <Icon d={IC.refresh} size={16} />
+              </button>
+            )}
+            {filter.source !== 'manual' && hl.state?.address && (
+              <button type="button" className={s.btnOutlineSm} onClick={() => hl.sync()} disabled={hl.syncing}>
+                {hl.syncing ? 'Syncing…' : 'Sync Hyperliquid'}
+              </button>
+            )}
+          </div>
+          {filter.source === 'perp' && hl.state && !hl.state.address && <ConnectWallet hl={hl} />}
+        </>
+      ) : (
+        <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div className={s.pills} role="group" aria-label="Source">
+          {(['all', 'manual', 'perp'] as const).map(k => (
+            <button key={k} type="button" aria-pressed={filter.source === k} className={filter.source === k ? s.optOn : s.opt} onClick={() => set({ source: k, name: '' })}>
+              {k === 'all' ? 'All' : SOURCE_NAME[k]} · {count({ source: k, name: '' })}
             </button>
           ))}
         </div>
-        <button type="button" className={s.btnOutline} onClick={prices.refresh} disabled={prices.busy}>
-          {prices.busy ? 'Refreshing prices…' : 'Refresh prices'}
-        </button>
-        {prices.msg && (
-          <span role="status" style={{ flexBasis: '100%', textAlign: 'right', fontSize: 13, color: C.textMuted }}>
-            {prices.msg}
-          </span>
-        )}
+        <div className={s.pills} role="group" aria-label="Status">
+          {(['all', 'open', 'closed'] as const).map(k => (
+            <button key={k} type="button" aria-pressed={filter.status === k} className={filter.status === k ? s.optOn : s.opt} onClick={() => set({ status: k })}>
+              {k === 'all' ? 'Open & closed' : k === 'open' ? 'Open' : 'Closed'}
+            </button>
+          ))}
+        </div>
+        <Select ariaLabel="Ticker or coin" value={filter.name} onChange={name => set({ name })} options={[{ value: '', label: 'All names' }, ...names.map(n => ({ value: n, label: n }))]} style={{ minWidth: 150 }} />
       </div>
+      {filter.source !== 'perp' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
+          <span style={{ marginRight: 'auto' }}>{prices.msg || 'Stocks & crypto prices from Google Finance'}</span>
+          <button type="button" className={s.btnOutlineSm} onClick={prices.refresh} disabled={prices.busy}>
+            <Icon d={IC.refresh} size={14} />
+            {prices.busy ? 'Refreshing…' : 'Refresh prices'}
+          </button>
+        </div>
+      )}
+      {filter.source !== 'manual' && (hl.state && !hl.state.address ? filter.source === 'perp' && <ConnectWallet hl={hl} /> : <SyncLine hl={hl} />)}
+        </>
+      )}
       <div className={s.cardFlush}>
-        {list.length === 0 && <div style={{ padding: '48px 24px', textAlign: 'center', fontSize: 15, color: C.textMuted }}>No entries here yet.</div>}
-        {list.map(t => {
-          const isOpen = openId === t.id;
+        {list.length === 0 && <div style={{ padding: '48px 24px', textAlign: 'center', fontSize: 15, color: C.textMuted }}>No trades here yet.</div>}
+        {list.map(item => {
+          if (item.perp) return perpRow(item);
+          const t = item.manual!;
+          const isOpen = openId === item.key;
           const cl = !!t.ex;
           const last = cl ? t.ex!.px : P.lastOf(t);
           const ret = ((last - t.px) / t.px) * 100 * dirOf(t) * levOf(t);
@@ -155,7 +255,7 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
                 className={`${s.rowBtn} ${s.hoverRow}`}
                 aria-expanded={isOpen}
                 onClick={() => {
-                  setOpenId(isOpen ? null : t.id);
+                  setOpenId(isOpen ? null : item.key);
                   setClosing(null);
                 }}
                 style={{ gap: '12px 16px', flexWrap: 'wrap', padding: '18px 24px' }}
@@ -225,6 +325,16 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
                         <span className={s.badge} style={{ padding: '3px 10px', background: C.divider, color: C.textSoft }}>
                           Rating {t.ex!.rt ?? '—'} / 5
                         </span>
+                        {t.ex!.su && (
+                          <span className={s.badge} style={{ padding: '3px 10px', background: C.divider, color: C.textSoft }}>
+                            {t.ex!.su}
+                          </span>
+                        )}
+                        {splitTags(t.ex!.mi).map(m => (
+                          <span key={m} className={s.badge} style={{ padding: '3px 10px', background: C.redTint, color: C.redInk }}>
+                            {m}
+                          </span>
+                        ))}
                       </div>
                       <p style={{ fontSize: 14, lineHeight: 1.55 }}>{t.ex!.ls || 'No lesson written.'}</p>
                     </div>
@@ -243,6 +353,11 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
                       <button type="button" className={s.btnOutline} onClick={() => onEdit(storedOf(t))}>
                         Edit entry
                       </button>
+                      {cl && (
+                        <button type="button" className={s.btnOutline} onClick={() => startClose(t)}>
+                          Edit review
+                        </button>
+                      )}
                       {/* Closing is final, so it sits apart from the everyday actions. */}
                       {!cl && (
                         <button type="button" className={s.btnGhost} onClick={() => startClose(t)} style={{ marginLeft: 'auto' }}>
@@ -251,9 +366,9 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
                       )}
                     </div>
                   )}
-                  {!cl && closing === t.id && (
+                  {closing === t.id && (
                     <div style={{ background: C.surface, border: `1.5px solid ${C.accent600}`, borderRadius: 10, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                      <span style={{ fontSize: 16, fontWeight: 600 }}>Close {t.tk} and review</span>
+                      <span style={{ fontSize: 16, fontWeight: 600 }}>{cl ? `Review ${t.tk}` : `Close ${t.tk} and review`}</span>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
                         <label className={s.field}>
                           Exit price ({t.mk === 'IDX' ? 'Rp' : '$'})
@@ -272,24 +387,7 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
                           <input className={s.input} type="date" value={cd.d} onChange={e => setCd({ ...cd, d: e.target.value })} />
                         </label>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <span className={s.label}>Followed plan?</span>
-                        <Options label="Followed plan" items={['Yes', 'Partly', 'No'] as const} value={cd.fp} onChange={fp => setCd({ ...cd, fp })} />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <span className={s.label}>Rating (process, not outcome)</span>
-                        <Options label="Rating" round items={[1, 2, 3, 4, 5] as const} value={cd.rt as 1 | 2 | 3 | 4 | 5} onChange={rt => setCd({ ...cd, rt })} />
-                      </div>
-                      <label className={s.field}>
-                        Lesson
-                        <textarea
-                          className={s.input}
-                          rows={3}
-                          value={cd.ls}
-                          onChange={e => setCd({ ...cd, ls: e.target.value })}
-                          placeholder="What would you repeat or change next time?"
-                        />
-                      </label>
+                      <ReviewFields value={cd.review} onChange={review => setCd({ ...cd, review })} />
                       {err && (
                         <span className={s.error} role="alert">
                           {err}
@@ -343,11 +441,4 @@ export function Journal({ today, todayISO, P, journal, filter, setFilter, openId
       )}
     </div>
   );
-}
-
-function match(t: Trade, f: JournalFilter) {
-  if (f === 'all') return true;
-  if (f === 'open') return !t.ex;
-  if (f === 'closed') return !!t.ex;
-  return t.mk === f;
 }

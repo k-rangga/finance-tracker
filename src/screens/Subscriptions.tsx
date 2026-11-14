@@ -65,7 +65,8 @@ export function Subscriptions({ budget: b, states, txs, catOf }: Props) {
           </span>
         </div>
         <button type="button" className={s.btnOutlineSm} style={{ flex: 'none' }} onClick={() => setEditing({ id: newId() })}>
-          <Icon d={IC.plus} size={15} /> Add
+          <Icon d={IC.plus} size={15} />
+          Add
         </button>
       </div>
 

@@ -116,6 +116,8 @@ type TradeRow = {
   followed_plan: 'Yes' | 'Partly' | 'No' | null;
   rating: number | null;
   lesson: string | null;
+  setup?: string | null;
+  mistakes?: string | null;
 };
 
 const u = <T>(v: T | null) => (v == null ? undefined : v);
@@ -139,7 +141,7 @@ const toTrade = (r: TradeRow): Trade => ({
   tags: u(r.tags),
   lev: u(r.leverage),
   dir: u(r.direction),
-  ex: r.exit_price != null && r.exit_date ? { px: r.exit_price, d: r.exit_date, fp: u(r.followed_plan), rt: u(r.rating), ls: u(r.lesson) } : undefined,
+  ex: r.exit_price != null && r.exit_date ? { px: r.exit_price, d: r.exit_date, fp: u(r.followed_plan), rt: u(r.rating), ls: u(r.lesson), su: r.setup || undefined, mi: r.mistakes || undefined } : undefined,
 });
 
 const toRow = (t: Trade): TradeRow => ({
@@ -166,6 +168,8 @@ const toRow = (t: Trade): TradeRow => ({
   followed_plan: t.ex?.fp ?? null,
   rating: t.ex?.rt ?? null,
   lesson: t.ex?.ls ?? null,
+  setup: t.ex?.su || null,
+  mistakes: t.ex?.mi || null,
 });
 
 type UpdateRow = {

@@ -3,10 +3,25 @@ import { run } from './gas';
 /** One Hyperliquid fill as the perp_fills tab keeps it (`time` in ms, money in USDC). `pnl` is already net of its fee. */
 export type Fill = { tid: string; time: number; coin: string; dir: string; px: number; sz: number; fee: number; pnl: number };
 
-/** Your journal on a trade. `mistakes` is a comma-separated list. */
-export type PerpNote = { setup: string; mistakes: string; rating: number; note: string };
+/** Your review of a trade, the same fields as a typed-in entry's. `mistakes` is a comma-separated list. */
+export type PerpNote = { setup: string; mistakes: string; rating: number; note: string; followed?: '' | 'Yes' | 'Partly' | 'No' };
 
-export type PerpState = { address: string; syncedAt: number | null; fills: Fill[]; notes: Record<string, PerpNote> };
+/** A funding payment on an open position: negative when you paid it. */
+export type Funding = { time: number; coin: string; usdc: number };
+
+/** A position open right now, with its unrealized PnL. `size` is negative for a short. */
+export type Position = { coin: string; size: number; entry: number; unrealized: number };
+
+export type PerpState = {
+  address: string;
+  syncedAt: number | null;
+  fills: Fill[];
+  funding?: Funding[];
+  positions?: Position[];
+  /** Account value in USDC: margin on every perp market plus spot USDC (null when it couldn't be read). */
+  equity?: number | null;
+  notes: Record<string, PerpNote>;
+};
 
 export const getPerps = () => run<PerpState>('getPerps');
 export const syncPerps = () => run<PerpState>('syncPerps');
@@ -34,7 +49,9 @@ export type PerpTrade = {
   maxSize: number;
   maxNotional: number;
   fees: number;
-  /** Net of all fees: the sum of the fills' closed PnL. */
+  /** Funding paid (negative) or received while it was open. */
+  funding: number;
+  /** After fees and funding. */
   pnl: number;
   liquidated: boolean;
 };
@@ -59,8 +76,11 @@ const EPS = 1e-9;
 /** Prediction-market outcomes ("BTC above 77610 on Aug 30…? - Yes", "HYPE touches 100… - Yes") aren't positions. */
 const isOutcome = (coin: string) => /\?| - (Yes|No)$|^#/.test(coin);
 
-/** Fills merged into trades, oldest first; the last one per coin may still be open (`closed: null`). */
-export function mergeFills(fills: Fill[]): PerpTrade[] {
+/**
+ * Fills merged into trades, oldest first; the last one per coin may still be open (`closed: null`). Each funding
+ * payment goes to the trade of its coin that was open at the time.
+ */
+export function mergeFills(fills: Fill[], funding: Funding[] = []): PerpTrade[] {
   const sorted = [...fills].filter(f => SIGN[f.dir] && !isOutcome(f.coin)).sort((a, b) => a.time - b.time || Number(a.tid) - Number(b.tid));
   /** A trade being built, with running totals for its average prices. */
   type Building = PerpTrade & { inQty: number; inCost: number; outQty: number; outCost: number };
@@ -80,6 +100,7 @@ export function mergeFills(fills: Fill[]): PerpTrade[] {
     maxSize: 0,
     maxNotional: 0,
     fees: 0,
+    funding: 0,
     pnl: 0,
     liquidated: false,
     inQty: 0,
@@ -144,7 +165,17 @@ export function mergeFills(fills: Fill[]): PerpTrade[] {
     } else pos.set(f.coin, after);
   }
   for (const t of open.values()) finish(t, 0);
-  return out.sort((a, b) => a.opened.getTime() - b.opened.getTime());
+  out.sort((a, b) => a.opened.getTime() - b.opened.getTime());
+
+  const byCoin = new Map<string, PerpTrade[]>();
+  for (const t of out) byCoin.set(t.coin, [...(byCoin.get(t.coin) ?? []), t]);
+  for (const f of funding) {
+    const t = byCoin.get(f.coin)?.find(x => x.opened.getTime() <= f.time && (!x.closed || f.time <= x.closed.getTime()));
+    if (!t) continue;
+    t.funding += f.usdc;
+    t.pnl += f.usdc;
+  }
+  return out;
 }
 
 export type PerpStats = {
@@ -153,6 +184,7 @@ export type PerpStats = {
   winRate: number;
   pnl: number;
   fees: number;
+  funding: number;
   avgWin: number;
   avgLoss: number;
   /** Total won ÷ total lost. Above 1 makes money. */
@@ -175,6 +207,7 @@ export function perpStats(all: PerpTrade[]): PerpStats {
     winRate: trades.length ? (wins.length / trades.length) * 100 : 0,
     pnl: won - lost,
     fees: trades.reduce((a, t) => a + t.fees, 0),
+    funding: trades.reduce((a, t) => a + t.funding, 0),
     avgWin: wins.length ? won / wins.length : 0,
     avgLoss: losses.length ? lost / losses.length : 0,
     profitFactor: lost > 0 ? won / lost : won > 0 ? Infinity : 0,

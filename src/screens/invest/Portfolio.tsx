@@ -8,11 +8,13 @@ import { buyFee, levOf, levTag, liqOf, MARKETS, MK_COLOR, MK_NAME, nat, qtyLabel
 import { useInvestFmt } from './Invest';
 import type { PriceRefresh } from './Journal';
 
-type Props = { cycle: Cycle; P: PortfolioModel; prices: Prices; refresh: PriceRefresh; onOpenPrices: () => void; onOpenTrade: (id: string) => void };
+/** `hl`: the Hyperliquid account in rupiah (value, open P/L, this year's closed trades), when it's connected. */
+type HlTotals = { equity: number; unrealized: number; realized: number; closed: number } | null;
+type Props = { cycle: Cycle; P: PortfolioModel; hl: HlTotals; prices: Prices; refresh: PriceRefresh; onOpenPrices: () => void; onOpenTrade: (id: string) => void };
 
 
 
-export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade }: Props) {
+export function Portfolio({ cycle, P, hl, prices, refresh, onOpenPrices, onOpenTrade }: Props) {
   const { settings, full, short, ofIncome } = useSettings();
   const { dF, dS } = useInvestFmt();
   const caps: Record<Market, number> = { IDX: settings.idxCap, US: settings.usCap, Crypto: settings.cryptoCap };
@@ -26,7 +28,11 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
   const capWarn = overs.length
     ? overs.map(a => `${MK_NAME[a.m]} is ${Math.round(a.share)}% of the portfolio, above your ${caps[a.m]}% cap`).join('. ') + '. Pause new buys there or trim to rebalance.'
     : '';
-  const winRate = P.done.length ? Math.round((P.wins / P.done.length) * 100) + '%' : '—';
+  // Everything you own: typed-in positions plus the Hyperliquid account (win rate and the rest live on Review).
+  const value = P.tot + (hl?.equity ?? 0);
+  const upl = P.upl + (hl?.unrealized ?? 0);
+  const realized = P.realized + (hl?.realized ?? 0);
+  const closedCount = P.done.filter(d => d.t.ex!.d.startsWith(String(cycle.today.getFullYear()))).length + (hl?.closed ?? 0);
 
   const age = diffDays(parseISO(prices.at), cycle.today);
   const stale = age > 7;
@@ -57,16 +63,19 @@ export function Portfolio({ cycle, P, prices, refresh, onOpenPrices, onOpenTrade
       <Card style={{ gap: 24 }}>
         <CardHead title="Portfolio" caption={`Totals in ${settings.currency} · USD at Rp ${settings.fxRate.toLocaleString('id-ID')}`} />
         <div className={s.stats}>
-          <Stat label="Portfolio value" value={dS(P.tot)} sub={`${dF(P.tot)} · ${P.pos.length} open ${P.pos.length === 1 ? 'position' : 'positions'}`} />
+          <Stat
+            label="Total value"
+            value={dS(value)}
+            sub={hl ? `${dS(P.tot)} positions · ${dS(hl.equity)} Hyperliquid` : `${dF(P.tot)} · ${P.pos.length} open ${P.pos.length === 1 ? 'position' : 'positions'}`}
+          />
           <Stat
             label="Unrealised P/L"
-            value={dS(P.upl, true)}
-            sub={`${fmtPct(P.cost ? (P.upl / P.cost) * 100 : 0)} on ${dS(P.cost)} cost`}
-            ink={plInk(P.upl)}
-            subInk={plInk(P.upl)}
+            value={dS(upl, true)}
+            sub={hl ? `${dS(P.upl, true)} positions · ${dS(hl.unrealized, true)} Hyperliquid` : `${fmtPct(P.cost ? (P.upl / P.cost) * 100 : 0)} on ${dS(P.cost)} cost`}
+            ink={plInk(upl)}
+            subInk={hl ? undefined : plInk(upl)}
           />
-          <Stat label={`Realised ${cycle.today.getFullYear()}`} value={dS(P.realized, true)} sub={`${P.done.length} closed · after fees`} ink={plInk(P.realized)} />
-          <Stat label="Win rate" value={winRate} sub={`${P.wins} of ${P.done.length} closed trades`} />
+          <Stat label={`Realised ${cycle.today.getFullYear()}`} value={dS(realized, true)} sub={`${closedCount} closed · after fees`} ink={plInk(realized)} />
         </div>
         {capWarn && (
           <div role="status" style={{ background: C.amberTint, color: C.amberInk, borderRadius: 12, padding: '12px 16px', fontSize: 14, lineHeight: 1.5 }}>

@@ -9,23 +9,23 @@ import { fetchQuotes } from '../../lib/backend';
 import { computePortfolio, effectiveTrade, type Trade } from './model';
 import { Portfolio } from './Portfolio';
 import { Progress } from './Progress';
-import { Journal, type JournalFilter, type PriceRefresh } from './Journal';
+import { ALL_TRADES, Journal, type JournalFilter, type PriceRefresh } from './Journal';
 import { Review } from './Review';
 import { PriceModal } from './PriceModal';
 import { EntryModal } from './EntryModal';
-import { Perps } from './Perps';
+import { HyperliquidCard, usePerps } from './Perps';
+import { allTrades } from './trades';
 
-type Sub = 'portfolio' | 'progress' | 'journal' | 'review' | 'perps';
+/** Three jobs: what you own, everything you traded, and how well you trade. */
+type Sub = 'overview' | 'trades' | 'review';
 
 /** Google Finance prices are refreshed on open when older than this. */
 const QUOTE_MAX_AGE_MS = 30 * 60 * 1000;
 
 const SUBS: [Sub, string][] = [
-  ['portfolio', 'Portfolio'],
-  ['progress', 'Progress'],
-  ['journal', 'Journal'],
+  ['overview', 'Overview'],
+  ['trades', 'Trades'],
   ['review', 'Review'],
-  ['perps', 'Perps'],
 ];
 
 /** Money formatters for rupiah amounts, shown in the display currency. */
@@ -47,13 +47,27 @@ export function Invest({ cycle }: { cycle: Cycle }) {
   // Positions with their avg ups/downs folded in; the stored entries stay as first bought.
   const journal = useMemo(() => stored.map(t => effectiveTrade(t, updates)), [stored, updates]);
   const [editing, setEditing] = useState<Trade | null>(null);
-  const [sub, setSub] = useState<Sub>('portfolio');
-  const [jf, setJf] = useState<JournalFilter>('all');
+  const [sub, setSub] = useState<Sub>('overview');
+  const [jf, setJf] = useState<JournalFilter>(ALL_TRADES);
   const [jOpen, setJOpen] = useState<string | null>(null);
   const [pxOpen, setPxOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
 
   const P = useMemo(() => computePortfolio(journal, prices, settings.fxRate, cycle.today.getFullYear()), [journal, prices, settings.fxRate, cycle.today]);
+  // Hyperliquid, synced once for every tab; its trades join the typed-in ones in one list, in rupiah.
+  const hl = usePerps();
+  const items = useMemo(() => allTrades(P, journal, hl.trades, hl.notes, settings.fxRate), [P, journal, hl.trades, hl.notes, settings.fxRate]);
+  /** Overview's totals take in the Hyperliquid account: its value, what's open, and this year's closed trades (rupiah). */
+  const hlTotals = useMemo(() => {
+    if (!hl.state?.address) return null;
+    const year = cycle.today.getFullYear();
+    return {
+      equity: (hl.state.equity ?? 0) * settings.fxRate,
+      unrealized: (hl.state.positions ?? []).reduce((a, p) => a + p.unrealized, 0) * settings.fxRate,
+      realized: items.filter(t => t.source === 'perp' && t.closed && t.closed.getFullYear() === year).reduce((a, t) => a + t.pnl, 0),
+      closed: items.filter(t => t.source === 'perp' && t.closed && t.closed.getFullYear() === year).length,
+    };
+  }, [hl.state, items, settings.fxRate, cycle.today]);
 
   // Prices from Google Finance (GOOGLEFINANCE via the data spreadsheet). Symbols it can't price keep the typed price.
   const [quoting, setQuoting] = useState(false);
@@ -103,9 +117,9 @@ export function Invest({ cycle }: { cycle: Cycle }) {
   }, [P.tot, P.cost, P.realized, todayISO, lastSnap, saveSnapshot]);
 
   const goJournal = useCallback((id: string) => {
-    setSub('journal');
-    setJf('all');
-    setJOpen(id);
+    setSub('trades');
+    setJf(ALL_TRADES);
+    setJOpen('m:' + id);
   }, []);
 
   return (
@@ -118,7 +132,7 @@ export function Invest({ cycle }: { cycle: Cycle }) {
             </button>
           ))}
         </div>
-        {sub !== 'perps' && (
+        {sub !== 'review' && (
           <button type="button" className={s.btnPrimary} style={{ marginBottom: 6 }} onClick={() => setFormOpen(true)}>
             <Icon d={IC.plus} size={18} />
             New entry
@@ -126,14 +140,20 @@ export function Invest({ cycle }: { cycle: Cycle }) {
         )}
       </div>
 
-      {sub === 'portfolio' && <Portfolio cycle={cycle} P={P} prices={prices} refresh={priceRefresh} onOpenPrices={() => setPxOpen(true)} onOpenTrade={goJournal} />}
-      {sub === 'progress' && <Progress today={cycle.today} snaps={snaps} />}
-      {sub === 'journal' && (
+      {sub === 'overview' && (
+        <>
+          <Portfolio cycle={cycle} P={P} hl={hlTotals} prices={prices} refresh={priceRefresh} onOpenPrices={() => setPxOpen(true)} onOpenTrade={goJournal} />
+          <HyperliquidCard hl={hl} />
+          <Progress today={cycle.today} snaps={snaps} />
+        </>
+      )}
+      {sub === 'trades' && (
         <Journal
           today={cycle.today}
           todayISO={todayISO}
           P={P}
-          journal={journal}
+          items={items}
+          hl={hl}
           filter={jf}
           setFilter={setJf}
           openId={jOpen}
@@ -150,8 +170,7 @@ export function Invest({ cycle }: { cycle: Cycle }) {
           prices={priceRefresh}
         />
       )}
-      {sub === 'perps' && <Perps />}
-      {sub === 'review' && <Review today={cycle.today} P={P} onOpenTrade={goJournal} />}
+      {sub === 'review' && <Review today={cycle.today} items={items} />}
 
       {pxOpen && (
         <PriceModal

@@ -38,6 +38,8 @@ const TABLES = {
     'id', 'market', 'ticker', 'name', 'buy_date', 'price', 'quantity', 'fee', 'style', 'conviction', 'target', 'stop',
     'catalyst', 'catalyst_date', 'thesis', 'tags', 'leverage', 'direction',
     'exit_price', 'exit_date', 'followed_plan', 'rating', 'lesson', 'created_at',
+    // The same review as Hyperliquid trades: setup, and mistakes (comma-separated).
+    'setup', 'mistakes',
   ],
   snapshots: ['day', 'value', 'contributed'],
   /** Avg up / avg down buys and notes on a journal entry. */
@@ -47,10 +49,15 @@ const TABLES = {
    * journaled (a public address, read-only; replace the placeholder with yours).
    */
   config: ['key', 'value', 'note'],
-  /** Hyperliquid fills (one per row, as the exchange reports them), merged into trades in the app. `time` is in ms. */
+  /**
+   * Hyperliquid fills, merged into trades in the app. `time` is in ms; `closed_pnl` is after that fill's fee, as in
+   * Hyperliquid's own CSV export (the API reports it before).
+   */
   perp_fills: ['tid', 'time', 'coin', 'dir', 'px', 'sz', 'fee', 'closed_pnl', 'start_position', 'hash'],
-  /** Your journal on a merged trade (`trade_id` = its first fill's tid): setup, mistakes, a 1–5 rating, notes. */
-  perp_notes: ['trade_id', 'setup', 'mistakes', 'rating', 'note', 'updated_at'],
+  /** Funding paid (negative) or received on open positions, one row per payment. */
+  perp_funding: ['key', 'time', 'coin', 'usdc'],
+  /** Your review of a merged trade (`trade_id` = its first fill's tid): setup, mistakes, a 1–5 rating, notes, followed plan. */
+  perp_notes: ['trade_id', 'setup', 'mistakes', 'rating', 'note', 'updated_at', 'followed'],
   /** Gmail messages already read that weren't receipts, so they aren't downloaded again. */
   skipped: ['id', 'subject', 'seen_at', 'reason'],
 };
@@ -61,6 +68,7 @@ const NUMERIC = {
   snapshots: ['value', 'contributed'],
   trade_updates: ['price', 'quantity', 'fee'],
   perp_fills: ['time', 'px', 'sz', 'fee', 'closed_pnl', 'start_position'],
+  perp_funding: ['time', 'usdc'],
   perp_notes: ['rating'],
 };
 
