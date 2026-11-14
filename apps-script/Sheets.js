@@ -57,7 +57,9 @@ const TABLES = {
   /** Funding paid (negative) or received on open positions, one row per payment. */
   perp_funding: ['key', 'time', 'coin', 'usdc'],
   /** Your review of a merged trade (`trade_id` = its first fill's tid): setup, mistakes, a 1–5 rating, notes, followed plan. */
-  perp_notes: ['trade_id', 'setup', 'mistakes', 'rating', 'note', 'updated_at', 'followed'],
+  perp_notes: ['trade_id', 'setup', 'mistakes', 'rating', 'note', 'updated_at', 'followed', 'skipped'],
+  /** Your note on a month of trading, per account (`key` = "manual|2026-11" or "perp|2026-11"). */
+  journal_months: ['key', 'note', 'updated_at'],
   /** Gmail messages already read that weren't receipts, so they aren't downloaded again. */
   skipped: ['id', 'subject', 'seen_at', 'reason'],
 };

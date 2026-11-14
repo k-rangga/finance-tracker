@@ -2291,6 +2291,162 @@ textarea.input {
   }
 }
 
+/* ---------- Trade review: three compact rows ---------- */
+.reviewBox {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.reviewForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.reviewRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.reviewLabel {
+  flex: none;
+  width: 108px;
+  padding-top: 9px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.segment {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 9px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.segment button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 14px;
+  min-height: 32px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.segment button[aria-pressed='true'] {
+  background: var(--accent-strong);
+  color: var(--on-accent);
+}
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.tag {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 11px;
+  min-height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.tag[aria-pressed='true'] {
+  background: var(--accent-tint);
+  border-color: var(--accent-600);
+  color: var(--accent-800);
+}
+.tag[data-mistake][aria-pressed='true'] {
+  background: var(--red-tint);
+  border-color: var(--red-ink);
+  color: var(--red-ink);
+}
+.tagDivider {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--border-strong);
+}
+.tagMore {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 6px;
+  border: none;
+  background: none;
+  color: var(--accent-800);
+  cursor: pointer;
+}
+@media (max-width: 759px) {
+  .reviewRow {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .reviewLabel {
+    width: auto;
+    padding-top: 0;
+  }
+  .reviewRow textarea {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+/* ---------- Journal: a month of reviewed trades, by week ---------- */
+.feedWeek {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.feedWeekHead {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.feedEntry {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.feedTop {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 15px;
+  flex-wrap: wrap;
+}
+.feedDate {
+  font-size: 13px;
+  color: var(--text-muted);
+  min-width: 48px;
+}
+.feedLesson {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text);
+  padding-left: 12px;
+  border-left: 3px solid var(--accent-tint);
+}
+
 /* ---------- Perps (Invest) ---------- */
 .perpSide {
   font-size: 11px;

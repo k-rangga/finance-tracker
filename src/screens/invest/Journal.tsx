@@ -25,15 +25,13 @@ import {
 } from './model';
 import { useInvestFmt } from './Invest';
 import { UpdateDetail, UpdateForm, UpdateTimeline } from './Updates';
-import { splitTags, type AnyTrade } from './trades';
-import { ReviewFields, type ReviewDraft } from './ReviewFields';
-import { PerpDetail, px, when, type Perps } from './Perps';
+import { manualDraft, needsReview, withReview, type AnyTrade } from './trades';
+import { ReviewFields, useAutosave, type ReviewDraft } from './ReviewFields';
+import { PerpDetail, px, ReviewBox, when, type Perps } from './Perps';
 
 /** Perps' colour: beside their trades and on the Perps switch, as markets have theirs. */
 export const HL_COLOR = '#7c6cf0';
 
-/** Closed and not reviewed yet: no followed-plan answer, rating, setup, mistakes or lesson. */
-export const needsReview = (t: AnyTrade) => !!t.closed && !t.followed && !t.rating && !t.setup && !t.mistakes.length && !t.lesson;
 
 /** A trade's row: name and what kind, dates and size, return and P/L, and its review at a glance. */
 function TradeHead({
@@ -99,7 +97,11 @@ function ReviewLine({ item: t }: { item: AnyTrade }) {
           {m}
         </span>
       ))}
-      {t.rating ? <span className={s.tradeChip}>{t.rating}/5</span> : null}
+      {t.lesson && (
+        <span className={s.ellipsis} style={{ color: C.textSoft, fontStyle: 'italic', minWidth: 0, flex: '1 1 160px' }}>
+          “{t.lesson}”
+        </span>
+      )}
     </span>
   );
 }
@@ -131,10 +133,18 @@ export const FP_COLORS: Record<FollowedPlan, [string, string]> = {
   No: [C.redTint, C.redInk],
 };
 
-/** Closing a trade, or changing a closed one's review: exit price and date, then the review. */
+/** Closing a trade: exit price and date, then the review. */
 type CloseDraft = { px: string; d: string; review: ReviewDraft };
 
-const reviewOf = (ex?: Trade['ex']): ReviewDraft => ({ followed: ex?.fp ?? '', rating: ex?.rt ?? 0, setup: ex?.su ?? '', mistakes: splitTags(ex?.mi), note: ex?.ls ?? '' });
+/** A closed entry's review, saved as you go, like a Hyperliquid trade's. */
+function ManualReview({ ex, onSave }: { ex: NonNullable<Trade['ex']>; onSave: (ex: NonNullable<Trade['ex']>) => void }) {
+  const { draft, change, label } = useAutosave(manualDraft(ex), d => onSave(withReview(ex, d)));
+  return (
+    <ReviewBox label={label}>
+      <ReviewFields value={draft} onChange={change} />
+    </ReviewBox>
+  );
+}
 
 export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onClose, stored, updates, onEdit, onSaveUpdate, onDeleteUpdate }: Props) {
   const { dS } = useInvestFmt();
@@ -143,19 +153,18 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
   const [detail, setDetail] = useState<{ t: Trade; u: TradeUpdate } | null>(null);
   const storedOf = (t: Trade) => stored.find(x => x.id === t.id) ?? t;
   const [closing, setClosing] = useState<string | null>(null);
-  const [cd, setCd] = useState<CloseDraft>({ px: '', d: todayISO, review: reviewOf() });
+  const [cd, setCd] = useState<CloseDraft>({ px: '', d: todayISO, review: manualDraft() });
   const [err, setErr] = useState('');
 
   const startClose = (t: Trade) => {
     setClosing(t.id);
     setErr('');
-    setCd({ px: String(t.ex?.px ?? P.lastOf(t)), d: t.ex?.d ?? todayISO, review: reviewOf(t.ex) });
+    setCd({ px: String(P.lastOf(t)), d: todayISO, review: manualDraft() });
   };
   const saveClose = (t: Trade) => {
     const px = numIn(cd.px, t.mk);
     if (!(px > 0)) return setErr('Enter the exit price.');
-    const r = cd.review;
-    onClose(t.id, { px, d: cd.d || todayISO, fp: r.followed || undefined, rt: r.rating || undefined, ls: r.note.trim(), su: r.setup || undefined, mi: r.mistakes.join(',') || undefined });
+    onClose(t.id, withReview({ px, d: cd.d || todayISO }, cd.review));
     setClosing(null);
   };
 
@@ -205,7 +214,6 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
           ];
           if (levOf(t) > 1) plan.splice(1, 0, { k: 'Leverage', v: levTag(t), sub: 'Liquidation ~' + nat(liqOf(t), t.mk), ink: C.amberInk });
           if (cl) plan.push({ k: 'Exit', v: nat(t.ex!.px, t.mk), sub: fmtD(t.ex!.d) }, { k: 'R multiple', v: r == null ? '—' : fmtR(r), sub: fmtPct(ret), ink: plInk(ret) });
-          const fp = FP_COLORS[t.ex?.fp ?? 'Partly'];
           const catWhen = t.cd
             ? fmtD(t.cd) + (cl ? '' : cdays! > 0 ? ` · in ${cdays} days` : cdays === 0 ? ' · today' : ' · passed')
             : t.cat
@@ -255,32 +263,7 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
                       </div>
                     ))}
                   </div>
-                  {cl && (
-                    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span className={s.eyebrow} style={{ marginRight: 'auto' }}>
-                          Review
-                        </span>
-                        <span className={s.badge} style={{ padding: '3px 10px', background: fp[0], color: fp[1] }}>
-                          Followed plan: {t.ex!.fp ?? '—'}
-                        </span>
-                        <span className={s.badge} style={{ padding: '3px 10px', background: C.divider, color: C.textSoft }}>
-                          Rating {t.ex!.rt ?? '—'} / 5
-                        </span>
-                        {t.ex!.su && (
-                          <span className={s.badge} style={{ padding: '3px 10px', background: C.divider, color: C.textSoft }}>
-                            {t.ex!.su}
-                          </span>
-                        )}
-                        {splitTags(t.ex!.mi).map(m => (
-                          <span key={m} className={s.badge} style={{ padding: '3px 10px', background: C.redTint, color: C.redInk }}>
-                            {m}
-                          </span>
-                        ))}
-                      </div>
-                      <p style={{ fontSize: 14, lineHeight: 1.55 }}>{t.ex!.ls || 'No lesson written.'}</p>
-                    </div>
-                  )}
+                  {cl && <ManualReview key={t.id} ex={t.ex!} onSave={ex => onClose(t.id, ex)} />}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <span className={s.eyebrow}>Updates</span>
                     <UpdateTimeline t={storedOf(t)} updates={updates} onOpen={u => setDetail({ t, u })} />
@@ -295,11 +278,6 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
                       <button type="button" className={s.btnOutline} onClick={() => onEdit(storedOf(t))}>
                         Edit entry
                       </button>
-                      {cl && (
-                        <button type="button" className={s.btnOutline} onClick={() => startClose(t)}>
-                          Edit review
-                        </button>
-                      )}
                       {/* Closing is final, so it sits apart from the everyday actions. */}
                       {!cl && (
                         <button type="button" className={s.btnGhost} onClick={() => startClose(t)} style={{ marginLeft: 'auto' }}>
@@ -308,9 +286,9 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
                       )}
                     </div>
                   )}
-                  {closing === t.id && (
+                  {!cl && closing === t.id && (
                     <div style={{ background: C.surface, border: `1.5px solid ${C.accent600}`, borderRadius: 10, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                      <span style={{ fontSize: 16, fontWeight: 600 }}>{cl ? `Review ${t.tk}` : `Close ${t.tk} and review`}</span>
+                      <span style={{ fontSize: 16, fontWeight: 600 }}>Close {t.tk}</span>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
                         <label className={s.field}>
                           Exit price ({t.mk === 'IDX' ? 'Rp' : '$'})
@@ -337,7 +315,7 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
                       )}
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <button type="button" className={s.btnPrimary} onClick={() => saveClose(t)}>
-                          Save review
+                          Close trade
                         </button>
                         <button type="button" className={s.btnGhost} onClick={() => setClosing(null)}>
                           Cancel

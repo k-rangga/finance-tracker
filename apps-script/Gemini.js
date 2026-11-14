@@ -89,3 +89,40 @@ function geminiJson_(res) {
     return null;
   }
 }
+
+/**
+ * A first draft of your monthly trading note, from the month's numbers and your own lessons (p.summary: text).
+ * Returns { text } or { error }. Like the chat, it only suggests; you edit and keep what you want.
+ */
+function draftJournalMonth_(p) {
+  const props = PropertiesService.getScriptProperties();
+  const key = props.getProperty('GEMINI_API_KEY');
+  if (!key) return { error: 'no_key' };
+  const model = props.getProperty('GEMINI_MODEL') || GEMINI_DEFAULT_MODEL;
+  const body = {
+    systemInstruction: {
+      parts: [
+        {
+          text: [
+            "You help a trader write their monthly trading journal note, in their voice (first person), from their month's numbers and their own lessons.",
+            'Write 3 short parts with these headings: "What worked", "What to change", "One rule for next month". At most 120 words in all, plain "- " bullets.',
+            'Be concrete: name the setups, mistakes and tickers in the data. No investment advice, no price predictions. Reply in the language the lessons are written in (English if none).',
+          ].join('\n'),
+        },
+      ],
+    },
+    contents: [{ role: 'user', parts: [{ text: String(p.summary || '').slice(0, 12000) }] }],
+    generationConfig: { temperature: 0.5, maxOutputTokens: 600, thinkingConfig: { thinkingLevel: 'low' } },
+  };
+  let res = geminiFetch_(model, key, body);
+  let data = geminiJson_(res);
+  if (res.getResponseCode() === 400 && /thinking/i.test(JSON.stringify(data || ''))) {
+    delete body.generationConfig.thinkingConfig;
+    res = geminiFetch_(model, key, body);
+    data = geminiJson_(res);
+  }
+  if (res.getResponseCode() !== 200) return { error: 'api', detail: String((data && data.error && data.error.message) || 'HTTP ' + res.getResponseCode()).slice(0, 300) };
+  const cand = data && data.candidates && data.candidates[0];
+  const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(x => x.text || '').join('').trim() : '';
+  return text ? { text: text } : { error: 'blocked' };
+}

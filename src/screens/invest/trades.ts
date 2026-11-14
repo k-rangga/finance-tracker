@@ -1,6 +1,7 @@
 import type { PerpNote, PerpTrade } from '../../lib/perps';
 import { parseISO, sum } from '../../lib/format';
 import { buyFee, sellFee, type FollowedPlan, type Portfolio, type Trade } from './model';
+import type { ReviewDraft } from './ReviewFields';
 
 export type Source = 'manual' | 'perp';
 export const SOURCE_NAME: Record<Source, string> = { manual: 'Stocks & crypto', perp: 'Hyperliquid' };
@@ -32,6 +33,8 @@ export type AnyTrade = {
   setup?: string;
   mistakes: string[];
   lesson?: string;
+  /** Left unreviewed on purpose ("mark the rest as reviewed"). */
+  skipped?: boolean;
   manual?: Trade;
   perp?: PerpTrade;
 };
@@ -41,6 +44,33 @@ export const followedOf = (n?: PerpNote): FollowedPlan | undefined =>
   n?.followed ? n.followed : n?.rating ? (n.rating >= 4 ? 'Yes' : n.rating === 3 ? 'Partly' : 'No') : undefined;
 
 export const splitTags = (v?: string) => (v ? v.split(',').map(x => x.trim()).filter(Boolean) : []);
+
+/** Closed and not reviewed yet: no followed-plan answer, rating, setup, mistakes or lesson, and not skipped. */
+export const needsReview = (t: AnyTrade) => !!t.closed && !t.skipped && !t.followed && !t.rating && !t.setup && !t.mistakes.length && !t.lesson;
+
+/** A Hyperliquid note as a review draft, and back (null when there's nothing in it). */
+export const perpDraft = (n?: PerpNote): ReviewDraft => ({
+  followed: followedOf(n) ?? '',
+  rating: n?.rating ?? 0,
+  setup: n?.setup ?? '',
+  mistakes: splitTags(n?.mistakes),
+  note: n?.note ?? '',
+});
+export const perpNoteOf = (d: ReviewDraft): PerpNote | null => {
+  const n: PerpNote = { followed: d.followed, rating: d.rating, setup: d.setup, mistakes: d.mistakes.join(','), note: d.note.trim() };
+  return n.followed || n.rating || n.setup || n.mistakes || n.note ? n : null;
+};
+
+/** A typed-in trade's review as a draft, and the exit with a draft's review in it. */
+export const manualDraft = (ex?: Trade['ex']): ReviewDraft => ({ followed: ex?.fp ?? '', rating: ex?.rt ?? 0, setup: ex?.su ?? '', mistakes: splitTags(ex?.mi), note: ex?.ls ?? '' });
+export const withReview = (ex: NonNullable<Trade['ex']>, d: ReviewDraft): NonNullable<Trade['ex']> => ({
+  ...ex,
+  fp: d.followed || undefined,
+  rt: d.rating || undefined,
+  ls: d.note.trim(),
+  su: d.setup || undefined,
+  mi: d.mistakes.join(',') || undefined,
+});
 
 export function allTrades(P: Portfolio, journal: Trade[], perps: PerpTrade[], notes: Record<string, PerpNote>, fx: number): AnyTrade[] {
   const manual = journal.map((t): AnyTrade => {
@@ -87,6 +117,7 @@ export function allTrades(P: Portfolio, journal: Trade[], perps: PerpTrade[], no
       setup: n?.setup || undefined,
       mistakes: splitTags(n?.mistakes),
       lesson: n?.note || undefined,
+      skipped: !!n?.skipped,
       perp: t,
     };
   });

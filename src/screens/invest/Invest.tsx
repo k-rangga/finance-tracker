@@ -9,19 +9,21 @@ import { fetchQuotes } from '../../lib/backend';
 import { computePortfolio, effectiveTrade, type Trade } from './model';
 import { Portfolio, priceNote } from './Portfolio';
 import { Progress } from './Progress';
-import { HL_COLOR, Journal, needsReview } from './Journal';
+import { HL_COLOR, Journal } from './Journal';
 import { Review } from './Review';
 import { PriceModal } from './PriceModal';
 import { EntryModal } from './EntryModal';
 import { ConnectWallet, usePerps } from './Perps';
-import { allTrades, type Source } from './trades';
+import { allTrades, needsReview, type AnyTrade, type Source } from './trades';
+import { QuickReview } from './QuickReview';
+import { JournalFeed } from './JournalFeed';
 import { Select } from '../../components/Select';
 import { usd } from '../../lib/perps';
 import { C, plInk } from '../../lib/tokens';
 import { storage } from '../../lib/storage';
 
 /** Two accounts that never mix, each with its trades (the journal) and what they say (insights). */
-type View = 'trades' | 'insights';
+type View = 'trades' | 'journal' | 'insights';
 type Status = 'all' | 'open' | 'closed';
 type Period = 'all' | 'year' | '30' | '7';
 const WORLD_KEY = 'moneyTracker.investWorld';
@@ -61,7 +63,8 @@ export function Invest({ cycle }: { cycle: Cycle }) {
   const [status, setStatus] = useState<Status>('all');
   const [period, setPeriod] = useState<Period>('all');
   const [q, setQ] = useState('');
-  const [toReview, setToReview] = useState(false);
+  /** The quick review's queue, fixed when it opens so reviewed trades don't shift it. */
+  const [reviewing, setReviewing] = useState<AnyTrade[] | null>(null);
   const { dS } = useInvestFmt();
   const [jOpen, setJOpen] = useState<string | null>(null);
   const [pxOpen, setPxOpen] = useState(false);
@@ -123,7 +126,6 @@ export function Invest({ cycle }: { cycle: Cycle }) {
     setView('trades');
     setStatus('all');
     setQ('');
-    setToReview(false);
     setJOpen('m:' + id);
   }, []);
 
@@ -131,14 +133,13 @@ export function Invest({ cycle }: { cycle: Cycle }) {
   const year = cycle.today.getFullYear();
   const from = period === 'all' ? 0 : period === 'year' ? new Date(year, 0, 1).getTime() : cycle.today.getTime() - Number(period) * 864e5;
   const mine = items.filter(t => t.source === world);
-  const reviewCount = mine.filter(t => needsReview(t) && t.closed!.getTime() >= from).length;
+  const toReview = mine.filter(t => needsReview(t) && t.closed!.getTime() >= from);
   const needle = q.trim().toLowerCase();
   const shown = mine.filter(
     t =>
       (status === 'all' || (status === 'open') === !t.closed) &&
       (!t.closed || t.closed.getTime() >= from) &&
-      (!needle || t.name.toLowerCase().includes(needle) || (t.manual?.nm ?? '').toLowerCase().includes(needle)) &&
-      (!toReview || needsReview(t)),
+      (!needle || t.name.toLowerCase().includes(needle) || (t.manual?.nm ?? '').toLowerCase().includes(needle)),
   );
   const perps = world === 'perp';
   /** Money in this account's own currency: rupiah for stocks (or your display currency), dollars for perps. */
@@ -179,7 +180,6 @@ export function Invest({ cycle }: { cycle: Cycle }) {
               className={world === k ? s.optOn : s.opt}
               onClick={() => {
                 setWorld(k);
-                setToReview(false);
                 setQ('');
               }}
             >
@@ -189,9 +189,9 @@ export function Invest({ cycle }: { cycle: Cycle }) {
           ))}
         </div>
         <div className={s.subTabList} role="tablist" aria-label="View">
-          {(['trades', 'insights'] as const).map(k => (
+          {(['trades', 'journal', 'insights'] as const).map(k => (
             <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? s.subTabActive : s.subTab} onClick={() => setView(k)}>
-              {k === 'trades' ? 'Trades' : 'Insights'}
+              {k === 'trades' ? 'Trades' : k === 'journal' ? 'Journal' : 'Insights'}
             </button>
           ))}
         </div>
@@ -240,8 +240,8 @@ export function Invest({ cycle }: { cycle: Cycle }) {
             </span>
           </div>
 
-          {/* One filter bar: open or closed, when, which name, and what still needs a review. */}
-          <div className={s.invFilters}>
+          {/* One filter bar: open or closed, when, which name, and what still needs a review. The Journal goes by month. */}
+          {view !== 'journal' && <div className={s.invFilters}>
             {view === 'trades' && (
               <Select
                 ariaLabel="Open or closed"
@@ -271,17 +271,19 @@ export function Invest({ cycle }: { cycle: Cycle }) {
                   <Icon d={IC.search} size={15} color={C.textMuted} />
                   <input value={q} onChange={e => setQ(e.target.value)} placeholder={perps ? 'Search BTC, HYPE…' : 'Search BBCA, NVDA…'} aria-label="Search trades" />
                 </label>
-                {reviewCount > 0 && (
-                  <button type="button" className={toReview ? s.optOn : s.opt} aria-pressed={toReview} onClick={() => setToReview(!toReview)}>
+                {toReview.length > 0 && (
+                  <button type="button" className={s.opt} onClick={() => setReviewing(toReview)}>
                     <span className={s.badgeDot} style={{ background: C.amber, display: 'inline-block', marginRight: 7, verticalAlign: 'middle' }} aria-hidden="true" />
-                    {reviewCount} to review
+                    Review {toReview.length}
                   </button>
                 )}
               </>
             )}
-          </div>
+          </div>}
 
-          {view === 'trades' ? (
+          {view === 'journal' ? (
+            <JournalFeed key={world} account={world} items={mine} dS={money} onReview={toReview.length ? () => setReviewing(toReview) : undefined} />
+          ) : view === 'trades' ? (
             <Journal
               today={cycle.today}
               todayISO={todayISO}
@@ -314,6 +316,17 @@ export function Invest({ cycle }: { cycle: Cycle }) {
         </>
       )}
 
+      {reviewing && (
+        <QuickReview
+          queue={reviewing}
+          hl={hl}
+          onSaveManual={(id, ex) => {
+            const t = stored.find(x => x.id === id);
+            if (t) saveTrade({ ...t, ex });
+          }}
+          onClose={() => setReviewing(null)}
+        />
+      )}
       {pxOpen && (
         <PriceModal
           P={P}

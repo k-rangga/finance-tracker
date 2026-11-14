@@ -150,6 +150,20 @@ const ACTIONS = {
     return perpState_();
   },
   setPerpNote: p => setPerpNote_(p),
+  skipPerpNotes: p => skipPerpNotes_(p),
+  getJournalMonths: () => {
+    const out = {};
+    readTable_('journal_months').forEach(r => {
+      if (r.note) out[r.key] = r.note;
+    });
+    return out;
+  },
+  setJournalMonth: p => {
+    if (!String(p.note || '').trim()) deleteRow_('journal_months', 'key', p.key);
+    else upsertRow_('journal_months', 'key', { key: p.key, note: String(p.note).slice(0, 5000), updated_at: new Date().toISOString() });
+    return true;
+  },
+  draftJournalMonth: p => draftJournalMonth_(p),
   removeReceipt: p => removeReceipt_(p),
 
   listLabels: () => listLabels_(),

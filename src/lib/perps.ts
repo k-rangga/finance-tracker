@@ -4,7 +4,7 @@ import { run } from './gas';
 export type Fill = { tid: string; time: number; coin: string; dir: string; px: number; sz: number; fee: number; pnl: number };
 
 /** Your review of a trade, the same fields as a typed-in entry's. `mistakes` is a comma-separated list. */
-export type PerpNote = { setup: string; mistakes: string; rating: number; note: string; followed?: '' | 'Yes' | 'Partly' | 'No' };
+export type PerpNote = { setup: string; mistakes: string; rating: number; note: string; followed?: '' | 'Yes' | 'Partly' | 'No'; skipped?: boolean };
 
 /** A funding payment on an open position: negative when you paid it. */
 export type Funding = { time: number; coin: string; usdc: number };
@@ -26,6 +26,12 @@ export type PerpState = {
 export const getPerps = () => run<PerpState>('getPerps');
 export const syncPerps = () => run<PerpState>('syncPerps');
 export const setPerpNote = (tradeId: string, note: PerpNote | null) => run('setPerpNote', { tradeId, note });
+export const skipPerpNotes = (ids: string[]) => run<number>('skipPerpNotes', { ids });
+
+/** Monthly journal notes, by "account|YYYY-MM". */
+export const getJournalMonths = () => run<Record<string, string>>('getJournalMonths');
+export const setJournalMonth = (key: string, note: string) => run('setJournalMonth', { key, note });
+export const draftJournalMonth = (summary: string) => run<{ text?: string; error?: string; detail?: string }>('draftJournalMonth', { summary });
 
 export const SETUPS = ['Breakout', 'Pullback', 'Range', 'Reversal', 'News', 'Scalp'];
 export const MISTAKES = ['FOMO', 'No stop', 'Moved stop', 'Oversized', 'Revenge', 'Early exit', 'Late entry'];

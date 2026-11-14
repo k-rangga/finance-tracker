@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import s from '../../styles/ui.module.css';
 import { Card } from '../../components/ui';
 import { IC, Icon } from '../../components/Icon';
 import { C } from '../../lib/tokens';
-import { getPerps, mergeFills, setPerpNote, syncPerps, usd, type PerpNote, type PerpState, type PerpTrade } from '../../lib/perps';
-import { ReviewFields, type ReviewDraft } from './ReviewFields';
-import { followedOf, splitTags } from './trades';
+import { getPerps, mergeFills, setPerpNote, skipPerpNotes, syncPerps, usd, type PerpNote, type PerpState, type PerpTrade } from '../../lib/perps';
+import { ReviewFields, SavedLabel, useAutosave } from './ReviewFields';
+import { perpDraft, perpNoteOf } from './trades';
 
 /** Hyperliquid trades for the whole Investment journal: loaded once, synced on open, reviews saved as you write them. */
 export function usePerps() {
@@ -39,7 +39,17 @@ export function usePerps() {
     });
     setPerpNote(id, note).catch(e => setError('Review not saved: ' + (e instanceof Error ? e.message : String(e))));
   };
-  return { state, trades, notes: state?.notes ?? {}, error, syncing, sync, saveNote };
+  /** Mark trades reviewed without writing anything (old ones you won't go through one by one). */
+  const skip = (ids: string[]) => {
+    setState(x => {
+      if (!x) return x;
+      const notes = { ...x.notes };
+      for (const id of ids) notes[id] ??= { setup: '', mistakes: '', rating: 0, note: '', skipped: true };
+      return { ...x, notes };
+    });
+    skipPerpNotes(ids).catch(e => setError("Couldn't mark them reviewed: " + (e instanceof Error ? e.message : String(e))));
+  };
+  return { state, trades, notes: state?.notes ?? {}, error, syncing, sync, saveNote, skip };
 }
 
 export type Perps = ReturnType<typeof usePerps>;
@@ -124,10 +134,7 @@ export function HyperliquidCard({ hl }: { hl: Perps }) {
 
 /** Inside a Hyperliquid trade: its numbers, every fill, and its review. */
 export function PerpDetail({ t, note, onSave }: { t: PerpTrade; note?: PerpNote; onSave: (n: PerpNote | null) => void }) {
-  const initial: ReviewDraft = { followed: followedOf(note) ?? '', rating: note?.rating ?? 0, setup: note?.setup ?? '', mistakes: splitTags(note?.mistakes), note: note?.note ?? '' };
-  const [draft, setDraft] = useState<ReviewDraft>(initial);
-  const [saved, setSaved] = useState(false);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
+  const { draft, change, label } = useAutosave(perpDraft(note), d => onSave(perpNoteOf(d)));
 
   return (
     <div className="fade-in" style={{ padding: '4px 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -162,31 +169,24 @@ export function PerpDetail({ t, note, onSave }: { t: PerpTrade; note?: PerpNote;
         </div>
       </div>
 
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <span className={s.eyebrow}>Review</span>
-        <ReviewFields
-          value={draft}
-          onChange={d => {
-            setDraft(d);
-            setSaved(false);
-          }}
-        />
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button
-            type="button"
-            className={s.btnPrimarySm}
-            disabled={!dirty}
-            onClick={() => {
-              const n: PerpNote = { followed: draft.followed, rating: draft.rating, setup: draft.setup, mistakes: draft.mistakes.join(','), note: draft.note.trim() };
-              onSave(n.followed || n.rating || n.setup || n.mistakes || n.note ? n : null);
-              setSaved(true);
-            }}
-          >
-            Save review
-          </button>
-          {saved && !dirty && <span style={{ fontSize: 13, color: C.accent800 }}>Saved</span>}
-        </div>
+      <ReviewBox label={label}>
+        <ReviewFields value={draft} onChange={change} />
+      </ReviewBox>
+    </div>
+  );
+}
+
+/** The review's frame: a title and the autosave state. */
+export function ReviewBox({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className={s.reviewBox}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className={s.eyebrow} style={{ marginRight: 'auto' }}>
+          Review
+        </span>
+        <SavedLabel label={label} />
       </div>
+      {children}
     </div>
   );
 }

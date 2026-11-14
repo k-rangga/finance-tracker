@@ -51,6 +51,7 @@ type Dev = Record<string, unknown> & {
   perpFunding?: unknown[];
   perpPositions?: unknown[];
   perpEquity?: number;
+  journalMonths?: Record<string, string>;
   rules?: Record<string, string>;
   ruleSubs?: Record<string, string>;
   subs?: Record<string, string>;
@@ -118,6 +119,23 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
     case 'syncPerps':
       await new Promise(r => setTimeout(r, action === 'syncPerps' ? 600 : 0));
       return { address: d.perpAddress ?? '', syncedAt: d.perpAddress ? Date.now() : null, fills: d.perpFills ?? [], funding: d.perpFunding ?? [], positions: d.perpPositions ?? [], equity: d.perpEquity ?? null, notes: d.perpNotes ?? {} };
+    case 'skipPerpNotes': {
+      const notes = (d.perpNotes ??= {});
+      for (const id of q.ids as string[]) notes[id] ??= { setup: '', mistakes: '', rating: 0, note: '', skipped: true };
+      return save();
+    }
+    case 'getJournalMonths':
+      return d.journalMonths ?? {};
+    case 'setJournalMonth': {
+      const m = (d.journalMonths ??= {});
+      if (String(q.note ?? '').trim()) m[q.key as string] = q.note as string;
+      else delete m[q.key as string];
+      return save();
+    }
+    case 'draftJournalMonth':
+      // Stand-in for Gemini: a canned draft from the summary's first lines.
+      await new Promise(r => setTimeout(r, 600));
+      return { text: 'What worked\n- (dev stand-in) Waiting for the setup.\n\nWhat to change\n- Fewer FOMO entries.\n\nOne rule for next month\n- No trade without a stop.' };
     case 'setPerpNote': {
       const notes = (d.perpNotes ??= {});
       if (q.note) notes[q.tradeId as string] = q.note;

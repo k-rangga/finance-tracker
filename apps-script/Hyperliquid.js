@@ -169,7 +169,7 @@ function scheduledPerpSync_() {
 function perpState_() {
   const notes = {};
   readTable_('perp_notes').forEach(r => {
-    notes[r.trade_id] = { setup: r.setup || '', mistakes: r.mistakes || '', rating: r.rating || 0, note: r.note || '', followed: r.followed || '' };
+    notes[r.trade_id] = { setup: r.setup || '', mistakes: r.mistakes || '', rating: r.rating || 0, note: r.note || '', followed: r.followed || '', skipped: r.skipped === '1' };
   });
   const address = perpAddress_();
   let positions = [];
@@ -194,6 +194,12 @@ function perpState_() {
     })),
     notes: notes,
   };
+}
+
+/** Old trades you won't review one by one: marked reviewed with nothing written (those with a review keep it). */
+function skipPerpNotes_(p) {
+  const at = new Date().toISOString();
+  return appendNew_('perp_notes', 'trade_id', (p.ids || []).map(id => ({ trade_id: id, updated_at: at, skipped: '1' })));
 }
 
 function setPerpNote_(p) {
