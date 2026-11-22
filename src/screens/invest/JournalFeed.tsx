@@ -121,7 +121,7 @@ export function JournalFeed({ account, items, dS, onReview }: Props) {
     setDraftErr('');
     try {
       const r = await draftJournalMonth(asText());
-      if (!r.text) setDraftErr(r.error === 'no_key' ? 'Gemini needs its API key first (Script properties → GEMINI_API_KEY).' : "Gemini couldn't write a draft. Try again.");
+      if (!r.text) setDraftErr(r.error === 'no_key' ? 'Maxie needs its Gemini API key first (GEMINI_API_KEY).' : "Maxie couldn't write a draft. Try again.");
       else editNote(note.trim() ? `${note.trim()}\n\n${r.text}` : r.text);
     } catch (e) {
       setDraftErr(e instanceof Error ? e.message : String(e));
@@ -165,7 +165,7 @@ export function JournalFeed({ account, items, dS, onReview }: Props) {
         <label className={s.field} style={{ gap: 6 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ marginRight: 'auto' }}>Your note on the month</span>
-            <span style={{ fontSize: 12, fontWeight: 400, color: noteState === 'error' ? C.redInk : noteState === 'saved' ? C.accent800 : C.textMuted }}>
+            <span style={{ fontSize: 12, fontWeight: 400, color: noteState === 'error' ? C.redInk : noteState === 'saved' ? C.good : C.textMuted }}>
               {noteState === 'saving' ? 'Saving…' : noteState === 'saved' ? 'Saved ✓' : noteState === 'error' ? 'Not saved' : ''}
             </span>
           </span>
@@ -182,7 +182,7 @@ export function JournalFeed({ account, items, dS, onReview }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <button type="button" className={s.btnOutlineSm} onClick={draft} disabled={drafting || !entries.length}>
             <Icon d={IC.sparkle} size={14} />
-            {drafting ? 'Drafting…' : 'Draft with Gemini'}
+            {drafting ? 'Drafting…' : 'Draft with Maxie'}
           </button>
           {draftErr && <span style={{ fontSize: 13, color: C.redInk }}>{draftErr}</span>}
           {waiting > 0 && onReview && (

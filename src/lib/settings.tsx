@@ -1,6 +1,8 @@
 import { createContext, useContext, useMemo, useRef, type ReactNode } from 'react';
 import { fmtFull, fmtShort, type Currency } from './format';
 import { useData } from './data';
+import { setPaydayRule, type PaydayRule } from './cycle';
+import { useIsPhone } from './media';
 import { applyCategorySettings, DEFAULT_SUBCATEGORIES, setSavingsTarget, type CustomCategory } from '../data/categories';
 import { currentCycleKey, type CyclePlan } from './cyclePlans';
 
@@ -40,11 +42,19 @@ export type Settings = {
   paidBills?: string[];
   /** No-spend challenges: a category with nothing spent for 7 days from `start` (YYYY-MM-DD). */
   challenges?: { category: string; start: string }[];
+  /** Share of income to keep unplanned in a cycle's plan, as a buffer (default 10). */
+  bufferPct?: number;
+  /** Your thumbs up / down on Maxie's answers (newest last, at most 30): sent with each question so Maxie learns what helps. */
+  chatFeedback?: ChatFeedback[];
   /** Plans for particular pay cycles, by the cycle's start (YYYY-MM-DD): see lib/cyclePlans. */
   cyclePlans?: Record<string, CyclePlan>;
+  /** When you're paid: your pay cycle runs from one payday to the day before the next. Default the 25th. */
+  payday?: PaydayRule;
   /** Per credit card (account name, e.g. "CC BCA"): the day its statement closes and the day the bill is due. */
   cards: Record<string, CardDates>;
 };
+
+export type ChatFeedback = { q: string; a: string; good: boolean; at: string };
 
 export type CardDates = { statement: number; due: number };
 
@@ -74,9 +84,12 @@ export const DEFAULT_SETTINGS: Settings = {
 type Ctx = {
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
-  /** Money in the display currency → full / short label. */
+  /** Money in the display currency: `full` always exact (Rp1.250.000). */
   full: (v: number, signed?: boolean) => string;
+  /** Where space is tight in lists: exact on wider screens, compact (Rp1.3M) on phones. */
   short: (v: number, signed?: boolean) => string;
+  /** Always compact (Rp1.3M): charts, tiles and Summary. */
+  compact: (v: number, signed?: boolean) => string;
   /** % of monthly income → money. */
   ofIncome: (pct: number) => number;
 };
@@ -87,9 +100,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const { settings: stored, saveSettings } = useData();
   /** Settings as of the last update, so two updates in one click (a new category, then a merchant rule) both land. */
   const latest = useRef<Settings>(DEFAULT_SETTINGS);
+  // Full amounts wherever there's room; compact ones only on phone-width screens.
+  const phone = useIsPhone();
   const settings = useMemo(() => {
     // `fixedStart` is set when the account had no settings yet (see backend load).
     const merged: Settings = { ...DEFAULT_SETTINGS, ...stored };
+    // First: the cycle (and so which cycle plan is current) follows your payday.
+    setPaydayRule(merged.payday);
     // Before children render, so every screen sees the same category list. This cycle's own plan (made as
     // "next cycle") overrides the regular amounts while it runs.
     const thisCycle = merged.cyclePlans?.[currentCycleKey()]?.limits ?? {};
@@ -106,10 +123,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         saveSettings(latest.current);
       },
       full: (v, s) => fmtFull(v, settings.currency, s),
-      short: (v, s) => fmtShort(v, settings.currency, s),
+      short: (v, s) => (phone ? fmtShort : fmtFull)(v, settings.currency, s),
+      compact: (v, s) => fmtShort(v, settings.currency, s),
       ofIncome: pct => (pct / 100) * settings.income,
     }),
-    [settings, saveSettings],
+    [settings, saveSettings, phone],
   );
   return <SettingsCtx.Provider value={value}>{children}</SettingsCtx.Provider>;
 }

@@ -84,7 +84,7 @@ export function SortQueue({ ids, allTxs, g, onPick, onClose }: Props) {
         </span>
       ) : g.status === 'asking' ? (
         <span className={s.sortWhy} style={{ color: C.textMuted }}>
-          <Icon d={IC.sparkle} size={14} /> Gemini is looking at your patterns…
+          <Icon d={IC.sparkle} size={14} /> Maxie is looking at your patterns…
         </span>
       ) : null}
 
@@ -135,7 +135,7 @@ export function SortQueue({ ids, allTxs, g, onPick, onClose }: Props) {
         <button type="button" className={s.btnGhost} onClick={() => setSkipped([...skipped, t.id])}>
           Skip
         </button>
-        {g.status === 'no_key' && <span style={{ fontSize: 12, color: C.textMuted, marginLeft: 'auto' }}>Gemini guesses need GEMINI_API_KEY in Script properties.</span>}
+        {g.status === 'no_key' && <span style={{ fontSize: 12, color: C.textMuted, marginLeft: 'auto' }}>Maxie guesses need the Gemini API key (GEMINI_API_KEY).</span>}
       </div>
     </Modal>
   );

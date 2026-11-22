@@ -28,7 +28,7 @@ export function useCountUp(target: number, ms = 700): number {
   return value;
 }
 
-const CONFETTI_COLOURS = ['#c35f3d', '#d89a2c', '#2a9d86', '#7b5cc4', '#3b74c4', '#e8c47e', '#5e9a83'];
+const CONFETTI_COLOURS = ['#b5532f', '#a77a20', '#644b8d', '#376ea9', '#c17d47', '#914a74', '#526b19'];
 
 /**
  * A short confetti burst for a win (savings target reached, cycle ending under budget), once per `id`:

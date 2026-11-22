@@ -11,8 +11,8 @@ export type ChatAction =
   | { type: 'recategorize'; txIds: string[]; category: string; sub?: string | null; why?: string }
   | { type: 'move_limit'; from: string; to: string; amount: number; why?: string };
 
-/** A reply also carries the model that wrote it and how long you waited, in seconds. */
-export type ChatMessage = { role: 'user' | 'model'; text: string; actions?: ChatAction[]; model?: string; secs?: number };
+/** A reply also carries the model that wrote it, and your thumbs up or down once you've rated it. */
+export type ChatMessage = { role: 'user' | 'model'; text: string; actions?: ChatAction[]; model?: string; rating?: 'up' | 'down' };
 
 export type ChatAnswer = { reply: string; actions: ChatAction[]; model?: string } | { error: 'no_key' | 'api' | 'blocked'; detail?: string };
 
@@ -61,5 +61,14 @@ export function chatContext({ cycle, budget: b, settings, notes, withNotes }: { 
       amount: r(t.isIncome || t.isTransfer ? t.amount : t.net),
       ...(withNotes && notes[t.id] ? { note: notes[t.id] } : {}),
     })),
+    // Answers you rated: write more like the liked ones, avoid what the disliked ones did.
+    ...(settings.chatFeedback?.length
+      ? {
+          answerFeedback: {
+            liked: settings.chatFeedback.filter(f => f.good).slice(-8).map(f => ({ question: f.q, answer: f.a })),
+            disliked: settings.chatFeedback.filter(f => !f.good).slice(-8).map(f => ({ question: f.q, answer: f.a })),
+          },
+        }
+      : {}),
   };
 }

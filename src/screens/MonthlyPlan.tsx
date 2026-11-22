@@ -13,9 +13,10 @@ import { SAVINGS_TARGET_PCT } from '../data/categories';
 /** "43.6": limits set as an amount are an exact share of income, so show one decimal at most. */
 const pct = (v: number) => String(Math.round(v * 10) / 10);
 
-const SAVE_INK = '#3d9a88';
-const FIXED_INK = '#b4ecdf';
-const VAR_INK = '#6fd9c2';
+// Maxie category slots: Terracotta, Ochre, Heather.
+const SAVE_INK = 'var(--category-1)';
+const FIXED_INK = 'var(--category-4)';
+const VAR_INK = 'var(--category-3)';
 
 /**
  * This cycle against last cycle by the same day (not all of last cycle, which would always look far lower early
@@ -25,7 +26,7 @@ function vsLast(now: number, before: number): { text: string; ink: string } | un
   if (before <= 0) return undefined;
   const d = ((now - before) / before) * 100;
   if (Math.abs(d) < 5) return { text: '≈ same', ink: C.textMuted };
-  if (d < 0) return { text: `▼ ${Math.round(-d)}%`, ink: C.accent800 };
+  if (d < 0) return { text: `▼ ${Math.round(-d)}%`, ink: C.good };
   // Double or more reads better as times: "▲ 2.6×", not "▲ 160%".
   const x = now / before;
   return { text: d < 100 ? `▲ ${Math.round(d)}%` : `▲ ${x < 10 ? Math.round(x * 10) / 10 : Math.round(x)}×`, ink: C.redInk };

@@ -54,7 +54,7 @@ export function usePerps() {
 
 export type Perps = ReturnType<typeof usePerps>;
 
-const pnlInk = (v: number) => (v > 0 ? C.accent800 : v < 0 ? C.redInk : C.textMuted);
+const pnlInk = (v: number) => (v > 0 ? C.good : v < 0 ? C.redInk : C.textMuted);
 export const when = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 export const px = (v: number) => (v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 1 }) : v >= 1 ? v.toFixed(3).replace(/\.?0+$/, '') : v.toPrecision(4));
 const shortAddr = (a: string) => a.slice(0, 6) + '…' + a.slice(-4);

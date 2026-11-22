@@ -1,150 +1,536 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
-import { Badge, Card, CardHead, DismissBill, Dot, DueChip, IconChip } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
-import { cycleKey, hasPlan, nextCycleOf } from '../lib/cyclePlans';
+import { Logo } from '../components/Logo';
 import { Celebrate, useCountUp } from '../components/Delight';
-import { changeBadge, dayAmount, dayTotalLabel, iconChip, type Budget, type TxView } from '../lib/budget';
+import { cycleKey, hasPlan, nextCycleOf } from '../lib/cyclePlans';
+import type { Budget } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { dayLabel, dayMonth, pc, sum, tidyName, toISO } from '../lib/format';
+import { dayLabel, dayMonth, sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
-import { useData } from '../lib/data';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
 import { categoryByName, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY } from '../data/categories';
 import { canDismissBill, type Bill } from '../data/transactions';
 
-type Props = { cycle: Cycle; budget: Budget; onOpenCategory: (name: string) => void };
-
-type Item = {
-  key: string;
-  title: string;
-  sub: string;
-  value: string;
-  ink: string;
-  icon: string;
-  cat?: string;
-  /** Transactions only: grouped under a day header. */
-  date?: Date;
-  /** Transactions only: what it adds to its day's total (see dayAmount). */
-  dayAmount?: number;
-  /** Gross amount, struck through under the net when part of it was paid back or isn't yours. */
-  struck?: string;
-  /** Bills only: when it's due, shown as a chip. */
-  due?: { date: Date; inDays: number };
-  /** Predicted bills only: "not a bill this cycle". */
-  onDismiss?: () => void;
-};
-
-type SummaryProps = Props & {
-  onOpenSettings: () => void;
+type SummaryProps = {
+  cycle: Cycle;
+  budget: Budget;
+  onOpenCategory: (name: string) => void;
   /** Hide a predicted bill for this cycle. */
   onDismissBill: (b: Bill) => void;
   /** Open Transactions on a range, optionally filtered to one category. */
   onShowTransactions: (range: 'today' | 'cycle', cat?: string) => void;
-  /** Ask Gemini this question. */
-  onAsk: (question: string) => void;
   /** Open Plan on the next cycle. */
   onPlanNext: () => void;
 };
 
 /**
- * Wide screens: the cycle and breakdowns on the left, a pinned glance panel on the right.
- * Phones: one column read top to bottom (spend today → today and what's coming → savings → where it went),
- * with the comparisons folded under More.
+ * The cycle at a glance, charts first: what's left as a ring, three tiles, spending by day against the plan,
+ * where the money went, and the bills still coming. Words only where a number needs a label; each chart's
+ * explanation is behind its info button.
  */
-/** Near payday: a nudge to plan the next cycle before it starts (or to look over the plan already made). */
-function PlanNextNudge({ cycle, planned, onOpen }: { cycle: Cycle; planned: boolean; onOpen: () => void }) {
-  return (
-    <section className={s.nudgeCard}>
-      <Icon d={IC.calendar} size={20} color={C.accent800} />
-      <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
-        <span style={{ fontWeight: 600 }}>{planned ? 'Next cycle is planned' : 'Plan your next cycle'}</span>
-        <span style={{ fontSize: 13, color: C.textSoft }}>
-          {planned ? `It starts on payday, ${dayLabel(cycle.next)}. Look it over once more.` : `Payday is ${dayLabel(cycle.next)}. See what's already promised and plan the rest.`}
-        </span>
-      </span>
-      <button type="button" className={s.btnPrimarySm} style={{ flex: 'none' }} onClick={onOpen}>
-        {planned ? 'Review' : 'Plan it'}
-      </button>
-    </section>
-  );
-}
-
-export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismissBill, onShowTransactions, onAsk, onPlanNext }: SummaryProps) {
+export function Summary({ cycle, budget: b, onOpenCategory, onDismissBill, onShowTransactions, onPlanNext }: SummaryProps) {
   const { ofIncome, settings } = useSettings();
-  const phone = useIsPhone();
-  const [more, setMore] = useState(false);
-  const target = ofIncome(SAVINGS_TARGET_PCT);
   const id = toISO(cycle.start);
-  const thisCycle = (
-    <ThisCycle
-      cycle={cycle}
-      budget={budget}
-      onOpenSettings={onOpenSettings}
-      onShowCycle={() => onShowTransactions('cycle')}
-      onMarkSavings={() => onShowTransactions('cycle', TRANSFER_CATEGORY)}
-      onDismissBill={onDismissBill}
-    />
-  );
-  const today = <TodayCard cycle={cycle} budget={budget} compact={phone} onSeeAll={() => onShowTransactions('today')} />;
-  const comingUp = (
-    <ComingUpCard cycle={cycle} budget={budget} onDismissBill={onDismissBill} limit={phone ? 1 : 4} onSeeAll={() => onShowTransactions('today')} />
-  );
+  const target = ofIncome(SAVINGS_TARGET_PCT);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Small wins, once per cycle on this device. */}
-      <Celebrate id={id + '.saved'} when={target > 0 && budget.saved >= target} />
-      <Celebrate id={id + '.under'} when={cycle.daysLeft <= 1 && budget.spent <= budget.budget} />
+    <div className={s.sxSumGrid}>
+      <Celebrate id={id + '.saved'} when={target > 0 && b.saved >= target} />
+      <Celebrate id={id + '.under'} when={cycle.daysLeft <= 1 && b.spent <= b.budget} />
       {cycle.daysLeft <= 4 && <PlanNextNudge cycle={cycle} planned={hasPlan(settings.cyclePlans?.[cycleKey(nextCycleOf(cycle))])} onOpen={onPlanNext} />}
-      {phone ? (
-        <>
-          {thisCycle}
-          <section className={s.summarySide} style={{ alignSelf: 'stretch' }} aria-label="At a glance">
-            {today}
-            {comingUp}
-          </section>
-          <WhereItWent cycle={cycle} budget={budget} onOpenCategory={onOpenCategory} />
-          {budget.cards.length > 0 && <CreditCards budget={budget} />}
-          <section className={s.summarySide} style={{ alignSelf: 'stretch' }}>
-            <button type="button" className={s.rowBtn} aria-expanded={more} onClick={() => setMore(!more)} style={{ padding: '14px 16px', minHeight: 48 }}>
-              <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto' }}>
-                <span style={{ fontSize: 15, fontWeight: 600 }}>More</span>
-                <span style={{ fontSize: 13, color: C.textMuted }}>Compared with last cycle, spending pace</span>
-              </span>
-              <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ transform: more ? 'rotate(180deg)' : 'none' }} />
-            </button>
-            {more && (
-              <div className="fade-in" style={{ borderTop: `1px solid ${C.divider}` }}>
-                <VsLastCycleCard cycle={cycle} budget={budget} />
-              </div>
-            )}
-          </section>
-          {more && <SpendingPace cycle={cycle} budget={budget} onAsk={onAsk} />}
-        </>
-      ) : (
-        <div className={s.summaryGrid}>
-          <div className={s.summaryCycle}>{thisCycle}</div>
-          <aside className={s.summarySide} aria-label="At a glance">
-            {today}
-            {comingUp}
-            <VsLastCycleCard cycle={cycle} budget={budget} />
-          </aside>
-          <div className={s.summaryRest}>
-            {budget.cards.length > 0 && <CreditCards budget={budget} />}
-            <WhereItWent cycle={cycle} budget={budget} onOpenCategory={onOpenCategory} />
-            <SpendingPace cycle={cycle} budget={budget} onAsk={onAsk} />
-          </div>
-        </div>
-      )}
+      <CycleLine cycle={cycle} budget={b} />
+      <Tiles cycle={cycle} budget={b} onSavings={() => onShowTransactions('cycle', TRANSFER_CATEGORY)} />
+      <DailyBars cycle={cycle} budget={b} />
+      <WhereMap budget={b} onOpenCategory={onOpenCategory} />
+      <BillsTimeline cycle={cycle} budget={b} onDismissBill={onDismissBill} />
+      <Recent budget={b} cycle={cycle} onSeeAll={() => onShowTransactions('today')} />
     </div>
   );
 }
 
+// ---- shared bits ----
+
+/** A chart card: a short title, an info icon whose one-line explanation shows on hover (or tap), and the chart. */
+function ChartCard({ title, info, right, children, wide }: { title: string; info: string | string[]; right?: ReactNode; children: ReactNode; wide?: boolean }) {
+  const lines = typeof info === 'string' ? [info] : info;
+  const [open, setOpen] = useState(false);
+  return (
+    <section className={s.sxChartCard} data-wide={wide || undefined} aria-label={title}>
+      <div className={s.sxChartHead}>
+        <h2 className={s.sxChartTitle}>{title}</h2>
+        <span className={s.sxInfo} data-open={open || undefined} onMouseLeave={() => setOpen(false)}>
+          <button type="button" className={s.sxInfoBtn} aria-label={`About ${title}: ${lines.join(' ')}`} onClick={() => setOpen(!open)} onBlur={() => setOpen(false)}>
+            <Icon d={IC.info} size={14} />
+          </button>
+          <span className={s.sxInfoTip} role="tooltip">
+            <strong className={s.sxInfoTipTitle}>{title}</strong>
+            {lines.map(l => (
+              <span key={l}>{l}</span>
+            ))}
+          </span>
+        </span>
+        {right != null && <span className={s.sxChartRight}>{right}</span>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** How the cycle is going: under the pace for today, on it, or past it. */
+function paceTone(spent: number, budget: number, expected: number) {
+  if (budget > 0 && spent > budget) return { bar: C.red, ink: C.redInk };
+  if (expected > 0 && spent > expected * 1.1) return { bar: C.amber, ink: C.amberInk };
+  return { bar: 'var(--category-1)', ink: C.text };
+}
+
+// ---- this cycle: spending so far, and where it's heading ----
+
+const CW = 320;
+const CH = 120;
+
 /**
- * Your usual day lately: the middle (median) of the last 7 full days' variable spending, so one big purchase
- * doesn't make an ordinary week look expensive. None on the cycle's first day.
+ * What's left on top; below it, the running total of what you've spent (solid), a dashed projection to payday at
+ * your pace so far plus the bills still to come, and your plan as a flat line.
  */
+function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
+  const { compact: short, full } = useSettings();
+  const [hover, setHover] = useState<number | null>(null);
+  const left = b.budget - b.spent - b.fixedDue;
+  const shownLeft = useCountUp(Math.abs(left));
+  const tone = paceTone(b.spent, b.budget, b.paceToday);
+  const days = cycle.cycleDays;
+  const today = Math.min(cycle.dayIdx, days - 1);
+  const perDay = new Array<number>(days).fill(0);
+  for (const t of b.txs) if (t.offset >= 0 && t.offset < days && categoryByName(t.cat)) perDay[t.offset] += t.net;
+  const cum: number[] = [];
+  perDay.reduce((acc, v, i) => (cum[i] = acc + v), 0);
+  const end = Math.max(b.projTotal, cum[today]);
+  const top = Math.max(b.budget, end, 1) * 1.08;
+  const x = (i: number) => (days > 1 ? (i / (days - 1)) * CW : 0);
+  const y = (v: number) => CH - (v / top) * CH;
+  const actual = cum.slice(0, today + 1).map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
+  const area = `${actual} L${x(today).toFixed(1)} ${CH} L0 ${CH} Z`;
+  const overPlan = b.budget > 0 && end > b.budget;
+  const projInk = overPlan ? C.redInk : C.textMuted;
+  const shown = hover != null && hover <= today ? hover : null;
+  const pick = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setHover(Math.round(((e.clientX - r.left) / r.width) * (days - 1)));
+  };
+  return (
+    <ChartCard
+      title="This cycle"
+      info={['Solid line: what you\'ve spent so far, bills included.', 'Dashed line: your pace carried on to payday, with bills still to come.', 'Flat line: your plan.']}
+      right={`${cycle.daysLeft + 1} ${cycle.daysLeft === 0 ? 'day' : 'days'} to payday`}
+    >
+      <div className={s.sxLeftHead}>
+        <span className={s.sxLeftBig} style={{ color: left < 0 ? C.redInk : C.text }}>
+          {short(shownLeft)}
+        </span>
+        <span className={s.sxLeftLabel}>{left < 0 ? 'over plan' : 'left'}</span>
+        <span className={s.sxLeftDay}>
+          <strong style={{ color: tone.ink }}>{short(b.safeDay)}</strong> a day
+        </span>
+      </div>
+      <div className={s.sxLine} onPointerMove={pick} onPointerDown={pick} onPointerLeave={() => setHover(null)}>
+        <svg viewBox={`0 0 ${CW} ${CH}`} preserveAspectRatio="none" role="img" aria-label={`Spent ${full(cum[today])} so far; heading for ${full(end)} by payday, plan ${full(b.budget)}`}>
+          <path d={area} fill="var(--category-1)" opacity={0.1} />
+          {b.budget > 0 && <line x1={0} x2={CW} y1={y(b.budget)} y2={y(b.budget)} stroke="var(--line-strong)" strokeWidth={1} vectorEffect="non-scaling-stroke" />}
+          {today < days - 1 && (
+            <line x1={x(today)} y1={y(cum[today])} x2={CW} y2={y(end)} stroke={overPlan ? 'var(--danger)' : 'var(--ink-muted)'} strokeWidth={2} strokeDasharray="5 4" vectorEffect="non-scaling-stroke" />
+          )}
+          <path d={actual} fill="none" stroke="var(--category-1)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          {shown != null && <line x1={x(shown)} x2={x(shown)} y1={0} y2={CH} stroke="var(--line-strong)" strokeWidth={1} vectorEffect="non-scaling-stroke" />}
+        </svg>
+        <span className={s.sxLineDot} style={{ left: `${(x(shown ?? today) / CW) * 100}%`, top: `${(y(cum[shown ?? today]) / CH) * 100}%` }} />
+        {b.budget > 0 && (
+          <span className={s.sxLinePlan} style={{ top: `${(y(b.budget) / CH) * 100}%` }}>
+            Plan {short(b.budget)}
+          </span>
+        )}
+      </div>
+      <div className={s.sxDayAxis} aria-hidden="true">
+        <span>{dayMonth(cycle.start)}</span>
+        <span>Payday {dayMonth(cycle.next)}</span>
+      </div>
+      <div className={s.sxLineFoot}>
+        {shown != null ? (
+          <span>
+            {dayMonth(cycle.dateOf(shown))} <strong style={{ color: C.text }}>{short(cum[shown])}</strong> spent
+          </span>
+        ) : (
+          <span>
+            Heading for <strong style={{ color: projInk }}>{short(end)}</strong> by payday
+          </span>
+        )}
+      </div>
+    </ChartCard>
+  );
+}
+
+/** Three StatTiles (Maxie): a label, one number, and a note that says what it means. */
+function Tiles({ cycle, budget: b, onSavings }: { cycle: Cycle; budget: Budget; onSavings: () => void }) {
+  const { compact: short } = useSettings();
+  const bills = b.bills.filter(x => x.date > cycle.today);
+  const billTotal = sum(bills.map(x => x.amount));
+  const owed = sum(b.cards.map(c => Math.max(0, c.owed)));
+  const savedShare = SAVINGS_TARGET_PCT > 0 ? Math.min(1, b.savedPct / SAVINGS_TARGET_PCT) : 0;
+  return (
+    <div className={s.sxTiles}>
+      <button type="button" className={s.sxTile} onClick={onSavings}>
+        <span className={s.sxTileLabel}>
+          <Icon d={IC.piggy} size={16} /> Saved
+        </span>
+        <span className={s.sxTileValue}>{Math.round(b.savedPct)}%</span>
+        <span className={s.sxTileMeter}>
+          <span style={{ width: savedShare * 100 + '%', background: savedShare >= 1 ? C.good : 'var(--clay)' }} />
+        </span>
+        <span className={s.sxTileNote}>of income, goal {SAVINGS_TARGET_PCT}%</span>
+      </button>
+      <div className={s.sxTile}>
+        <span className={s.sxTileLabel}>
+          <Icon d={IC.calendar} size={16} /> Bills to come
+        </span>
+        <span className={s.sxTileValue}>{short(billTotal)}</span>
+        <span className={s.sxTileNote}>{bills.length === 0 ? 'Nothing left this cycle' : bills.length === 1 ? '1 bill before payday' : `${bills.length} bills before payday`}</span>
+      </div>
+      <div className={s.sxTile}>
+        <span className={s.sxTileLabel}>
+          <Icon d={IC.card} size={16} /> Card bill
+        </span>
+        <span className={s.sxTileValue}>{short(owed)}</span>
+        <span className={s.sxTileNote}>{owed > 0 ? 'Owed on your cards' : 'Nothing owed'}</span>
+      </div>
+    </div>
+  );
+}
+
+function DailyBars({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
+  const { compact: short, full } = useSettings();
+  const phone = useIsPhone();
+  const [hover, setHover] = useState<number | null>(null);
+  const days = cycle.cycleDays;
+  const perDay = new Array<number>(days).fill(0);
+  for (const t of b.txs) if (t.offset >= 0 && t.offset < days && categoryByName(t.cat)?.type === 'variable') perDay[t.offset] += t.net;
+  const plan = b.varBudget / days;
+  const top = Math.max(plan * 1.6, ...perDay, 1);
+  const shown = hover ?? cycle.dayIdx;
+  return (
+    <ChartCard
+      title="By day"
+      wide
+      info="Everyday spending each day, fixed bills left out. The line is the daily share of your everyday plan."
+      right={
+        <span>
+          {dayMonth(cycle.dateOf(shown))} <strong style={{ color: C.text }}>{short(perDay[shown])}</strong>
+        </span>
+      }
+    >
+      <div className={s.sxDayBars} onMouseLeave={() => setHover(null)} role="img" aria-label={`Spending by day; daily plan ${full(plan)}`}>
+        <span className={s.sxPlanLineMark} style={{ bottom: (plan / top) * 100 + '%' }} aria-hidden="true" />
+        {perDay.map((v, i) => {
+          const future = i > cycle.dayIdx;
+          return (
+            <button
+              key={i}
+              type="button"
+              className={s.sxDayBar}
+              data-active={i === shown || undefined}
+              onMouseEnter={() => setHover(i)}
+              onFocus={() => setHover(i)}
+              onClick={() => setHover(i)}
+              aria-label={`${dayMonth(cycle.dateOf(i))}: ${full(v)}`}
+              tabIndex={future ? -1 : 0}
+            >
+              <span
+                className={s.sxDayBarFill}
+                style={{
+                  height: !future && v > 0 ? Math.max(4, (v / top) * 100) + '%' : 3,
+                  background: future || v === 0 ? C.divider : v > plan ? C.amber : 'var(--category-1)',
+                }}
+              />
+            </button>
+          );
+        })}
+      </div>
+      <div className={s.sxDayAxis} aria-hidden="true">
+        <span>{dayMonth(cycle.start)}</span>
+        {!phone && <span>{dayMonth(cycle.dateOf(Math.floor(days / 2)))}</span>}
+        <span>{dayMonth(cycle.end)}</span>
+      </div>
+    </ChartCard>
+  );
+}
+
+// ---- where it went ----
+
+/** A category colour's matching label ink: `var(--category-7)` → `var(--on-category-7)`. */
+const onColor = (color: string) => color.replace('var(--category-', 'var(--on-category-');
+
+type Cell = { name: string; value: number; color: string; on: string; x: number; y: number; w: number; h: number };
+
+/** Squarified treemap layout: rectangles close to square, biggest first. */
+function squarify(items: Omit<Cell, 'x' | 'y' | 'w' | 'h'>[], W: number, H: number): Cell[] {
+  const out: Cell[] = [];
+  const total = sum(items.map(d => d.value));
+  if (!total) return out;
+  let x = 0, y = 0, w = W, h = H;
+  const rest = items.map(d => ({ d, a: (d.value * W * H) / total }));
+  const worst = (row: { a: number }[], side: number) => {
+    const t = sum(row.map(r => r.a));
+    const mx = Math.max(...row.map(r => r.a));
+    const mn = Math.min(...row.map(r => r.a));
+    return Math.max((side * side * mx) / (t * t), (t * t) / (side * side * mn));
+  };
+  while (rest.length) {
+    const side = Math.min(w, h);
+    const row = [rest.shift()!];
+    while (rest.length && worst([...row, rest[0]], side) <= worst(row, side)) row.push(rest.shift()!);
+    const t = sum(row.map(r => r.a));
+    if (w >= h) {
+      const cw = t / h;
+      let yy = y;
+      for (const r of row) {
+        out.push({ ...r.d, x, y: yy, w: cw, h: r.a / cw });
+        yy += r.a / cw;
+      }
+      x += cw;
+      w -= cw;
+    } else {
+      const rh = t / w;
+      let xx = x;
+      for (const r of row) {
+        out.push({ ...r.d, x: xx, y, w: r.a / rh, h: rh });
+        xx += r.a / rh;
+      }
+      y += rh;
+      h -= rh;
+    }
+  }
+  return out;
+}
+
+/** How big a box's label can be: big boxes get a big name and share, small ones a small label or none. */
+function labelSize(w: number, h: number, name: string) {
+  for (const [nameSize, pctSize] of [
+    [20, 26],
+    [15, 18],
+    [12, 13],
+  ] as const) {
+    const fits = name.length * nameSize * 0.58 + 24 <= w && nameSize + pctSize + 26 <= h;
+    if (fits) return { nameSize, pctSize };
+  }
+  return null;
+}
+
+/**
+ * Where it went, as a treemap: boxes sized by spending, split by thin gaps, each with its name and share when it
+ * fits. Small boxes are named in the legend under it. Tap a box to open the category.
+ */
+function WhereMap({ budget: b, onOpenCategory }: { budget: Budget; onOpenCategory: (name: string) => void }) {
+  const { compact: short, full } = useSettings();
+  const phone = useIsPhone();
+  const [box, setBox] = useState<HTMLDivElement | null>(null);
+  const W = useWidth(box);
+  const H = phone ? 240 : 300;
+  const cats = b.cats.filter(c => c.spent > 0).sort((x, y) => y.spent - x.spent);
+  const total = sum(cats.map(c => c.spent));
+  // Eight categories at most, then the rest together as Other, shown last.
+  const main = cats.slice(0, 8);
+  const rest = sum(cats.slice(8).map(c => c.spent));
+  const items = [
+    ...main.map(c => ({ name: c.name, value: c.spent, color: c.color, on: onColor(c.color) })),
+    ...(rest > 0 ? [{ name: 'Other', value: rest, color: 'var(--category-other)', on: 'var(--on-category-other)' }] : []),
+  ];
+  const cells = W ? squarify(items, W, H) : [];
+  const pct = (v: number) => {
+    const x = (v / total) * 100;
+    return (x < 1 ? '<1' : x < 10 ? x.toFixed(1).replace(/\.0$/, '') : Math.round(x)) + '%';
+  };
+  const laid = cells.map(c => {
+    // 2px gap between boxes: each inner edge gives up 1px.
+    const L = Math.round(c.x), T = Math.round(c.y), R = Math.round(c.x + c.w), B = Math.round(c.y + c.h);
+    const x = L + (L > 0 ? 1 : 0), y = T + (T > 0 ? 1 : 0);
+    const w = R - (R < W ? 1 : 0) - x, h = B - (B < H ? 1 : 0) - y;
+    return { ...c, x, y, w, h, label: labelSize(w, h, c.name) };
+  });
+  const unlabelled = laid.filter(c => !c.label);
+  return (
+    <ChartCard title="Where it went" wide info="This cycle's spending by category: the bigger the box, the bigger its share. Tap one to open it." right={total > 0 ? short(total) : undefined}>
+      {total === 0 ? (
+        <span className={s.sxChartEmpty}>Nothing spent yet</span>
+      ) : (
+        <>
+          <div ref={setBox} className={s.sxTreemap} style={{ height: H }} role="img" aria-label={items.map(d => `${d.name} ${full(d.value)} (${pct(d.value)})`).join(', ')}>
+            {laid.map(c => (
+              <button
+                key={c.name}
+                type="button"
+                className={s.sxTmCell}
+                disabled={c.name === 'Other'}
+                onClick={() => onOpenCategory(c.name)}
+                title={`${c.name}: ${full(c.value)}, ${pct(c.value)}`}
+                aria-label={`${c.name}: ${full(c.value)}, ${pct(c.value)}`}
+                style={{ left: c.x, top: c.y, width: Math.max(0, c.w), height: Math.max(0, c.h), background: c.color, color: c.on }}
+              >
+                {c.label && (
+                  <>
+                    <span className={s.sxTmName} style={{ fontSize: c.label.nameSize, lineHeight: 1.2 }}>
+                      {c.name}
+                    </span>
+                    <span className={s.sxTmPct} style={{ fontSize: c.label.pctSize, lineHeight: 1.15 }}>
+                      {pct(c.value)}
+                    </span>
+                  </>
+                )}
+              </button>
+            ))}
+          </div>
+          <div className={s.sxTmFoot}>
+            {unlabelled.map(p => (
+              <button key={p.name} type="button" className={s.sxTmKey} disabled={p.name === 'Other'} onClick={() => onOpenCategory(p.name)} title={full(p.value)}>
+                <span className={s.sxLegendDot} style={{ background: p.color }} />
+                {p.name} {pct(p.value)}
+              </button>
+            ))}
+            <span className={s.sxTmCaption}>Box size is share of spending, tap one to open</span>
+          </div>
+        </>
+      )}
+    </ChartCard>
+  );
+}
+
+/** An element's width, kept current as it resizes. */
+function useWidth(el: HTMLElement | null) {
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setW(Math.round(e.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [el]);
+  return w;
+}
+
+// ---- bills to come ----
+
+function BillsTimeline({ cycle, budget: b, onDismissBill }: { cycle: Cycle; budget: Budget; onDismissBill: (b: Bill) => void }) {
+  const { compact: short, full } = useSettings();
+  const bills = b.bills.filter(x => x.date > cycle.today);
+  const [picked, setPicked] = useState(0);
+  const from = cycle.today.getTime();
+  const to = cycle.end.getTime() + 864e5;
+  const at = (d: Date) => Math.min(97, Math.max(3, ((d.getTime() - from) / (to - from)) * 100));
+  const sel = bills[Math.min(picked, bills.length - 1)];
+  return (
+    <ChartCard
+      title="Bills to come"
+      wide
+      info="Bills due before payday, on a line from today to payday. Tap a dot for its details."
+      right={bills.length ? short(sum(bills.map(x => x.amount))) : undefined}
+    >
+      {bills.length === 0 ? (
+        <span className={s.sxChartEmpty}>None before payday</span>
+      ) : (
+        <>
+          <div className={s.sxTimeline}>
+            <span className={s.sxTimelineLine} />
+            {bills.map((x, i) => (
+              <button
+                key={x.title + x.date.getTime()}
+                type="button"
+                className={s.sxTimelineDot}
+                data-active={x === sel || undefined}
+                style={{ left: at(x.date) + '%', background: categoryByName(x.category)?.color ?? C.textSoft }}
+                onClick={() => setPicked(i)}
+                aria-label={`${tidyName(x.title)}, ${full(x.amount)}, ${dayMonth(x.date)}`}
+              />
+            ))}
+          </div>
+          <div className={s.sxDayAxis} aria-hidden="true">
+            <span>Today</span>
+            <span>{dayMonth(cycle.next)}</span>
+          </div>
+          {sel && (
+            <div className={s.sxTimelinePick}>
+              <span className={s.sxLegendDot} style={{ background: categoryByName(sel.category)?.color ?? C.textSoft }} />
+              <span style={{ marginRight: 'auto', minWidth: 0 }} className={s.ellipsis}>
+                {tidyName(sel.title)}
+              </span>
+              <span style={{ color: C.textMuted, whiteSpace: 'nowrap' }}>{dayMonth(sel.date)}</span>
+              <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{full(sel.amount)}</span>
+              {canDismissBill(sel) && (
+                <button type="button" className={s.iconBtnSm} aria-label={`Not a bill this cycle: ${tidyName(sel.title)}`} title="Not a bill this cycle" onClick={() => onDismissBill(sel)}>
+                  <Icon d={IC.close} size={14} />
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </ChartCard>
+  );
+}
+
+// ---- today ----
+
+function Recent({ budget: b, cycle, onSeeAll }: { budget: Budget; cycle: Cycle; onSeeAll: () => void }) {
+  const { full } = useSettings();
+  const all = b.txs.filter(t => t.offset === cycle.dayIdx && !t.isTransfer);
+  const today = all.slice(0, 3);
+  return (
+    <ChartCard
+      title="Today"
+      wide
+      info="Your latest transactions today."
+      right={
+        <button type="button" className={s.textBtnSm} style={{ padding: 0 }} onClick={onSeeAll}>
+          {all.length > 3 ? `+${all.length - 3} more` : 'See all'}
+        </button>
+      }
+    >
+      {today.length === 0 ? (
+        <span className={s.sxChartEmpty}>Nothing yet</span>
+      ) : (
+        today.map(t => (
+          <div key={t.id} className={s.sxRecentRow}>
+            <span className={s.sxLegendDot} style={{ background: categoryByName(t.cat)?.color ?? C.textFaint }} />
+            <span className={s.ellipsis} style={{ marginRight: 'auto', minWidth: 0 }}>
+              {tidyName(t.title)}
+            </span>
+            <span style={{ fontWeight: 600, whiteSpace: 'nowrap', color: t.isIncome ? C.good : C.text }}>
+              {t.isIncome ? '+ ' : '− '}
+              {full(t.isIncome ? t.amount : t.net)}
+            </span>
+          </div>
+        ))
+      )}
+    </ChartCard>
+  );
+}
+
+/** Near payday: plan the next cycle before it starts (or look over the plan already made). */
+/** Maxie speaking up (InsightCard): one serif sentence and one next step. */
+function PlanNextNudge({ cycle, planned, onOpen }: { cycle: Cycle; planned: boolean; onOpen: () => void }) {
+  return (
+    <aside className={s.insightCard} data-wide aria-label="Maxie noticed">
+      <span className={s.insightHead}>
+        <Logo size={28} /> Maxie noticed
+      </span>
+      <p className={s.insightBody}>
+        {planned ? `Next cycle is planned, and payday is ${dayLabel(cycle.next)}. Want to look it over?` : `Payday is ${dayLabel(cycle.next)}. Want to plan the next cycle now?`}
+      </p>
+      <div>
+        <button type="button" className={s.btnPrimarySm} onClick={onOpen}>
+          {planned ? 'Review plan' : 'Plan next cycle'}
+        </button>
+      </div>
+    </aside>
+  );
+}
+
 export function usualDay(cycle: Cycle, b: Budget) {
   const from = Math.max(0, cycle.dayIdx - 7);
   if (cycle.dayIdx <= from) return null;
@@ -166,1069 +552,5 @@ export function cycleStatus(cycle: Cycle, b: Budget, full: (v: number) => string
   if (b.budget - b.spent - b.fixedDue <= 0) return { ink: C.redInk, text: 'Nothing left for spending before payday' };
   if (usual == null) return { ink: C.textMuted, text: 'Stay at or under this each day to finish on budget' };
   if (usual > b.safeDay * 1.05) return { ink: C.amberInk, text: `Your usual day lately is ${short(usual)}, ${short(usual - b.safeDay)} more than this` };
-  return { ink: C.accent800, text: `On track, your usual day lately is ${short(usual)}` };
-}
-
-/** Days in a row, back from today, where variable spending stayed within its even daily share. */
-export function underBudgetStreak(cycle: Cycle, b: Budget) {
-  const perDay = b.varBudget / cycle.cycleDays;
-  const byDay = new Map<number, number>();
-  for (const t of b.txs) if (categoryByName(t.cat)?.type === 'variable') byDay.set(t.offset, (byDay.get(t.offset) ?? 0) + t.net);
-  let days = 0;
-  for (let o = cycle.dayIdx; o >= 0 && (byDay.get(o) ?? 0) <= perDay; o--) days++;
-  return { days, perDay };
-}
-
-/** "Good evening, Rangga" and the streak: the small line above today's number. */
-function Greeting({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
-  const { short, settings } = useSettings();
-  const hour = new Date().getHours();
-  const hello = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const name = settings.name.trim().split(/\s+/)[0];
-  const streak = underBudgetStreak(cycle, b);
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '6px 12px', flexWrap: 'wrap' }}>
-      <span style={{ fontSize: 15, fontWeight: 500, color: C.textSoft }}>
-        {hello}
-        {name ? `, ${name}` : ''}
-      </span>
-      {streak.days >= 2 && (
-        <span className={s.streak} title={`Variable spending at or under ${short(streak.perDay)} a day`}>
-          🔥 {streak.days} days under budget
-        </span>
-      )}
-    </div>
-  );
-}
-
-type Row = {
-  id: string;
-  label: string;
-  value?: string;
-  items: Item[];
-  strong?: boolean;
-  /** Shown above the items when the row opens (e.g. the savings breakdown). */
-  summary?: ReactNode;
-  /** List the items under collapsible category groups instead of straight by day. */
-  byCategory?: boolean;
-  /** A one-line row with nothing to open and no amount (e.g. "No more bills before payday"). */
-  quiet?: boolean;
-  /** "−" or "=" before the label, so the lines read as a sum. */
-  sign?: string;
-  /** Part of the line above (the spending budget's lines). */
-  indent?: boolean;
-  /** Shown even when it's zero. */
-  keep?: boolean;
-  ink?: string;
-};
-
-function ThisCycle({
-  cycle,
-  budget: b,
-  onOpenSettings,
-  onShowCycle,
-  onMarkSavings,
-  onDismissBill,
-}: {
-  cycle: Cycle;
-  budget: Budget;
-  onOpenSettings: () => void;
-  onShowCycle: () => void;
-  onMarkSavings: () => void;
-  onDismissBill: (b: Bill) => void;
-}) {
-  const { full, short, ofIncome, settings } = useSettings();
-  const { notes } = useData();
-  const phone = useIsPhone();
-  /** Phones: short amounts (Rp 4.0M) wherever a full one would wrap. */
-  const fit = phone ? short : full;
-  // Everything starts collapsed; on phones the whole breakdown too.
-  const [open, setOpen] = useState<string | null>(null);
-  const [breakdown, setBreakdown] = useState(false);
-  const budgetPct = Math.round((b.budget / b.income) * 100);
-
-  const txItem = (t: TxView): Item => {
-    const c = categoryByName(t.cat);
-    return {
-      key: t.id,
-      title: tidyName(t.title),
-      sub:
-        `${t.time}, ${t.cat}` +
-        (notes[t.id] ? `, “${notes[t.id]}”` : '') +
-        (t.reimbursed ? `, ${full(t.reimbursed)} reimbursed` : '') +
-        (t.share != null ? `, your share of ${full(t.amount)}` : ''),
-      value: (t.isIncome ? '+ ' : '- ') + full(t.isIncome ? t.amount : t.net),
-      // The section already says it's spending: only incomes get a colour.
-      ink: t.isIncome ? C.accent800 : C.text,
-      icon: c ? c.icon : t.isSavings ? IC.piggy : t.isInvestment ? IC.trend : IC.coins,
-      cat: t.cat,
-      date: t.date,
-      // The Savings list totals what it shows (money moved out), though it isn't spending.
-      dayAmount: t.isInvestment || t.isSavings ? -t.amount : dayAmount(t),
-      struck: !t.isIncome && t.net !== t.amount ? full(t.amount) : undefined,
-    };
-  };
-  const typeOf = (n: string) => categoryByName(n)?.type;
-  const billItems: Item[] = b.bills.map(bill => ({
-    key: `${bill.title}|${bill.amount}|${bill.date.getTime()}`,
-    title: tidyName(bill.title),
-    sub: bill.category,
-    due: { date: bill.date, inDays: cycle.offsetOf(bill.date) - cycle.dayIdx },
-    value: '- ' + full(bill.amount),
-    ink: C.text,
-    icon: IC.calendar,
-    cat: bill.category,
-    onDismiss: canDismissBill(bill) ? () => onDismissBill(bill) : undefined,
-  }));
-  const savings = ofIncome(SAVINGS_TARGET_PCT);
-  const investPlan = ofIncome(settings.investPct);
-  const count = (n: number) => (n ? n + (n === 1 ? ' transaction' : ' transactions') : '');
-  const fixedItems = b.txs.filter(t => typeOf(t.cat) === 'fixed').map(txItem);
-  const varItems = b.txs.filter(t => typeOf(t.cat) === 'variable').map(txItem);
-
-  // Savings and investing are one pocket. Only what you moved there counts ("Transfer (savings)" transactions),
-  // not the plan; investing comes out of it.
-  const aboveInvestPlan = b.invested - investPlan;
-  const leftInSavings = b.saved - b.invested;
-  const savingsSummary = (
-    <div style={{ display: 'flex', flexDirection: 'column', padding: '6px 0 4px' }}>
-      <BreakdownLine
-        label="Moved to savings this cycle"
-        sub={
-          `Plan ${full(savings)} (${SAVINGS_TARGET_PCT}% of income)` +
-          (b.saved >= savings ? ', plan reached' : `, ${full(savings - b.saved)} to go`) +
-          (b.saved ? '' : ', set a transfer\'s category to Transfer (savings) to count it')
-        }
-        value={full(b.saved)}
-      />
-      <BreakdownLine
-        label="Invested this cycle"
-        sub={`Plan ${full(investPlan)} (${settings.investPct}% of income)` + (aboveInvestPlan > 0 ? `, ${full(aboveInvestPlan)} above plan` : '')}
-        value={full(b.invested)}
-        ink={aboveInvestPlan > 0 ? C.amberInk : C.text}
-      />
-      <BreakdownLine
-        label={leftInSavings >= 0 ? 'Left in savings' : 'Invested beyond your savings'}
-        value={full(Math.abs(leftInSavings))}
-        ink={leftInSavings >= 0 ? C.accent800 : C.redInk}
-        strong
-      />
-    </div>
-  );
-
-  const left = Math.max(0, b.budget - b.spent - b.fixedDue);
-  const unplanned = b.income - savings - b.budget;
-  // Where your income goes, as a sum: income − savings target − spending budget = not planned.
-  // The spending budget's own lines (spent, due, left) sit indented under it.
-  const rows: Row[] = [
-    { id: 'inc', label: 'Monthly income', value: full(b.income), items: b.txs.filter(t => t.isIncome && !t.reimbursesId).map(txItem), keep: true },
-    {
-      id: 'save',
-      sign: '−',
-      label: 'Savings target',
-      value: full(savings),
-      items: b.txs.filter(t => t.isSavings || t.isInvestment).map(txItem),
-      summary: savingsSummary,
-      keep: true,
-    },
-    { id: 'budget', sign: '−', label: 'Spending budget', value: full(b.budget), items: [], keep: true },
-    { id: 'fixed', indent: true, label: 'Fixed bills paid', value: full(b.fixedSpent), items: fixedItems },
-    { id: 'var', indent: true, label: 'Variable spending', value: full(b.varSpent), items: varItems, byCategory: true },
-    billItems.length
-      ? { id: 'due', indent: true, label: 'Bills still due', value: full(b.fixedDue), items: billItems }
-      : { id: 'due', indent: true, label: 'No more bills before payday', items: [], quiet: true },
-    { id: 'left', indent: true, label: 'Left after bills', value: full(left), items: [], strong: true },
-    {
-      id: 'unplanned',
-      sign: '=',
-      label: unplanned >= 0 ? 'Not planned' : 'Planned beyond income',
-      value: full(Math.abs(unplanned)),
-      items: [],
-      keep: true,
-      ink: unplanned >= 0 ? C.textSoft : C.redInk,
-    },
-  ].filter((r: Row) => r.quiet || r.strong || r.keep || r.items.length > 0 || r.summary || r.value !== full(0));
-
-  const safeShown = useCountUp(b.safeDay);
-  // Budget and savings both come out of income: together they can't be more than all of it.
-  const plannedPct = budgetPct + SAVINGS_TARGET_PCT;
-  const ending = cycle.daysLeft <= 2;
-  const over = b.spent - b.budget;
-  const status = cycleStatus(cycle, b, full, short);
-  // The budget bar: spent, bills still due, what's left. Over budget, the spent part fills it in red.
-  const scale = Math.max(b.budget, b.spent + b.fixedDue, 1);
-  const usedPct = b.budget ? Math.round((b.spent / b.budget) * 100) : 0;
-  const parts = [
-    { key: 'spent', label: 'Spent', value: b.spent, color: over > 0 ? C.red : C.accent600 },
-    { key: 'due', label: 'Bills due', value: b.fixedDue, color: C.amber },
-    { key: 'left', label: 'Left', value: left, color: 'transparent' },
-  ];
-  const saveTarget = ofIncome(SAVINGS_TARGET_PCT);
-  const savedPct = saveTarget > 0 ? Math.min(100, (b.saved / saveTarget) * 100) : 0;
-
-  return (
-    <Card style={{ gap: phone ? 20 : 24, overflow: 'hidden' }}>
-      <Greeting cycle={cycle} budget={b} />
-      {plannedPct > 100 && (
-        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: '8px 12px', flexWrap: 'wrap', background: C.amberTint, color: C.amberInk, borderRadius: 10, padding: '10px 14px', fontSize: 14 }}>
-          <span style={{ marginRight: 'auto' }}>
-            Budget {budgetPct}% + savings {SAVINGS_TARGET_PCT}% = <strong>{plannedPct}% of income</strong>. Lower a category limit or the savings target so they fit.
-          </span>
-          <button type="button" className={s.btnOutline} onClick={onOpenSettings} style={{ flex: 'none' }}>
-            Adjust
-          </button>
-        </div>
-      )}
-      {ending && <CycleWrapUp cycle={cycle} budget={b} />}
-
-      {/* Target 1: what you can spend a day and still finish on budget. */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <span className={s.statLabel}>Spend at most</span>
-        <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 600, letterSpacing: '-0.02em', fontSize: 36, lineHeight: 1.05, color: b.safeDay > 0 ? C.text : C.redInk }}>{full(safeShown)}</span>
-          <span style={{ fontSize: 16, color: C.textSoft }}>a day</span>
-        </span>
-        <span style={{ fontSize: 14, color: C.textSoft }}>
-          until payday, <span style={{ whiteSpace: 'nowrap' }}>{dayLabel(cycle.next)}</span>,{' '}
-          <span style={{ whiteSpace: 'nowrap' }}>
-            {full(left)} left after bills ÷ {cycle.daysLeft} {cycle.daysLeft === 1 ? 'day' : 'days'}
-          </span>
-        </span>
-        <span style={{ fontSize: 14, fontWeight: 600, color: status.ink }}>{status.text}</span>
-      </div>
-
-      {/* The budget, in three parts that add up to it. */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div
-          className={s.track}
-          style={{ height: 12, display: 'flex', gap: 2, overflow: 'hidden' }}
-          role="img"
-          aria-label={`Budget ${full(b.budget)}: spent ${full(b.spent)}, bills due ${full(b.fixedDue)}, left ${full(left)}`}
-        >
-          {parts
-            .filter(x => x.value > 0 && x.key !== 'left')
-            .map(x => (
-              <span key={x.key} style={{ flex: 'none', width: pc((x.value / scale) * 100), background: x.color }} />
-            ))}
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 16px', fontSize: 13, color: C.textSoft }}>
-          {parts.filter(x => x.key !== 'due' || x.value > 0).map(x => (
-            <span key={x.key} style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-              <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 2, background: x.key === 'left' ? 'transparent' : x.color, border: x.key === 'left' ? `1.5px solid ${C.textFaint}` : undefined }} />
-              {x.label} <strong style={{ color: C.text, fontWeight: 600 }}>{fit(x.value)}</strong>
-            </span>
-          ))}
-          <button type="button" className={s.linkBtn} onClick={onShowCycle} style={{ marginLeft: 'auto', fontSize: 13 }} title="See this cycle's transactions">
-            {usedPct}% of {fit(b.budget)} used <Icon d={IC.arrowRight} size={12} />
-          </button>
-        </div>
-      </div>
-
-      {/* Target 2: what to move to savings this cycle (investing comes out of it). */}
-      <div className={s.saveTarget}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-          <span className={s.statLabel} style={{ marginRight: 'auto' }}>
-            Save this cycle
-          </span>
-          <span style={{ fontSize: 14, color: C.textSoft, whiteSpace: 'nowrap' }}>
-            <strong style={{ color: b.saved >= saveTarget && saveTarget > 0 ? C.accent800 : C.text, fontWeight: 600 }}>{fit(b.saved)}</strong> of {fit(saveTarget)}
-            {b.saved >= saveTarget && saveTarget > 0 ? ' ✓' : ''}
-          </span>
-        </div>
-        <span className={s.track} style={{ display: 'block', height: 6 }}>
-          <span className={s.fill} style={{ width: pc(savedPct), background: C.accent600 }} />
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px 12px', flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
-          <span style={{ marginRight: 'auto' }}>
-            {SAVINGS_TARGET_PCT}% of income, invest {fit(investPlan)} of it ({fit(b.invested)} so far)
-          </span>
-          {b.saved < saveTarget && (
-            <button type="button" className={s.linkBtn} onClick={onMarkSavings} style={{ fontSize: 13 }}>
-              {b.saved > 0 ? 'Mark another transfer' : 'Mark your savings transfer'} <Icon d={IC.arrowRight} size={12} />
-            </button>
-          )}
-        </div>
-      </div>
-      <div className={s.bleed}>
-        {phone && (
-          <button type="button" className={s.rowBtn} aria-expanded={breakdown} onClick={() => setBreakdown(!breakdown)} style={{ padding: '10px var(--pad)', minHeight: 46 }}>
-            <span style={{ fontSize: 15, fontWeight: 500, marginRight: 'auto' }}>Breakdown</span>
-            <span style={{ fontSize: 13, color: C.textMuted }}>Income, savings, bills</span>
-            <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ transform: breakdown ? 'rotate(180deg)' : 'none' }} />
-          </button>
-        )}
-        {(!phone || breakdown) && rows.map(r => {
-          const has = r.items.length > 0 || !!r.summary;
-          const isOpen = open === r.id && has;
-          if (r.quiet)
-            return (
-              <div key={r.id} style={{ padding: r.indent ? '10px var(--pad) 10px calc(var(--pad) + 22px)' : '12px var(--pad)', fontSize: 13, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Icon d={IC.calendar} size={15} />
-                {r.label}
-              </div>
-            );
-          return (
-            <div key={r.id} style={{}}>
-              <button
-                type="button"
-                className={s.rowBtn}
-                disabled={!has}
-                aria-expanded={has ? isOpen : undefined}
-                onClick={() => has && setOpen(isOpen ? null : r.id)}
-                title={has ? (r.items.length ? count(r.items.length) : undefined) : undefined}
-                style={{
-                  padding: r.indent ? '8px var(--pad) 8px calc(var(--pad) + 22px)' : '10px var(--pad)',
-                  fontWeight: r.strong ? 600 : 500,
-                  background: r.strong ? 'color-mix(in srgb, var(--accent-500) 9%, transparent)' : undefined,
-                  minHeight: r.indent ? 40 : 46,
-                  borderTop: r.sign === '=' ? `1px solid ${C.divider}` : undefined,
-                }}
-              >
-                <span style={{ fontSize: r.indent ? 14 : 15, marginRight: 'auto', minWidth: 0, color: r.indent && !r.strong ? C.textSoft : undefined }}>
-                  {r.sign && <span style={{ display: 'inline-block', width: 18, color: C.textMuted }}>{r.sign}</span>}
-                  {r.label}
-                </span>
-                <span style={{ fontSize: r.indent ? 14 : 15, color: r.ink ?? (r.strong ? C.accent800 : C.text), whiteSpace: 'nowrap', flex: 'none' }}>{r.value}</span>
-                <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ opacity: has ? 1 : 0, transform: isOpen ? 'rotate(180deg)' : 'none' }} />
-              </button>
-              {isOpen && (
-                <div className="fade-in" style={{ padding: '0 var(--pad) 8px' }}>
-                  {r.summary}
-                  {r.byCategory ? <ByCategory key={r.id} items={r.items} /> : <ByDay items={r.items} />}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
-
-/** Header shared by the side cards: title with an optional action on the right, one summary line below. */
-function SideHead({ title, sub, action }: { title: string; sub?: ReactNode; action?: ReactNode }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-        <h3 className={s.sideTitle}>{title}</h3>
-        {action}
-      </div>
-      {sub && <span style={{ fontSize: 13, color: C.textMuted }}>{sub}</span>}
-    </div>
-  );
-}
-
-/** One line in a side card: marker, name over a detail line, amount. */
-function SideRow({ mark, title, sub, value, ink = C.text, action }: { mark: ReactNode; title: string; sub: ReactNode; value: string; ink?: string; action?: ReactNode }) {
-  return (
-    <div className={s.sideRow}>
-      <span className={s.sideMark}>{mark}</span>
-      <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
-        <span className={s.ellipsis} style={{ fontSize: 14, fontWeight: 500 }}>
-          {title}
-        </span>
-        <span style={{ fontSize: 13, color: C.textMuted }}>{sub}</span>
-      </span>
-      <span style={{ fontSize: 14, fontWeight: 600, flex: 'none', whiteSpace: 'nowrap', color: ink }}>{value}</span>
-      {action}
-    </div>
-  );
-}
-
-
-/** Today's spending and income, newest first. Moves between your own accounts aren't spending, so they're only counted. */
-function TodayCard({ cycle, budget: b, compact, onSeeAll }: { cycle: Cycle; budget: Budget; compact?: boolean; onSeeAll: () => void }) {
-  const { full } = useSettings();
-  const { notes } = useData();
-  const all = b.txs.filter(t => t.offset === cycle.dayIdx);
-  const today = all.filter(t => !t.isTransfer);
-  const transfers = all.filter(t => t.isTransfer && !t.isInstallment).length;
-  const spent = today.filter(t => !t.isIncome).reduce((a, t) => a + t.net, 0);
-  // Phones, nothing yet: one line instead of a card.
-  if (compact && today.length === 0)
-    return (
-      <section className={s.sideCard} style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-        <h3 className={s.sideTitle}>Today</h3>
-        <span style={{ fontSize: 14, color: C.textMuted }}>Nothing spent yet 🌿</span>
-      </section>
-    );
-  return (
-    <section className={s.sideCard}>
-      <SideHead
-        title="Today"
-        sub={today.length ? `${full(spent)} spent` : undefined}
-        action={
-          all.length > 0 && (
-            <button type="button" className={s.textBtnSm} onClick={onSeeAll}>
-              See all
-            </button>
-          )
-        }
-      />
-      {today.length === 0 && <span style={{ fontSize: 14, color: C.textMuted }}>No spending yet today — nice! 🌿</span>}
-      {today.length > 0 && (
-        <div className={s.sideList}>
-          {today.slice(0, 5).map(t => (
-            <button key={t.id} type="button" className={s.recapRow} onClick={onSeeAll} title="See today's transactions">
-              <SideRow
-                mark={<Dot color={categoryByName(t.cat)?.color ?? C.accent500} />}
-                title={tidyName(t.title)}
-                sub={`${t.cat}, ${t.time}` + (notes[t.id] ? `, “${notes[t.id]}”` : '')}
-                value={t.isIncome ? '+ ' + full(t.amount) : full(t.net)}
-                ink={t.isIncome ? C.accent800 : C.text}
-              />
-            </button>
-          ))}
-        </div>
-      )}
-      {(today.length > 5 || transfers > 0) && (
-        <span style={{ fontSize: 13, color: C.textMuted }}>
-          {[today.length > 5 && `+${today.length - 5} more`, transfers > 0 && `${transfers} ${transfers === 1 ? 'transfer' : 'transfers'} between your accounts`].filter(Boolean).join(', ')}
-        </span>
-      )}
-    </section>
-  );
-}
-
-/** Fixed bills expected before payday, soonest first. */
-function ComingUpCard({
-  cycle,
-  budget: b,
-  onDismissBill,
-  limit,
-  onSeeAll,
-}: {
-  cycle: Cycle;
-  budget: Budget;
-  onDismissBill: (b: Bill) => void;
-  /** How many to list (phones: just the next one); the rest are on Transactions. */
-  limit: number;
-  onSeeAll: () => void;
-}) {
-  const { full } = useSettings();
-  const bills = [...b.bills].sort((x, y) => x.date.getTime() - y.date.getTime());
-  return (
-    <section className={s.sideCard}>
-      <SideHead title="Coming up" sub={bills.length ? `${full(b.fixedDue)} in bills before payday` : undefined} />
-      {bills.length === 0 && <span style={{ fontSize: 14, color: C.textMuted }}>No more bills before payday.</span>}
-      {bills.length > 0 && (
-        <div className={s.sideList}>
-          {bills.slice(0, limit).map(bill => {
-            const inDays = cycle.offsetOf(bill.date) - cycle.dayIdx;
-            return (
-              <SideRow
-                key={`${bill.title}|${bill.amount}|${bill.date.getTime()}`}
-                mark={<Icon d={IC.calendar} size={15} color={C.textMuted} />}
-                title={tidyName(bill.title)}
-                sub={<DueChip date={bill.date} inDays={inDays} />}
-                value={full(bill.amount)}
-                action={canDismissBill(bill) ? <DismissBill title={tidyName(bill.title)} onClick={() => onDismissBill(bill)} /> : undefined}
-              />
-            );
-          })}
-        </div>
-      )}
-      {bills.length > limit && (
-        <button type="button" className={s.textBtnSm} onClick={onSeeAll} style={{ alignSelf: 'flex-start' }}>
-          +{bills.length - limit} more on Transactions →
-        </button>
-      )}
-    </section>
-  );
-}
-
-/** Variable spending so far against last cycle's by the same day. */
-function VsLastCycleCard({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
-  const { full } = useSettings();
-  const vari = b.cats.filter(c => c.type === 'variable');
-  const cur = sum(vari.map(c => c.spent));
-  const last = sum(vari.map(c => c.lastSameDays));
-  const ch = changeBadge(cur, last);
-  return (
-    <section className={s.sideCard}>
-      <SideHead title="Compared with last cycle" sub={`Variable spending by day ${cycle.dayN}`} />
-      {last <= 0 ? (
-        <span style={{ fontSize: 14, color: C.textMuted }}>No spending from last cycle to compare yet.</span>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto' }}>
-            <span style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.01em' }}>{full(cur)}</span>
-            <span style={{ fontSize: 13, color: C.textMuted }}>Last cycle {full(last)}</span>
-          </span>
-          <Badge ink={ch.ink}>
-            {ch.label}
-          </Badge>
-        </div>
-      )}
-    </section>
-  );
-}
-
-/** Last days of the cycle: how it's ending, instead of how it's pacing. */
-function CycleWrapUp({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
-  const { full } = useSettings();
-  const when = cycle.daysLeft === 0 ? 'today' : cycle.daysLeft === 1 ? 'tomorrow' : `in ${cycle.daysLeft} days`;
-  const over = b.cats.filter(c => c.spent > c.limit).sort((x, y) => y.spent - y.limit - (x.spent - x.limit))[0];
-  const usedPct = Math.round((b.spent / b.budget) * 100);
-  const onTarget = b.savedPct >= SAVINGS_TARGET_PCT;
-  return (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: C.accentSoft, borderRadius: 10, padding: '14px 16px' }}>
-      <IconChip d={IC.calendar} bg={C.accentTint} ink={C.accent800} size={34} iconSize={16} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-        <span style={{ fontSize: 15, fontWeight: 600 }}>
-          Cycle closes {when}, payday {dayLabel(cycle.next)}
-        </span>
-        <span style={{ fontSize: 13, color: C.textSoft, lineHeight: 1.5 }}>
-          Spent {usedPct}% of your budget, saved {b.savedPct.toFixed(1)}% ({full(b.saved)}) vs your {SAVINGS_TARGET_PCT}% target{onTarget ? ' ✓' : ''},{' '}
-          {over ? (
-            <>
-              biggest overspend: <strong style={{ color: C.redInk, whiteSpace: 'nowrap' }}>{over.name} +{full(over.spent - over.limit)}</strong>
-            </>
-          ) : (
-            'every category within its limit'
-          )}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function BreakdownLine({ label, sub, value, ink = C.text, strong }: { label: string; sub?: string; value: string; ink?: string; strong?: boolean }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: `1px solid ${C.divider}` }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
-        <span style={{ fontSize: 14, fontWeight: strong ? 700 : 600 }}>{label}</span>
-        {sub && <span style={{ fontSize: 13, color: C.textMuted }}>{sub}</span>}
-      </div>
-      <span style={{ fontSize: 14, fontWeight: strong ? 700 : 600, color: ink, whiteSpace: 'nowrap' }}>{value}</span>
-    </div>
-  );
-}
-
-/** Items under day headers with each day's total. */
-function ByDay({ items }: { items: Item[] }) {
-  const { full } = useSettings();
-  return (
-    <>
-      {groupByDay(items).map(g => (
-        <div key={g.label || 'items'}>
-          {g.label && (
-            <h3 style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: C.textMuted, padding: '14px 0 6px' }}>
-              <span>{g.label}</span>
-              <span style={{ letterSpacing: 0, textTransform: 'none' }}>{dayTotalLabel(sum(g.items.map(i => i.dayAmount ?? 0)), full)}</span>
-            </h3>
-          )}
-          {g.items.map(i => (
-            <CycleItem key={i.key} i={i} />
-          ))}
-        </div>
-      ))}
-    </>
-  );
-}
-
-/** One collapsible group per category (largest first), each listing its items by day. All start collapsed. */
-function ByCategory({ items }: { items: Item[] }) {
-  const { full } = useSettings();
-  const [open, setOpen] = useState<Set<string>>(new Set());
-  const groups = useMemo(() => {
-    const m = new Map<string, Item[]>();
-    for (const i of items) m.set(i.cat ?? '', [...(m.get(i.cat ?? '') ?? []), i]);
-    return [...m].map(([cat, list]) => ({ cat, list, total: -sum(list.map(i => i.dayAmount ?? 0)) })).sort((x, y) => y.total - x.total);
-  }, [items]);
-  const toggle = (cat: string) =>
-    setOpen(o => {
-      const n = new Set(o);
-      if (n.has(cat)) n.delete(cat);
-      else n.add(cat);
-      return n;
-    });
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {groups.map(g => {
-        const c = categoryByName(g.cat);
-        const ic = iconChip(g.cat);
-        const isOpen = open.has(g.cat);
-        return (
-          <div key={g.cat} style={{ borderTop: `1px solid ${C.divider}` }}>
-            <button
-              type="button"
-              className={s.rowBtn}
-              aria-expanded={isOpen}
-              onClick={() => toggle(g.cat)}
-              style={{ padding: '12px 0', gap: 12, background: 'transparent' }}
-            >
-              <IconChip d={c?.icon ?? IC.coins} bg={ic.bg} ink={ic.ink} size={34} iconSize={16} />
-              <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0, textAlign: 'left' }}>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>{g.cat}</span>
-                <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>
-                  {g.list.length} {g.list.length === 1 ? 'transaction' : 'transactions'}
-                </span>
-              </span>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>{full(g.total)}</span>
-              <Icon d={IC.chevDown} size={15} color={C.textMuted} style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }} />
-            </button>
-            {isOpen && (
-              <div className="fade-in" style={{ paddingLeft: 46, paddingBottom: 6 }}>
-                {/* The group already says the category. */}
-                <ByDay items={g.list.map(i => ({ ...i, sub: i.sub.replace(`, ${g.cat}`, '') }))} />
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Consecutive items on the same day share a header (items are already newest first); undated items get none. */
-function groupByDay(items: Item[]) {
-  const groups: { label: string; items: Item[] }[] = [];
-  for (const i of items) {
-    const label = i.date ? dayMonth(i.date) : '';
-    const last = groups[groups.length - 1];
-    if (last && last.label === label) last.items.push(i);
-    else groups.push({ label, items: [i] });
-  }
-  return groups;
-}
-
-function CycleItem({ i }: { i: Item }) {
-  const ic = iconChip(i.cat);
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderTop: `1px solid ${C.divider}` }}>
-      <IconChip d={i.icon} bg={ic.bg} ink={ic.ink} size={34} iconSize={16} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{i.title}</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
-          {i.due && <DueChip date={i.due.date} inDays={i.due.inDays} />}
-          {i.sub}
-        </span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flex: 'none' }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: i.ink, whiteSpace: 'nowrap' }}>{i.value}</span>
-        {i.struck && <span style={{ fontSize: 13, color: C.textMuted, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>{i.struck}</span>}
-      </div>
-      {i.onDismiss && <DismissBill title={i.title} onClick={i.onDismiss} />}
-    </div>
-  );
-}
-
-function CreditCards({ budget: b }: { budget: Budget }) {
-  const { full } = useSettings();
-  return (
-    <Card>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <h2 className={s.h2}>Credit cards</h2>
-        <span className={s.caption}>Card purchases count as spending when you buy. Bill payments are transfers.</span>
-      </div>
-      <div className={s.bleed}>
-        {b.cards.map(c => (
-          <div key={c.account} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px var(--pad)', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: '1 1 260px', minWidth: 0 }}>
-              <IconChip d={IC.card} bg={C.accentTint} ink={C.accent800} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
-                <span style={{ fontSize: 15, fontWeight: 600 }}>{c.account.replace(/^CC /, '')} card</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
-                  <span>Spent this cycle {full(c.spent)}</span>
-                  <span>Last bill {full(c.lastBill)}</span>
-                  <span>
-                    Paid {full(c.paid)}
-                    {c.paidOn ? ' on ' + dayMonth(c.paidOn) : ''}
-                  </span>
-                  <Badge ink={c.paidInFull ? C.accent800 : C.amberInk} style={{ fontSize: 13, fontWeight: 600, padding: '4px 10px' }}>
-                    {c.paidInFull ? 'Paid in full' : full(c.carriedOver) + ' carried over'}
-                  </Badge>
-                </span>
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, marginLeft: 'auto', flex: 'none' }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>{full(c.owed)}</span>
-              <span style={{ fontSize: 13, color: C.textMuted }}>owed</span>
-            </div>
-          </div>
-        ))}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px var(--pad)', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginRight: 'auto', minWidth: 0 }}>
-            <span style={{ fontSize: 15, fontWeight: 600 }}>Cash out this cycle</span>
-            <span style={{ fontSize: 13, color: C.textMuted }}>
-              {full(b.nonCardSpent)} bank &amp; e-wallet spending + {full(b.cardBillsPaid)} card bills paid
-            </span>
-          </div>
-          <span style={{ fontSize: 15, fontWeight: 600 }}>{full(b.cashOut)}</span>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-/**
- * Treemap colours: one muted family per group (warm earth for variable spending, greens for fixed bills),
- * biggest tile first, so the map reads as two families instead of a rainbow.
- */
-const TREEMAP_FAMILIES: Record<string, string[]> = {
-  Variable: ['#c35f3d', '#d89a2c', '#b5431f', '#e8c47e', '#d98a68', '#a8721c', '#e0a87e', '#9c5a3c'],
-  'Fixed bills': ['#1f5e4a', '#5e9a83', '#3f7f67', '#9cbfb0', '#2d6e58', '#7fae9b'],
-};
-
-/** White or dark text, whichever reads better on `hex`. */
-function onColor(hex: string) {
-  const n = parseInt(hex.slice(1), 16);
-  const lin = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-  const L = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-  return L > 0.22 ? '#16201e' : '#ffffff';
-}
-
-/** Phones: categories under this share of spending go into one "Other" tile. */
-const OTHER_SHARE = 0.05;
-const OTHER_COLOR = '#8b8f8a';
-
-type Rect = { x: number; y: number; w: number; h: number };
-
-/** Squarified treemap: tiles for `values` (largest first) in `r`, kept as close to square as the space allows. */
-function squarify(values: number[], r: Rect): Rect[] {
-  const total = sum(values);
-  if (!total) return [];
-  const areas = values.map(v => (v / total) * r.w * r.h);
-  const out: Rect[] = [];
-  let rest = { ...r };
-  let row: number[] = [];
-  // Worst aspect ratio of a row laid along a side of this length.
-  const worst = (xs: number[], side: number) => {
-    const s = sum(xs);
-    return Math.max((side * side * Math.max(...xs)) / (s * s), (s * s) / (side * side * Math.min(...xs)));
-  };
-  const place = (xs: number[]) => {
-    const s = sum(xs);
-    if (rest.w >= rest.h) {
-      // A column on the left.
-      const w = s / rest.h;
-      let y = rest.y;
-      for (const a of xs) out.push({ x: rest.x, y, w, h: a / w }), (y += a / w);
-      rest = { x: rest.x + w, y: rest.y, w: rest.w - w, h: rest.h };
-    } else {
-      // A row along the top.
-      const h = s / rest.w;
-      let x = rest.x;
-      for (const a of xs) out.push({ x, y: rest.y, w: a / h, h }), (x += a / h);
-      rest = { x: rest.x, y: rest.y + h, w: rest.w, h: rest.h - h };
-    }
-  };
-  for (let i = 0; i < areas.length; ) {
-    const side = Math.min(rest.w, rest.h);
-    if (!row.length || worst([...row, areas[i]], side) <= worst(row, side)) row.push(areas[i++]);
-    else {
-      place(row);
-      row = [];
-    }
-  }
-  if (row.length) place(row);
-  return out;
-}
-
-function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
-  const { full, short } = useSettings();
-  const phone = useIsPhone();
-  const box = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(600);
-  useEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  // Phones: a shorter box, with the small categories merged into one "Other" tile so every tile can be read.
-  const height = phone ? 230 : 340;
-  /** Hovered tile and where the pointer is, for the details tooltip. */
-  const [hover, setHover] = useState<{ name: string; x: number; y: number } | null>(null);
-
-  // Totals per type, for the legend.
-  const groups = useMemo(() => {
-    const spent = b.cats.filter(c => c.spent > 0);
-    return (
-      [
-        ['Variable', spent.filter(c => c.type === 'variable')],
-        ['Fixed bills', spent.filter(c => c.type === 'fixed')],
-      ] as const
-    )
-      .map(([name, cats]) => ({ name, total: sum(cats.map(c => c.spent)) }))
-      .filter(g => g.total > 0)
-      .sort((x, y) => y.total - x.total);
-  }, [b.cats]);
-  // Tiles strictly by size: biggest top-left down to smallest bottom-right, whatever the type.
-  // Colour still tells the type: warm shades for variable spending, greens for fixed bills, darkest first.
-  const tiles = useMemo(() => {
-    const all = b.cats.filter(c => c.spent > 0).sort((x, y) => y.spent - x.spent);
-    const small = phone ? all.filter(c => c.spent / b.spent < OTHER_SHARE) : [];
-    // Only worth merging when there's more than one.
-    const cats = small.length > 1 ? all.filter(c => !small.includes(c)) : all;
-    const other = small.length > 1 ? sum(small.map(c => c.spent)) : 0;
-    const rects = squarify(
-      [...cats.map(c => c.spent), ...(other ? [other] : [])],
-      { x: 0, y: 0, w: width, h: height },
-    );
-    const seen = { variable: 0, fixed: 0 };
-    const list = cats.map((c, i) => {
-      const family = TREEMAP_FAMILIES[c.type === 'fixed' ? 'Fixed bills' : 'Variable'];
-      const color = family[seen[c.type]++ % family.length];
-      return { name: c.name, spent: c.spent, r: rects[i], color, others: undefined as string[] | undefined };
-    });
-    if (other) list.push({ name: 'Other', spent: other, r: rects[cats.length], color: OTHER_COLOR, others: small.map(c => c.name) });
-    return list;
-  }, [b.cats, b.spent, phone, width, height]);
-  // Over or near their limit, worst first, at most three.
-  const attention = b.cats
-    .filter(c => c.status.key !== 'ok')
-    .sort((x, y) => x.status.rank - y.status.rank || y.used - x.used)
-    .slice(0, 3);
-  const hovered = hover ? b.cats.find(c => c.name === hover.name) : undefined;
-
-  return (
-    <Card>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '4px 16px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <h2 className={s.h2}>Where it went</h2>
-          <span className={s.caption}>
-            Spent {full(b.spent)}, day {cycle.dayN} of {cycle.cycleDays}
-          </span>
-        </div>
-      </div>
-      <div ref={box} data-own-gestures className={s.treemap} style={{ height: tiles.length ? height : 120 }} onMouseLeave={() => setHover(null)}>
-        {!tiles.length && <span style={{ margin: 'auto', fontSize: 14, color: C.textMuted }}>Nothing spent yet this cycle.</span>}
-        {tiles.map(({ name, spent, r, color, others }) => {
-          if (!r) return null;
-          const pct = (spent / b.spent) * 100;
-          const ink = onColor(color);
-          // Label size follows the tile: big tiles read from across the room, small ones keep what fits.
-          const side = Math.min(r.w, r.h);
-          const big = r.w >= 220 && r.h >= 120;
-          const fits = r.w >= 70 && r.h >= 40;
-          const tiny = !fits && side >= 24 && r.w >= 44;
-          return (
-            <button
-              key={name}
-              type="button"
-              className={s.tile}
-              onClick={() => onOpenCategory(others ? '' : name)}
-              onMouseMove={e => {
-                if (others) return;
-                const box2 = box.current!.getBoundingClientRect();
-                setHover({ name, x: e.clientX - box2.left, y: e.clientY - box2.top });
-              }}
-              title={others?.join(', ')}
-              aria-label={`${others ? 'Other (' + others.join(', ') + ')' : name}: ${full(spent)}, ${pct.toFixed(1)}% of spending. Open in Categories`}
-              style={{
-                left: r.x,
-                top: r.y,
-                width: r.w,
-                height: r.h,
-                background: color,
-                color: ink,
-                opacity: hover && hover.name !== name ? 0.55 : 1,
-                padding: big ? '12px 14px' : '8px 10px',
-              }}
-            >
-              {(fits || tiny) && (
-                <>
-                  <span className={s.tileName} style={{ fontSize: big ? 16 : fits && side >= 70 ? 14 : 12 }}>
-                    {name}
-                  </span>
-                  <span style={{ fontSize: big ? 22 : fits && side >= 70 ? 16 : 12, fontWeight: 600, lineHeight: 1.15, opacity: 0.92 }}>{pct.toFixed(1)}%</span>
-                </>
-              )}
-            </button>
-          );
-        })}
-        {hover && hovered && (
-          <div
-            className={s.tileTip}
-            role="tooltip"
-            style={{ left: Math.min(hover.x + 14, width - 220), top: Math.min(hover.y + 14, height - 96) }}
-          >
-            <strong style={{ fontSize: 14 }}>{hovered.name}</strong>
-            <span>
-              {full(hovered.spent)}, {((hovered.spent / b.spent) * 100).toFixed(1)}% of spending
-            </span>
-            <span style={{ color: C.textMuted }}>
-              {Math.round(hovered.used)}% of its {full(hovered.limit)} limit
-            </span>
-          </div>
-        )}
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px 20px', flexWrap: 'wrap', fontSize: 14, color: C.textSoft }}>
-        <span style={{ display: 'flex', gap: '6px 20px', flexWrap: 'wrap' }}>
-          {groups.map(g => (
-            <span key={g.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Dot color={TREEMAP_FAMILIES[g.name][0]} />
-              {g.name} {Math.round((g.total / b.spent) * 100)}%
-            </span>
-          ))}
-        </span>
-        {!phone && <span style={{ color: C.textMuted }}>Tile size = share of spending, hover for details, click to open</span>}
-      </div>
-      {/* Only what needs a look; the full list lives on Categories. */}
-      <div className={s.bleed} style={{ marginTop: 4 }}>
-        {attention.length === 0 ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px var(--pad)', fontSize: 14, color: C.accent800 }}>
-            ✓ All categories on track
-          </div>
-        ) : (
-          attention.map(c => {
-            const ic = iconChip(c.name);
-            return (
-              <button
-                key={c.name}
-                type="button"
-                className={s.rowBtn}
-                onClick={() => onOpenCategory(c.name)}
-                style={{ padding: '10px var(--pad)', background: c.status.rowBg, minHeight: 48 }}
-              >
-                <IconChip d={c.icon} bg={ic.bg} ink={ic.ink} size={28} iconSize={14} />
-                <span className={s.ellipsis} style={{ fontSize: 14, fontWeight: 600, marginRight: 'auto', minWidth: 0 }}>
-                  {c.name}
-                </span>
-                <span style={{ fontSize: 14, whiteSpace: 'nowrap', color: C.textMuted }}>
-                  <strong style={{ color: C.text, fontWeight: 600 }}>{short(c.spent)}</strong> / {short(c.limit)}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', color: c.status.ink, minWidth: 40, textAlign: 'right' }}>{Math.round(c.used)}%</span>
-              </button>
-            );
-          })
-        )}
-        <button type="button" className={s.rowBtn} onClick={() => onOpenCategory('')} style={{ padding: '12px var(--pad)', fontSize: 14, fontWeight: 600, color: C.accent700 }}>
-          See all categories →
-        </button>
-      </div>
-    </Card>
-  );
-}
-
-/**
- * Spending so far, day by day (cumulative), and where it ends if you keep going: variable spending at your
- * daily average plus the bills still due on their dates. One line against the budget.
- */
-function SpendingPace({ cycle, budget: b, onAsk }: { cycle: Cycle; budget: Budget; onAsk: (question: string) => void }) {
-  const { full, short } = useSettings();
-  const box = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(600);
-  const [hover, setHover] = useState<number | null>(null);
-  useEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const days = cycle.cycleDays;
-  const today = cycle.dayIdx;
-  const points = useMemo(() => {
-    const byDay = new Array<number>(days).fill(0);
-    for (const t of b.txs) if (categoryByName(t.cat) && t.offset >= 0 && t.offset <= today) byDay[t.offset] += t.net;
-    for (const bill of b.bills) byDay[Math.min(days - 1, Math.max(today + 1, cycle.offsetOf(bill.date)))] += bill.amount;
-    let run = 0;
-    return byDay.map((v, o) => (run += v + (o > today ? b.velDay : 0)));
-  }, [b, cycle, days, today]);
-
-  const end = points[days - 1];
-  const over = end - b.budget;
-  const height = 170;
-  const pad = { top: 22, bottom: 4 };
-  const max = Math.max(end, b.budget, 1) * 1.06;
-  const x = (o: number) => (days > 1 ? (o / (days - 1)) * width : 0);
-  const y = (v: number) => pad.top + (1 - v / max) * (height - pad.top - pad.bottom);
-  const path = (from: number, to: number) => points.slice(from, to + 1).map((v, i) => `${i ? 'L' : 'M'}${x(from + i).toFixed(1)},${y(v).toFixed(1)}`).join('');
-  const area = `${path(0, today)}L${x(today).toFixed(1)},${height}L0,${height}Z`;
-  const line = over > 0 ? C.redInk : C.accent600;
-  const pick = (clientX: number) => {
-    const r = box.current!.getBoundingClientRect();
-    setHover(Math.max(0, Math.min(days - 1, Math.round(((clientX - r.left) / r.width) * (days - 1)))));
-  };
-  const h = hover ?? today;
-  const billsLeft = sum(b.bills.map(x => x.amount));
-
-  return (
-    <Card style={{ gap: 14 }}>
-      <CardHead title="Spending pace" caption="Day by day, and where this cycle ends at this pace" />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <span className={s.statLabel}>Ends at</span>
-        <span style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em' }}>{full(end)}</span>
-        <span style={{ fontSize: 14, fontWeight: 600, color: over > 0 ? C.redInk : C.accent800 }}>
-          {over > 0 ? `${short(over)} over budget` : `${short(-over)} under budget`}
-          <span style={{ fontWeight: 400, color: C.textMuted }}>, budget {short(b.budget)}</span>
-        </span>
-        <button
-          type="button"
-          className={s.linkBtn}
-          onClick={() =>
-            onAsk(
-              over > 0
-                ? `My spending pace ends at ${full(end)}, ${full(over)} over my ${full(b.budget)} budget. Why, and how do I finish this cycle on budget?`
-                : `My spending pace ends at ${full(end)}, under my ${full(b.budget)} budget. Anything I should watch for the rest of this cycle?`,
-            )
-          }
-          style={{ alignSelf: 'flex-start', marginTop: 4 }}
-        >
-          <Icon d={IC.sparkle} size={14} /> {over > 0 ? 'Why, and how to fix it?' : 'Ask Gemini about it'}
-        </button>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {/* What the pointer is on (today when it isn't on the chart). */}
-        <span style={{ fontSize: 13, color: C.textMuted, minHeight: 18 }} aria-live="polite">
-          <strong style={{ color: C.text, fontWeight: 600 }}>{dayLabel(cycle.dateOf(h))}</strong>
-          {h === today ? ' (today)' : ''}, {full(points[h])} {h > today ? 'at this pace' : 'spent so far'}
-        </span>
-        <div
-          ref={box}
-          data-own-gestures
-          style={{ position: 'relative', height, touchAction: 'pan-y' }}
-          onPointerMove={e => pick(e.clientX)}
-          onPointerDown={e => pick(e.clientX)}
-          onPointerLeave={() => setHover(null)}
-        >
-          <svg
-            width={width}
-            height={height}
-            role="img"
-            aria-label={`Spent ${full(points[today])} by today; at this pace ${full(end)} by ${dayLabel(cycle.dateOf(days - 1))}, against a budget of ${full(b.budget)}.`}
-            style={{ display: 'block', overflow: 'visible' }}
-          >
-            <path d={area} fill={C.accent500} opacity={0.12} />
-            <line x1={0} x2={width} y1={y(b.budget)} y2={y(b.budget)} stroke={C.textMuted} strokeWidth={1.5} strokeDasharray="4 4" />
-            <path d={path(0, today)} fill="none" stroke={C.accent600} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
-            <path d={path(today, days - 1)} fill="none" stroke={line} strokeWidth={2} strokeDasharray="5 5" strokeLinejoin="round" />
-            <line x1={x(h)} x2={x(h)} y1={pad.top - 6} y2={height} stroke={C.textFaint} strokeWidth={1} />
-            <circle cx={x(h)} cy={y(points[h])} r={5} fill={h > today ? line : C.accent600} stroke={C.surface} strokeWidth={2} />
-            <circle cx={x(days - 1)} cy={y(end)} r={4} fill={line} stroke={C.surface} strokeWidth={2} />
-          </svg>
-          <span className={s.paceTag} style={{ top: Math.max(0, y(b.budget) - 22), right: 0 }}>
-            Budget {short(b.budget)}
-          </span>
-        </div>
-        <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.textMuted }}>
-          <span>{dayMonth(cycle.start)}</span>
-          {/* Under today's point, unless it would sit on the start or end date. */}
-          {x(today) > 56 && x(today) < width - 56 && <span style={{ position: 'absolute', left: x(today), transform: 'translateX(-50%)', fontWeight: 600, color: C.text }}>Today</span>}
-          <span>{dayMonth(cycle.dateOf(days - 1))}</span>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 13, color: C.textSoft }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 16, height: 3, borderRadius: 2, background: C.accent600 }} />
-          Spent
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 16, borderTop: `2px dashed ${line}` }} />
-          At this pace: {short(b.velDay)}/day{billsLeft > 0 ? ` + ${short(billsLeft)} bills` : ''}
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 16, borderTop: `1.5px dashed ${C.textMuted}` }} />
-          Budget
-        </span>
-      </div>
-    </Card>
-  );
+  return { ink: C.good, text: `On track, your usual day lately is ${short(usual)}` };
 }

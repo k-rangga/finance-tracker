@@ -21,9 +21,9 @@ export type Status = {
 export function categoryStatus(used: number, c: Pick<Category, 'type' | 'color'>, warnAt: number): Status {
   if (used >= 100.5) return { key: 'over', label: 'Over limit', bg: C.redTint, ink: C.redInk, bar: C.red, rowBg: 'var(--red-row)', rank: 0 };
   if (c.type === 'fixed')
-    return { key: 'ok', label: used >= 99 ? 'Bill paid' : 'On plan', bg: C.accentTint, ink: C.accent800, bar: c.color, rowBg: 'transparent', rank: 2 };
+    return { key: 'ok', label: used >= 99 ? 'Bill paid' : 'On plan', bg: C.goodTint, ink: C.good, bar: c.color, rowBg: 'transparent', rank: 2 };
   if (used >= warnAt) return { key: 'near', label: 'Near limit', bg: C.amberTint, ink: C.amberInk, bar: C.amber, rowBg: 'var(--amber-row)', rank: 1 };
-  return { key: 'ok', label: 'On track', bg: C.accentTint, ink: C.accent800, bar: c.color, rowBg: 'transparent', rank: 2 };
+  return { key: 'ok', label: 'On track', bg: C.goodTint, ink: C.good, bar: c.color, rowBg: 'transparent', rank: 2 };
 }
 
 export type TxView = Transaction & {
@@ -308,7 +308,7 @@ export function changeBadge(cur: number, last: number) {
   const ch = last ? ((cur - last) / last) * 100 : 0;
   const r = Math.round(Math.abs(ch));
   if (r === 0) return { label: '0%', bg: C.divider, ink: C.textMuted };
-  return ch < 0 ? { label: '↓ ' + r + '%', bg: C.accentTint, ink: C.accent800 } : { label: '↑ ' + r + '%', bg: C.redTint, ink: C.redInk };
+  return ch < 0 ? { label: '↓ ' + r + '%', bg: C.goodTint, ink: C.good } : { label: '↑ ' + r + '%', bg: C.redTint, ink: C.redInk };
 }
 
 /** Icon chip colours: a faint wash of the category's colour; transfers, income and the like stay neutral grey. */

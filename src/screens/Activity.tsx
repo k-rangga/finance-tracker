@@ -239,7 +239,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
       rangeLabel={rangeLabel}
       count={inRange.length}
       figures={[
-        ['Income', income, C.accent800],
+        ['Income', income, C.good],
         ['Reimbursed', paidBack, C.text],
         ['Card bills paid', cardBills, C.text],
         ['Saved', saved, C.text],
@@ -726,7 +726,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
   const paidBy = t.paidBackBy.join(', ');
   const shareNote = t.share != null ? `your share of ${full(t.amount)}` : '';
   const amount = t.isIncome
-    ? { text: '+ ' + full(t.amount), ink: t.reimbursesId ? C.textMuted : C.accent800 }
+    ? { text: '+ ' + full(t.amount), ink: t.reimbursesId ? C.textMuted : C.good }
     : t.isInstallment
       ? { text: full(t.amount), ink: C.textMuted, note: `in ${installments[t.id]?.amounts.length ?? '?'} payments` }
       : t.isTransfer
@@ -859,7 +859,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>
         <span style={{ fontSize: 15, fontWeight: 600, color: amount.ink }}>{amount.text}</span>
-        {amount.note && <span style={{ fontSize: 13, fontWeight: 600, color: C.accent800 }}>{amount.note}</span>}
+        {amount.note && <span style={{ fontSize: 13, fontWeight: 600, color: C.good }}>{amount.note}</span>}
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>
           {uploading ? (
             'Uploading…'
@@ -1239,7 +1239,7 @@ function CategoryMenu({
               style={i.group === 'sub' ? { paddingLeft: 48, minHeight: 36 } : undefined}
             >
               {i.group === 'sub' ? null : i.group === 'new' ? (
-                <span className={s.menuIcon} style={{ background: C.accentTint, color: C.accent800 }}>
+                <span className={s.menuIcon} style={{ background: C.accentTint, color: C.clayInk }}>
                   <Icon d={IC.plus} size={14} />
                 </span>
               ) : (

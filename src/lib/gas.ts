@@ -143,6 +143,29 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
     }
     case 'getGuesses':
       return d.guesses ?? {};
+    case 'checkPlan': {
+      // Stand-in for Maxie: trim the categories with the most room until the buffer goal is met.
+      await new Promise(r => setTimeout(r, 700));
+      const p = q as { mode?: string; left: number; bufferGoal: number; categories: { name: string; type: string; next: number; thisCycle: number }[] };
+      if (p.mode === 'build') {
+        const changes = p.categories
+          .filter(c => c.type === 'variable' && c.thisCycle > 0)
+          .map(c => ({ category: c.name, amount: Math.max(50_000, Math.round((c.thisCycle * 0.95) / 50_000) * 50_000), why: '(dev stand-in) A little under what you spent this cycle.' }));
+        return { verdict: "(dev stand-in) I set each everyday category a little under what you spent this cycle. Dining is the one I'd watch.", changes };
+      }
+      let short = p.bufferGoal - p.left;
+      if (short <= 0) return { verdict: '(dev stand-in) Looks good: the buffer is covered.', changes: [] };
+      const changes = [];
+      for (const c of [...p.categories].filter(c => c.type === 'variable').sort((a, b) => b.next - b.thisCycle - (a.next - a.thisCycle))) {
+        if (short <= 0 || changes.length >= 3) break;
+        const cut = Math.min(short, Math.max(0, c.next - c.thisCycle));
+        if (cut < 50_000) continue;
+        const amount = Math.round((c.next - cut) / 50_000) * 50_000;
+        changes.push({ category: c.name, amount, why: '(dev stand-in) Spent less than planned this cycle.' });
+        short -= c.next - amount;
+      }
+      return { verdict: `(dev stand-in) The buffer is ${Math.round(p.bufferGoal - p.left).toLocaleString('id-ID')} short.`, changes };
+    }
     case 'guessCategories': {
       // Stand-in for Gemini: food-sounding names to Take out, the rest to the first category offered.
       await new Promise(r => setTimeout(r, 800));
@@ -249,7 +272,7 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       if (unsorted) actions.push({ type: 'rule', merchant: unsorted.merchant, category: 'Transfer', sub: null, why: 'Looks like an e-wallet top-up, not spending.' });
       if (worst && room && worst !== room && worst.spent > worst.limit)
         actions.push({ type: 'move_limit', from: room.name, to: worst.name, amount: Math.min(worst.spent - worst.limit, room.limit - room.spent), why: `${room.name} has the most room left.` });
-      const n = (v: number) => 'Rp ' + Math.round(v).toLocaleString('id-ID');
+      const n = (v: number) => 'Rp' + Math.round(v).toLocaleString('id-ID');
       return {
         reply: `(Dev stand-in, not Gemini) You've spent **${n(c.spent)}** of **${n(c.budget)}**.\n- ${worst?.name ?? 'Nothing'} is furthest over its limit.\n- To finish on budget, keep to about **${n(c.perDayToFinishOnBudget)}** a day.`,
         actions,

@@ -46,7 +46,7 @@ export function InstallmentsAhead({ payments, cycle }: { payments: Transaction[]
                   </span>
                 </span>
                 {ending.length > 0 && drop > 0 && (
-                  <span style={{ fontSize: 13, color: C.accent800 }}>
+                  <span style={{ fontSize: 13, color: C.good }}>
                     ↓ {full(drop)}: {ending.map(p => tidyName(p.title)).join(', ')} {ending.length === 1 ? 'is' : 'are'} paid off
                   </span>
                 )}

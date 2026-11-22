@@ -2,25 +2,21 @@ export type Currency = 'IDR' | 'USD';
 
 const sign = (v: number, on: boolean) => (on ? (v > 0 ? '+ ' : v < 0 ? '− ' : '') : '');
 
-/** `Rp 30.000.000` / `$6,500`. Pass `signed` to prefix + / −. */
+/** `Rp30.000.000` / `$6,500` (Maxie: no space after Rp, dots for thousands, no decimals). Pass `signed` to prefix + / −. */
 export function fmtFull(v: number, cur: Currency, signed = false): string {
   const a = Math.abs(v);
-  const body = cur === 'USD' ? '$' + Math.round(a).toLocaleString('en-US') : 'Rp ' + Math.round(a).toLocaleString('id-ID');
+  const body = cur === 'USD' ? '$' + Math.round(a).toLocaleString('en-US') : 'Rp' + Math.round(a).toLocaleString('id-ID');
   return sign(v, signed) + body;
 }
 
-/** One decimal with a decimal comma, and no ",0": 1.8 → "1,8", 2.0 → "2". */
-const oneDecimal = (v: number) => (Math.round(v * 10) / 10).toLocaleString('id-ID', { maximumFractionDigits: 1 });
+/** One decimal, English style, and no ".0": 1.84 → "1.8", 2.0 → "2". */
+const oneDecimal = (v: number) => (Math.round(v * 10) / 10).toLocaleString('en-US', { maximumFractionDigits: 1 });
 
-/** Amounts for lists, Indonesian style: `Rp 1,2 miliar`, `Rp 1,8 jt`, `Rp 450K`, `Rp 750`; `$1.2k`, `$450`. */
+/** Compact amounts for lists, charts and tiles, in English units: `Rp1.2B`, `Rp1.8M`, `Rp450K`, `Rp750`; `$1.2K`, `$450`. */
 export function fmtShort(v: number, cur: Currency, signed = false): string {
   const a = Math.abs(v);
-  let body: string;
-  if (cur === 'USD') body = '$' + (a >= 1000 ? (a / 1000).toFixed(1) + 'k' : Math.round(a));
-  else
-    body =
-      'Rp ' +
-      (a >= 1e9 ? oneDecimal(a / 1e9) + ' miliar' : a >= 999_500 ? oneDecimal(a / 1e6) + ' jt' : a >= 1000 ? Math.round(a / 1e3) + 'K' : Math.round(a).toLocaleString('id-ID'));
+  const unit = a >= 999_500_000 ? oneDecimal(a / 1e9) + 'B' : a >= 999_500 ? oneDecimal(a / 1e6) + 'M' : a >= 1000 ? Math.round(a / 1e3) + 'K' : null;
+  const body = cur === 'USD' ? '$' + (unit ?? Math.round(a)) : 'Rp' + (unit ?? Math.round(a).toLocaleString('id-ID'));
   return sign(v, signed) + body;
 }
 

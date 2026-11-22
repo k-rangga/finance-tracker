@@ -22,8 +22,15 @@ export const C = {
   accentHover: 'var(--accent-hover)',
   accentSoft: 'var(--accent-soft)',
   onAccent: 'var(--on-accent)',
-  // Chart greens: fixed hex, readable on light and dark.
-  mint: ['#0b4f45', '#1f7f6d', '#3d9a88', '#7fb8aa', '#2a9d86', '#2fc2a4', '#6fd9c2', '#b4ecdf', '#a6e4d6'],
+  /** Clay-coloured text: links, eyebrows, selected items. */
+  clayInk: 'var(--clay-ink)',
+  // Good news and done states (Maxie's Moss green), apart from the brand clay so neither stands in for the other.
+  good: 'var(--good)',
+  goodTint: 'var(--good-soft)',
+  sky: 'var(--sky)',
+  skyTint: 'var(--sky-soft)',
+  // Chart series: the Maxie category slots in order (own light and dark steps).
+  series: ['var(--category-1)', 'var(--category-2)', 'var(--category-3)', 'var(--category-4)', 'var(--category-5)', 'var(--category-6)', 'var(--category-7)', 'var(--category-8)'],
   red: 'var(--red)',
   redInk: 'var(--red-ink)',
   redTint: 'var(--red-tint)',
@@ -33,4 +40,4 @@ export const C = {
 } as const;
 
 /** Positive/negative ink for P/L and deltas. */
-export const plInk = (v: number) => (v >= 0 ? C.accent800 : C.redInk);
+export const plInk = (v: number) => (v >= 0 ? C.good : C.redInk);

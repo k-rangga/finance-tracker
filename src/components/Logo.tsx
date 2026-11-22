@@ -1,14 +1,32 @@
-import logoUrl from '../assets/logo-cat.jpg';
+/**
+ * Maxie, the husky mark (from the Maxie design system). Two layers: the face stays light in both themes and the
+ * clay cap sits on top, so the husky never looks inverted on dark grounds. At 24px and below it switches to the
+ * simplified small mark (no eye glints or mouth, bolder features).
+ */
+const MARK =
+  'M32 60C26 60 19.5 56.5 15 51L8.6 49.6L12.2 45C9.2 40 8.2 33.5 9.4 26.5L15.6 5.6Q16.4 3.4 18 4.8L26 13.8C28 13.3 30 13 32 13C34 13 36 13.3 38 13.8L46 4.8Q47.6 3.4 48.4 5.6L54.6 26.5C55.8 33.5 54.8 40 51.8 45L55.4 49.6L49 51C44.5 56.5 38 60 32 60Z M17.4 9.6L14.6 21.4Q18.2 17.4 22.6 15.8Z M46.6 9.6L49.4 21.4Q45.8 17.4 41.4 15.8Z M32 17.5L33.4 27C35.6 25.2 38.6 24.2 41.6 24.4C45 24.6 48.4 26.4 49.6 29.4C48.2 30.6 47 32.6 47.4 35C49.5 38.5 50.5 42.5 49 46C46 51.5 39.5 55.6 32 55.6C24.5 55.6 18 51.5 15 46C13.5 42.5 14.5 38.5 16.6 35C17 32.6 15.8 30.6 14.4 29.4C15.6 26.4 19 24.6 22.4 24.4C25.4 24.2 28.4 25.2 30.6 27Z M18.6 31.2Q23.6 27.6 28.6 32.4Q23.2 35.6 18.6 31.2Z M45.4 31.2Q40.4 27.6 35.4 32.4Q40.8 35.6 45.4 31.2Z M24.6 30.2a1 1 0 1 0 0 2a1 1 0 1 0 0-2Z M39.4 30.2a1 1 0 1 0 0 2a1 1 0 1 0 0-2Z M27.8 42.6Q32 41 36.2 42.6Q36 45.8 32 47.6Q28 45.8 27.8 42.6Z M31.3 47.2H32.7V49.6Q34.6 51.4 36.8 50.6L37.3 51.8Q34.4 53 32 51.2Q29.6 53 26.7 51.8L27.2 50.6Q29.4 51.4 31.3 49.6Z';
+const FACE =
+  'M17.4 9.6L14.6 21.4Q18.2 17.4 22.6 15.8Z M46.6 9.6L49.4 21.4Q45.8 17.4 41.4 15.8Z M32 17.5L33.4 27C35.6 25.2 38.6 24.2 41.6 24.4C45 24.6 48.4 26.4 49.6 29.4C48.2 30.6 47 32.6 47.4 35C49.5 38.5 50.5 42.5 49 46C46 51.5 39.5 55.6 32 55.6C24.5 55.6 18 51.5 15 46C13.5 42.5 14.5 38.5 16.6 35C17 32.6 15.8 30.6 14.4 29.4C15.6 26.4 19 24.6 22.4 24.4C25.4 24.2 28.4 25.2 30.6 27Z';
+const MARK_S =
+  'M32 60C26 60 19.5 56.5 15 51L8.6 49.6L12.2 45C9.2 40 8.2 33.5 9.4 26.5L15.6 5.6Q16.4 3.4 18 4.8L26 13.8C28 13.3 30 13 32 13C34 13 36 13.3 38 13.8L46 4.8Q47.6 3.4 48.4 5.6L54.6 26.5C55.8 33.5 54.8 40 51.8 45L55.4 49.6L49 51C44.5 56.5 38 60 32 60Z M17.4 9.6L14.6 21.4Q18.2 17.4 22.6 15.8Z M46.6 9.6L49.4 21.4Q45.8 17.4 41.4 15.8Z M32 16L34.2 27C35.6 25.2 38.6 24.2 41.6 24.4C45 24.6 48.4 26.4 49.6 29.4C48.2 30.6 47 32.6 47.4 35C49.5 38.5 50.5 42.5 49 46C46 51.5 39.5 55.6 32 55.6C24.5 55.6 18 51.5 15 46C13.5 42.5 14.5 38.5 16.6 35C17 32.6 15.8 30.6 14.4 29.4C15.6 26.4 19 24.6 22.4 24.4C25.4 24.2 28.4 25.2 30.6 27Z M17.8 31.4Q23.4 26.8 29 32.2Q23 36.6 17.8 31.4Z M46.2 31.4Q40.6 26.8 35 32.2Q41 36.6 46.2 31.4Z M26.8 42Q32 40.2 37.2 42Q37 46 32 48.4Q27 46 26.8 42Z';
+const FACE_S =
+  'M17.4 9.6L14.6 21.4Q18.2 17.4 22.6 15.8Z M46.6 9.6L49.4 21.4Q45.8 17.4 41.4 15.8Z M32 16L34.2 27C35.6 25.2 38.6 24.2 41.6 24.4C45 24.6 48.4 26.4 49.6 29.4C48.2 30.6 47 32.6 47.4 35C49.5 38.5 50.5 42.5 49 46C46 51.5 39.5 55.6 32 55.6C24.5 55.6 18 51.5 15 46C13.5 42.5 14.5 38.5 16.6 35C17 32.6 15.8 30.6 14.4 29.4C15.6 26.4 19 24.6 22.4 24.4C25.4 24.2 28.4 25.2 30.6 27Z';
 
-/** Circular cat logo, inlined into the single-file build. Replace src/assets/logo-cat.jpg to change it. */
-export function Logo({ size }: { size: number }) {
+/** `tone`: clay (default), ink (one colour), or on-clay (sitting on a clay fill). */
+export function Logo({ size, tone = 'clay', label }: { size: number; tone?: 'clay' | 'ink' | 'on-clay'; label?: string }) {
+  const small = size <= 24;
   return (
-    <img
-      src={logoUrl}
-      alt="Personal Spending Tracker"
+    <svg
       width={size}
       height={size}
-      style={{ flex: 'none', width: size, height: size, borderRadius: '50%', objectFit: 'cover' }}
-    />
+      viewBox="0 0 64 64"
+      style={{ flex: 'none', display: 'block' }}
+      role={label ? 'img' : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+    >
+      <path d={small ? FACE_S : FACE} fill="var(--mark-face)" />
+      <path d={small ? MARK_S : MARK} fillRule="evenodd" fill={tone === 'clay' ? 'var(--clay)' : 'var(--mark-ink)'} />
+    </svg>
   );
 }

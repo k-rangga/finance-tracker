@@ -166,6 +166,8 @@ const ACTIONS = {
     return true;
   },
   draftJournalMonth: p => draftJournalMonth_(p),
+  /** Maxie's check of next cycle's plan (see checkCyclePlan_). */
+  checkPlan: p => checkCyclePlan_(p),
   /** Saved category guesses: { txId: { category, sub, why, confidence } }. */
   getGuesses: () => categoryGuesses_(),
   /** Ask Gemini to guess categories for transactions still to sort (see guessCategories_), save and return them. */

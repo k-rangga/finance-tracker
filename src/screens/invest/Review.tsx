@@ -22,12 +22,12 @@ export function Review({ today, items, from, dS }: { today: Date; items: AnyTrad
   const worst = st.byName[0];
   const best = st.byName[st.byName.length - 1];
   if (worst && worst.pnl < 0) findings.push({ ink: C.redInk, text: `${worst.key} lost ${dS(-worst.pnl)} over ${n(worst.trades)} (${wins(worst)}).` });
-  if (best && best.pnl > 0 && best !== worst) findings.push({ ink: C.accent800, text: `${best.key} made ${dS(best.pnl)} over ${n(best.trades)} (${wins(best)}).` });
+  if (best && best.pnl > 0 && best !== worst) findings.push({ ink: C.good, text: `${best.key} made ${dS(best.pnl)} over ${n(best.trades)} (${wins(best)}).` });
   const costly = st.byMistake[0];
   if (costly && costly.pnl < 0) findings.push({ ink: C.redInk, text: `Trades tagged ${costly.key} cost ${dS(-costly.pnl)} over ${n(costly.trades)}: your most expensive mistake.` });
   if (st.avgFollowed != null && st.avgNotFollowed != null)
     findings.push({
-      ink: st.avgFollowed >= st.avgNotFollowed ? C.accent800 : C.amberInk,
+      ink: st.avgFollowed >= st.avgNotFollowed ? C.good : C.amberInk,
       text: `Following your plan averaged ${dS(st.avgFollowed, true)} a trade; not following it, ${dS(st.avgNotFollowed, true)}.`,
     });
   const costs = st.fees - st.funding;
@@ -51,7 +51,7 @@ export function Review({ today, items, from, dS }: { today: Date; items: AnyTrad
           <Stat
             label="Won per 1 lost"
             value={st.perLost == null ? '—' : st.perLost.toFixed(2)}
-            ink={st.perLost == null ? undefined : st.perLost >= 1 ? C.accent800 : C.redInk}
+            ink={st.perLost == null ? undefined : st.perLost >= 1 ? C.good : C.redInk}
             sub={
               (st.perLost == null ? 'No losses yet' : st.perLost >= 1 ? 'Above 1: making money' : 'Below 1: losing money') +
               (st.followedPct != null ? `, plan followed ${Math.round(st.followedPct)}%` : '') +

@@ -28,7 +28,7 @@ type Status = 'all' | 'open' | 'closed';
 type Period = 'all' | 'year' | '30' | '7';
 const WORLD_KEY = 'moneyTracker.investWorld';
 const WORLDS: [Source, string, string][] = [
-  ['manual', 'Stocks & crypto', '#2fc2a4'],
+  ['manual', 'Stocks & crypto', 'var(--category-1)'],
   ['perp', 'Perps', HL_COLOR],
 ];
 

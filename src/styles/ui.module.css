@@ -149,7 +149,7 @@
   color: var(--text-soft);
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px 12px;
   min-height: 38px;
   display: flex;
@@ -296,17 +296,18 @@
   }
 }
 .h1 {
-  font-weight: 600;
+  font-family: var(--font-serif);
+  font-weight: 450;
   letter-spacing: -0.015em;
-  font-size: clamp(24px, 3vw, 28px);
-  line-height: 1.2;
+  font-size: clamp(28px, 3.4vw, 34px);
+  line-height: 1.15;
 }
 
 /* ---------- Cards & type ---------- */
 .card {
   --pad: 24px;
   background: var(--surface);
-  border-radius: 12px;
+  border-radius: 16px;
   border: 1px solid var(--border);
   padding: var(--pad);
   display: flex;
@@ -342,9 +343,11 @@
 }
 
 .h2 {
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-family: var(--font-serif);
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
 }
 .h2Sm {
   composes: h2;
@@ -395,7 +398,7 @@
   color: var(--accent-800);
   background: var(--accent-tint);
   padding: 7px 12px;
-  border-radius: 8px;
+  border-radius: 10px;
   white-space: nowrap;
 }
 .chip {
@@ -405,7 +408,7 @@
   font-size: 13px;
   color: var(--text-muted);
   padding: 7px 12px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid var(--border-strong);
   background: transparent;
   white-space: nowrap;
@@ -428,7 +431,7 @@ button.chip:hover {
   font-weight: 500;
   padding: 9px 18px;
   min-height: 44px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1.5px solid var(--border-strong);
   color: var(--text);
   background: var(--surface);
@@ -453,7 +456,7 @@ button.chip:hover {
   font-weight: 600;
   padding: 10px 18px;
   min-height: 44px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1.5px solid var(--border-strong);
   background: var(--surface);
   color: var(--text-soft);
@@ -483,7 +486,7 @@ button.chip:hover {
   color: var(--on-accent);
   background: var(--accent-strong);
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 12px 22px;
   min-height: 44px;
   display: inline-flex;
@@ -507,7 +510,7 @@ button.chip:hover {
   color: var(--accent-600);
   background: var(--surface);
   border: 1.5px solid var(--accent-600);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 9px 18px;
   min-height: 44px;
   /* An icon sits centred beside the label, not on its baseline. */
@@ -622,7 +625,7 @@ button.chip:hover {
   color: var(--text);
   background: var(--surface);
   border: 1.5px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 13px 14px;
   width: 100%;
   min-width: 0;
@@ -800,7 +803,7 @@ textarea.input {
   background: var(--surface);
   padding: 3px 26px 3px 10px;
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: 10px;
   min-height: 28px;
   cursor: pointer;
   text-align: left;
@@ -1173,7 +1176,7 @@ textarea.input {
   height: 28px;
   border: none;
   background: none;
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--text-soft);
   font-size: 17px;
   display: grid;
@@ -1340,10 +1343,10 @@ textarea.input {
   flex: none;
   border: none;
   background: none;
-  color: #8fe3cf;
+  color: #e8916f;
   font-weight: 600;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
 }
 .toastBtn:hover {
@@ -1609,7 +1612,7 @@ textarea.input {
   margin: 0 -10px;
   width: calc(100% + 20px);
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text);
   text-align: left;
@@ -2048,7 +2051,7 @@ textarea.input {
   height: 30px;
   margin-right: -6px;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   background: none;
   color: var(--text-muted);
   display: grid;
@@ -2095,9 +2098,7 @@ textarea.input {
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 10px;
-  background: var(--accent-tint);
-  color: var(--accent-800);
+  background: transparent;
 }
 .chatList {
   flex: 1;
@@ -2112,23 +2113,37 @@ textarea.input {
   max-width: 85%;
   padding: 10px 14px;
   border-radius: 16px 16px 4px 16px;
-  background: var(--accent-strong);
-  color: var(--on-accent);
-  font-size: 14px;
+  background: var(--surface-200);
+  color: var(--ink);
+  font-size: 15px;
   white-space: pre-wrap;
 }
-.chatTheirs {
+/* Maxie's answers: no bubble, serif reading text beside the husky. */
+.chatTheirsRow {
   align-self: flex-start;
-  max-width: 92%;
+  display: flex;
+  gap: 10px;
+  max-width: 100%;
+}
+.chatTheirs {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 14px;
-  border-radius: 16px 16px 16px 4px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  font-size: 14px;
-  line-height: 1.5;
+  padding-top: 2px;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 26px;
+}
+.chatTheirs button,
+.chatTheirs .chatMeta {
+  font-family: var(--font-sans);
+}
+.chatDisclosure {
+  font-size: 12px;
+  color: var(--ink-muted);
+  text-align: center;
 }
 .receiptView {
   display: flex;
@@ -2670,7 +2685,7 @@ textarea.input {
   font-size: 13px;
   padding: 8px 12px;
   margin: 0 0 12px 50px;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 @media (max-width: 759px) {
   .subFlag {
@@ -2715,7 +2730,8 @@ textarea.input {
   text-align: left;
 }
 .chatStarter:hover {
-  border-color: var(--accent-500);
+  border-color: var(--clay);
+  background: var(--clay-soft);
 }
 .chatForm {
   display: flex;
@@ -3177,6 +3193,30 @@ textarea.input {
   color: var(--text);
 }
 /* Summary: the nudge to plan the next cycle near payday. */
+/* Maxie speaking up on its own (InsightCard). */
+.insightCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px 24px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.insightHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+.insightBody {
+  font-family: var(--font-serif);
+  font-size: 19px;
+  line-height: 28px;
+  color: var(--ink);
+}
 .nudgeCard {
   display: flex;
   align-items: center;
@@ -3186,4 +3226,691 @@ textarea.input {
   background: var(--accent-tint);
   border: 1px solid var(--accent-soft, var(--border));
   flex-wrap: wrap;
+}
+
+/* Maxie's mark beside the Ask chip. */
+.purrMark {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+/* Next cycle: buffer and PurrAI's check. */
+.bufferBox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+  font-size: 14px;
+}
+.bufferGoal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.bufferGoal input {
+  flex: 1;
+  accent-color: var(--accent-600);
+}
+.purrBadge {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex: none;
+}
+.changeRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--divider);
+  font-size: 14px;
+}
+
+/* ---------- Summary: charts first ---------- */
+.sxSumGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+.sxSumGrid > [data-wide] {
+  grid-column: 1 / -1;
+}
+@media (max-width: 759px) {
+  .sxSumGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+}
+.sxChartCard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  min-width: 0;
+}
+@media (max-width: 759px) {
+  .sxChartCard {
+    padding: 16px;
+  }
+}
+.sxChartHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+.sxChartTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0;
+}
+.sxInfoBtn {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+/* The (i) explanation: a tooltip on hover, focus or tap; it floats, so nothing below moves. */
+.sxInfo {
+  position: relative;
+  display: inline-flex;
+}
+.sxInfoTip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -12px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: max-content;
+  max-width: min(320px, 78vw);
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-000);
+  color: var(--ink-muted);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 21px;
+  font-weight: 400;
+  text-align: left;
+  text-wrap: pretty;
+  white-space: normal;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-2px);
+  transition:
+    opacity 0.12s ease-out,
+    transform 0.12s ease-out,
+    visibility 0.12s;
+  pointer-events: none;
+}
+.sxInfoTipTitle {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.sxInfo:hover .sxInfoTip,
+.sxInfo:focus-within .sxInfoTip,
+.sxInfo[data-open] .sxInfoTip {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+.sxInfoBtn:hover,
+.sxInfo[data-open] .sxInfoBtn {
+  color: var(--text-soft);
+  background: var(--hover);
+}
+.sxChartRight {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.sxChartInfo {
+  margin: -6px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.sxChartEmpty {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* The ring. */
+.sxRingWrap {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  margin: 0 auto;
+}
+.sxRing {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.sxRingCenter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.sxRingBig {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.sxRingSmall {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.sxRingFoot {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+}
+.sxRingFootValue {
+  font-size: 18px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.sxRingFootLabel {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Three tiles: a column on wide screens, a row on phones. */
+.sxTiles {
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  gap: 12px;
+}
+@media (max-width: 759px) {
+  .sxTiles {
+    grid-template-rows: none;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+}
+.sxTile {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px 20px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  min-width: 0;
+}
+button.sxTile {
+  cursor: pointer;
+}
+button.sxTile:hover {
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(31, 29, 26, 0.06));
+}
+.sxTileLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sxTileValue {
+  font-size: 24px;
+  line-height: 30px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: proportional-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sxTileNote {
+  font-size: 12px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 759px) {
+  .sxTile {
+    padding: 12px;
+    gap: 4px;
+  }
+  .sxTileValue {
+    font-size: 18px;
+    line-height: 24px;
+  }
+  .sxTileLabel svg {
+    display: none;
+  }
+  .sxTileNote {
+    white-space: normal;
+    line-height: 15px;
+  }
+}
+.sxTileMeter {
+  grid-area: meter;
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--divider);
+  overflow: hidden;
+}
+.sxTileMeter > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+/* Spending by day. */
+.sxDayBars {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 120px;
+}
+.sxDayBar {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  min-width: 0;
+}
+.sxDayBarFill {
+  display: block;
+  width: 100%;
+  border-radius: 4px 4px 1px 1px;
+  transition: height 0.4s ease, opacity 0.15s;
+  opacity: 0.85;
+}
+.sxDayBars:hover .sxDayBarFill {
+  opacity: 0.55;
+}
+.sxDayBar[data-active] .sxDayBarFill,
+.sxDayBars:hover .sxDayBar[data-active] .sxDayBarFill {
+  opacity: 1;
+}
+.sxPlanLineMark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1.5px dashed var(--text-faint);
+  pointer-events: none;
+  z-index: 1;
+}
+.sxDayAxis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Where it went: one bar, then a legend. */
+.sxStackBar {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.sxStackBar > span {
+  min-width: 4px;
+}
+.sxLegend {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 2px 20px;
+}
+.sxLegendItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.sxLegendItem:disabled {
+  cursor: default;
+}
+.sxLegendItem:not(:disabled):hover .sxLegendName {
+  text-decoration: underline;
+}
+.sxLegendDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+.sxLegendName {
+  margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sxLegendValue {
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Bills to come: dots on a line from today to payday. */
+.sxTimeline {
+  position: relative;
+  height: 28px;
+}
+.sxTimelineLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--divider);
+}
+.sxTimelineDot {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  cursor: pointer;
+}
+.sxTimelineDot[data-active] {
+  box-shadow: 0 0 0 2px var(--text-soft);
+  transform: scale(1.15);
+}
+.sxTimelinePick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  min-height: 32px;
+}
+.sxRecentRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  padding: 2px 0;
+}
+
+/* Summary: this cycle as a line (spent so far, projection to payday, the plan). */
+.sxLeftHead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  row-gap: 2px;
+}
+.sxLeftBig {
+  font-size: 32px;
+  line-height: 38px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  font-variant-numeric: proportional-nums;
+}
+.sxLeftLabel {
+  font-size: 14px;
+  color: var(--ink-muted);
+  margin-right: auto;
+}
+.sxLeftDay {
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+.sxLine {
+  position: relative;
+  height: 150px;
+  margin-top: auto;
+  touch-action: pan-y;
+  cursor: crosshair;
+}
+.sxLine svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.sxLineDot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: var(--category-1);
+  box-shadow: 0 0 0 2px var(--surface);
+  pointer-events: none;
+}
+.sxLinePlan {
+  position: absolute;
+  left: 0;
+  transform: translateY(-120%);
+  font-size: 12px;
+  color: var(--ink-muted);
+  pointer-events: none;
+}
+.sxLineFoot {
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+
+/* Summary: where it went as a treemap. Flush cells, only the outer corners round. */
+.sxTreemap {
+  position: relative;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.sxTmCell {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 0;
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+  cursor: pointer;
+  transition: filter 0.12s ease-out;
+}
+.sxTmCell:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.sxTmCell:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.sxTmCell:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--surface), inset 0 0 0 4px var(--clay);
+}
+.sxTmName {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sxTmPct {
+  font-weight: 600;
+  font-variant-numeric: proportional-nums;
+  white-space: nowrap;
+}
+.sxTmFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 6px;
+  font-size: 14px;
+}
+.sxTmKey {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+.sxTmKey:disabled {
+  cursor: default;
+}
+.sxTmCaption {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+/* Maxie is thinking: a label that follows the loading, and three crescents that blink in turn. */
+.thinking {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+}
+.thinkLabel {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-muted);
+}
+.thinkArcs {
+  display: inline-flex;
+  gap: 4px;
+}
+.thinkArc path {
+  fill: none;
+  stroke: var(--clay);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.thinkArc {
+  opacity: 0.25;
+  animation: thinkBlink 1.4s ease-in-out infinite;
+}
+@keyframes thinkBlink {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thinkArc {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* Thumbs up / down under an answer. */
+.chatRate {
+  font-family: var(--font-sans);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: -6px;
+}
+.chatRateBtn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+.chatRateBtn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.chatRateBtn[aria-pressed='true'] {
+  background: var(--clay-soft);
+  color: var(--clay-ink);
+}
+.chatRateNote {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* Maxie's plan on the Plan tab: the written plan sits under the steps, divided by a line. */
+.maxiePlan {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--divider);
+}
+.maxiePlanText {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 26px;
+  color: var(--ink);
 }

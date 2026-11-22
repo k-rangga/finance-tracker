@@ -8,7 +8,7 @@ import { addFee, dirOf, isAdd, nat, numIn, positionHistory, UPDATE_LABEL, type P
 export const fmtAt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 const KIND_COLORS: Record<UpdateKind, [string, string]> = {
-  avg_up: [C.accentTint, C.accent800],
+  avg_up: [C.goodTint, C.good],
   avg_down: [C.amberTint, C.amberInk],
   note: [C.divider, C.textSoft],
 };

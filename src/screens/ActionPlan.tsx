@@ -1,9 +1,14 @@
+import { useEffect, useState } from 'react';
 import s from '../styles/ui.module.css';
 import { Card } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
+import { Logo } from '../components/Logo';
+import { ActionCard, Problem, Rich, ThinkingArcs, thinkingLabel } from '../components/Chat';
+import { askGemini, chatContext, type ChatAction } from '../lib/chat';
+import { useData } from '../lib/data';
 import type { Budget, CatView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { dayLabel } from '../lib/format';
+import { dayLabel, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { useSetLimits } from '../lib/limits';
 import { C } from '../lib/tokens';
@@ -37,12 +42,12 @@ export function ActionPlan({ cycle, budget: b, onShowTransactions }: { cycle: Cy
     const amount = from ? Math.min(over, room(from)) : 0;
     steps.push({
       key: 'over:' + c.name,
-      title: `${c.name} is ${full(over)} over its limit`,
+      title: `${c.name} is ${full(over)} over`,
       sub: !from
-        ? 'No category has room left to cover it'
+        ? "Nothing else has room left, so let's keep the rest of it tight."
         : amount < over
-          ? `${from.name} can cover ${full(amount)} of it, all the room it has left`
-          : `${from.name} has room to cover it: its limit goes down by the same amount`,
+          ? `${from.name} can cover ${full(amount)} of it. That's all the room it has left.`
+          : `Let's cover it from ${from.name}, it has the most room. Your total budget stays the same.`,
       action: from
         ? {
             label: amount < over ? `Cover ${short(amount)} from ${from.name}` : `Cover from ${from.name}`,
@@ -72,8 +77,8 @@ export function ActionPlan({ cycle, budget: b, onShowTransactions }: { cycle: Cy
     if (likely)
       steps.push({
         key: 'likely:' + likely.c.name,
-        title: `${likely.c.name}: keep it under ${short(room(likely.c) / cycle.daysLeft)} a day`,
-        sub: `You've been spending about ${short(likely.perDay)} a day on it`,
+        title: `Keep ${likely.c.name} under ${short(room(likely.c) / cycle.daysLeft)} a day`,
+        sub: `You've been averaging about ${short(likely.perDay)} a day, so it's the next one I'd watch.`,
         action: see(likely.c),
       });
   }
@@ -84,11 +89,11 @@ export function ActionPlan({ cycle, budget: b, onShowTransactions }: { cycle: Cy
     save <= 0
       ? { key: 'save', title: 'No savings planned this cycle', done: true }
       : b.saved >= save
-        ? { key: 'save', title: `Saved ${full(b.saved)} this cycle`, done: true }
+        ? { key: 'save', title: `You saved ${full(b.saved)} this cycle`, done: true }
         : {
             key: 'save',
             title: `Move ${full(save - b.saved)} to savings`,
-            sub: b.saved > 0 ? `${full(b.saved)} moved so far, best done on payday, ${dayLabel(cycle.next)}` : `Best done on payday morning, ${dayLabel(cycle.next)}`,
+            sub: b.saved > 0 ? `${full(b.saved)} is in already. Do the rest on payday, ${dayLabel(cycle.next)}.` : `Do it on payday morning, ${dayLabel(cycle.next)}, before anything else goes out.`,
             action: { label: 'I moved it', run: () => onShowTransactions(TRANSFER_CATEGORY) },
           };
   const shown = [...steps.slice(0, MAX_STEPS - 1), saving];
@@ -96,35 +101,32 @@ export function ActionPlan({ cycle, budget: b, onShowTransactions }: { cycle: Cy
 
   return (
     <Card style={{ gap: 18 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
-          <span style={{ marginRight: 'auto' }}>
-            Action plan, day {cycle.dayN} of {cycle.cycleDays}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Logo size={28} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginRight: 'auto' }}>
+            Maxie's plan, day {cycle.dayN} of {cycle.cycleDays}
           </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: status.ink, fontWeight: 500 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: status.ink, fontWeight: 500 }}>
             <span className={s.badgeDot} style={{ background: status.ink }} aria-hidden="true" />
             {status.text}
           </span>
         </div>
-        <h2 className={s.h2} style={{ fontSize: 'clamp(19px, 2.2vw, 22px)', lineHeight: 1.3 }}>
+        <p className={s.insightBody}>
           {b.safeDay > 0 ? (
             <>
-              Spend at most <span style={{ color: C.accent800 }}>{full(b.safeDay)}</span> a day until payday, {dayLabel(cycle.next)}
+              You've got <strong style={{ fontWeight: 600 }}>{full(b.safeDay)}</strong> a day until payday on {dayLabel(cycle.next)}.{' '}
+              {allDone ? "You're on track, nothing needs doing today." : "Here's what I'd do:"}
             </>
           ) : (
-            <span style={{ color: C.redInk }}>Nothing left for spending before payday, {dayLabel(cycle.next)}</span>
+            <>
+              <span style={{ color: C.redInk }}>There's nothing left for spending before payday on {dayLabel(cycle.next)}.</span> Here's how I'd get through it:
+            </>
           )}
-        </h2>
+        </p>
       </div>
 
-      {allDone ? (
-        <span className={s.stepRow} style={{ color: C.accent800, fontWeight: 600 }}>
-          <span className={s.stepMark} data-done>
-            <Icon d={IC.check} size={14} strokeWidth={3} />
-          </span>
-          On track. Nothing to do.
-        </span>
-      ) : (
+      {!allDone && (
         <ol className={s.stepList}>
           {shown.map((x, i) => (
             <li key={x.key} className={s.stepRow}>
@@ -144,6 +146,90 @@ export function ActionPlan({ cycle, budget: b, onShowTransactions }: { cycle: Cy
           ))}
         </ol>
       )}
+
+      <MaxiePlan cycle={cycle} budget={b} />
     </Card>
+  );
+}
+
+/** What Maxie is asked for on the Plan tab. */
+const PLAN_REQUEST =
+  'Make me a plan for the rest of this pay cycle from my data. Start with one sentence on where I stand. ' +
+  'Then up to 3 numbered steps, most important first, each with a real amount and a day or date where it helps. ' +
+  'Cover staying on budget until payday and my savings target. Suggest moving limits between categories as actions when it clearly helps.';
+
+type PlanAnswer = { text: string; actions: ChatAction[] };
+/** Maxie's plan per cycle, kept while the app is open so switching tabs doesn't ask again. */
+const planCache = new Map<string, PlanAnswer>();
+
+/** Maxie writes a plan from this cycle's numbers (Gemini, in Maxie's voice); budget moves come as Apply cards. */
+function MaxiePlan({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
+  const { settings } = useSettings();
+  const { notes } = useData();
+  const key = toISO(cycle.start);
+  const [plan, setPlan] = useState<PlanAnswer | null>(() => planCache.get(key) ?? null);
+  const [busy, setBusy] = useState(false);
+  const [waited, setWaited] = useState(0);
+  const [problem, setProblem] = useState<{ kind: string; detail?: string } | null>(null);
+
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(() => setWaited(w => w + 1), 1000);
+    return () => clearInterval(t);
+  }, [busy]);
+
+  const ask = async () => {
+    setBusy(true);
+    setWaited(0);
+    setProblem(null);
+    try {
+      const a = await askGemini([{ role: 'user', text: PLAN_REQUEST }], chatContext({ cycle, budget: b, settings, notes, withNotes: false }));
+      if ('error' in a) setProblem({ kind: a.error, detail: a.detail });
+      else {
+        const p = { text: a.reply, actions: a.actions.filter(x => x.type === 'move_limit') };
+        planCache.set(key, p);
+        setPlan(p);
+      }
+    } catch (e) {
+      setProblem({ kind: 'network', detail: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (busy)
+    return (
+      <div className={s.maxiePlan} role="status" aria-live="polite">
+        <span className={s.thinking}>
+          <span className={s.thinkLabel}>{thinkingLabel(waited)}</span>
+          <ThinkingArcs />
+        </span>
+      </div>
+    );
+  if (problem) return <Problem p={problem} onRetry={ask} />;
+  if (!plan)
+    return (
+      <div className={s.maxiePlan}>
+        <button type="button" className={s.btnOutlineSm} onClick={ask} style={{ alignSelf: 'flex-start' }}>
+          <Icon d={IC.sparkle} size={15} /> Make my plan with Maxie
+        </button>
+        <span style={{ fontSize: 12, color: C.textMuted }}>Maxie reads this cycle's numbers and writes you a plan. It's AI, so double-check anything important.</span>
+      </div>
+    );
+  return (
+    <div className={s.maxiePlan}>
+      <div className={s.maxiePlanText}>
+        <Rich text={plan.text} />
+      </div>
+      {plan.actions.map((x, i) => (
+        <ActionCard key={i} action={x} allTxs={b.txs} />
+      ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <button type="button" className={s.textBtnSm} onClick={ask} style={{ padding: 0 }}>
+          Ask Maxie again
+        </button>
+        <span style={{ fontSize: 12, color: C.textMuted }}>Maxie is AI and can get things wrong, so double-check anything important.</span>
+      </div>
+    </div>
   );
 }

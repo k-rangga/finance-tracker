@@ -6,6 +6,7 @@
 import { getCycle, type Cycle } from './cycle';
 import { toISO } from './format';
 import type { Bill } from '../data/transactions';
+import { run } from './gas';
 
 export type PlannedCost = { id: string; name: string; amount: number; date: string; category: string };
 /** `limits`: % of income per category, for this cycle only. */
@@ -54,3 +55,7 @@ export function plannedCostBills(costs: PlannedCost[], cycle: Cycle, paid: Map<s
     .filter(b => b.date >= cycle.start && b.date <= cycle.end)
     .map(b => (b.date <= cycle.today ? { ...b, date: new Date(cycle.today.getTime() + DAY) } : b));
 }
+
+/** Maxie's check of a plan: one line, and up to three amounts to change. */
+export type PlanCheck = { verdict?: string; changes?: { category: string; amount: number; why: string }[]; error?: string; detail?: string };
+export const checkPlan = (payload: unknown) => run<PlanCheck>('checkPlan', payload);

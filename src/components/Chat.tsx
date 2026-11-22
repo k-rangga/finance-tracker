@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { IC, Icon } from './Icon';
+import { Logo } from './Logo';
 import { askGemini, chatContext, type ChatAction, type ChatMessage } from '../lib/chat';
 import type { Budget, TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
@@ -15,11 +16,21 @@ import { tidyName } from '../lib/format';
 /** Stop waiting after this long; Apps Script would still finish, but the answer is dropped. */
 const TIMEOUT_MS = 75_000;
 
-/** "Answered in 4s, Flash-Lite" under a reply. */
-function answeredIn(m: ChatMessage) {
-  const secs = m.secs! < 10 ? Math.max(0.1, m.secs!).toFixed(1).replace(/\.0$/, '') : String(Math.round(m.secs!));
-  const model = m.model?.replace(/^gemini-[\d.]+-/, '').replace(/(^|-)(\w)/g, (_, d, c) => (d ? ' ' : '') + c.toUpperCase()).replace(' Lite', '-Lite');
-  return `Answered in ${secs}s${model ? ', ' + model : ''}`;
+/** What Maxie is doing, by how long it's been working: the thinking label follows the loading. */
+export const thinkingLabel = (secs: number) =>
+  secs < 2 ? 'Maxie is thinking…' : secs < 5 ? 'Reading this cycle…' : secs < 10 ? 'Checking your categories…' : secs < 20 ? 'Writing an answer…' : 'Still working, long questions can take up to a minute…';
+
+/** Three small crescents that blink in turn (Maxie ThinkingIndicator). */
+export function ThinkingArcs() {
+  return (
+    <span className={s.thinkArcs} aria-hidden="true">
+      {[0, 1, 2].map(i => (
+        <svg key={i} className={s.thinkArc} style={{ animationDelay: i * 180 + 'ms' }} width={14} height={8} viewBox="0 0 14 8">
+          <path d="M2 2q5 5 10 0" />
+        </svg>
+      ))}
+    </span>
+  );
 }
 
 const STARTERS = ['Why am I over budget?', 'How do I finish this cycle on budget?', 'Which merchants should I cut back on?', 'Sort my Buffer transactions'];
@@ -39,7 +50,7 @@ type Props = {
  * suggested changes come back as cards that do nothing until you tap Apply, and can be undone.
  */
 export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
-  const { settings } = useSettings();
+  const { settings, update } = useSettings();
   const { notes } = useData();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
@@ -63,19 +74,28 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
     setBusy(true);
     setWaited(0);
     const id = ++asking.current;
-    const started = Date.now();
     const timeout = new Promise<'slow'>(r => setTimeout(() => r('slow'), TIMEOUT_MS));
     try {
       const a = await Promise.race([askGemini(next, chatContext({ cycle, budget, settings, notes, withNotes })), timeout]);
       if (id !== asking.current) return;
       if (a === 'slow') setProblem({ kind: 'slow' });
       else if ('error' in a) setProblem({ kind: a.error, detail: a.detail });
-      else setMessages([...next, { role: 'model', text: a.reply, actions: a.actions, model: a.model, secs: (Date.now() - started) / 1000 }]);
+      else setMessages([...next, { role: 'model', text: a.reply, actions: a.actions, model: a.model }]);
     } catch (e) {
       if (id === asking.current) setProblem({ kind: 'network', detail: e instanceof Error ? e.message : String(e) });
     } finally {
       if (id === asking.current) setBusy(false);
     }
+  };
+  /** Thumbs up or down on answer `i`: kept on the message, and saved so later questions carry it (chatContext). */
+  const rate = (i: number, rating: 'up' | 'down') => {
+    const m = messages[i];
+    const q = [...messages.slice(0, i)].reverse().find(x => x.role === 'user')?.text ?? '';
+    const same = m.rating === rating;
+    setMessages(messages.map((x, j) => (j === i ? { ...x, rating: same ? undefined : rating } : x)));
+    const a = m.text.slice(0, 400);
+    const rest = (settings.chatFeedback ?? []).filter(f => !(f.q === q && f.a === a));
+    update({ chatFeedback: same ? rest : [...rest, { q: q.slice(0, 200), a, good: rating === 'up', at: new Date().toISOString() }].slice(-30) });
   };
   useEffect(() => {
     if (!busy) return;
@@ -97,13 +117,13 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
 
   return (
     <div className={s.chatOverlay} onMouseDown={e => e.target === e.currentTarget && onClose()}>
-      <section className={`${s.chatPanel} fade-in`} role="dialog" aria-modal="true" aria-label="Ask Gemini">
+      <section className={`${s.chatPanel} fade-in`} role="dialog" aria-modal="true" aria-label="Ask Maxie">
         <header className={s.chatHead}>
-          <span className={s.chatMark}>
-            <Icon d={IC.sparkle} size={16} />
+          <span className={s.chatMark} style={{ overflow: 'hidden', padding: 0 }}>
+            <Logo size={32} />
           </span>
           <span style={{ display: 'flex', flexDirection: 'column', marginRight: 'auto', minWidth: 0 }}>
-            <strong style={{ fontSize: 15 }}>Ask Gemini</strong>
+            <strong style={{ fontFamily: 'var(--font-serif)', fontSize: 20, fontWeight: 500 }}>Maxie</strong>
             <span style={{ fontSize: 12, color: C.textMuted }}>About this cycle's spending</span>
           </span>
           {messages.length > 0 && (
@@ -144,21 +164,40 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
                 {m.text}
               </div>
             ) : (
-              <div key={i} className={s.chatTheirs}>
-                <Rich text={m.text} />
-                {(m.actions ?? []).map((a, j) => (
-                  <ActionCard key={j} action={a} allTxs={allTxs} />
-                ))}
-                {m.secs != null && <span className={s.chatMeta}>{answeredIn(m)}</span>}
+              <div key={i} className={s.chatTheirsRow}>
+                <Logo size={28} />
+                <div className={s.chatTheirs}>
+                  <Rich text={m.text} />
+                  {(m.actions ?? []).map((a, j) => (
+                    <ActionCard key={j} action={a} allTxs={allTxs} />
+                  ))}
+                  <span className={s.chatRate}>
+                    {(['up', 'down'] as const).map(r => (
+                      <button
+                        key={r}
+                        type="button"
+                        className={s.chatRateBtn}
+                        aria-pressed={m.rating === r}
+                        aria-label={r === 'up' ? 'Good answer' : 'Not helpful'}
+                        title={r === 'up' ? 'Good answer' : 'Not helpful'}
+                        onClick={() => rate(i, r)}
+                      >
+                        <Icon d={r === 'up' ? IC.thumbUp : IC.thumbDown} size={16} />
+                      </button>
+                    ))}
+                    {m.rating && <span className={s.chatRateNote}>{m.rating === 'up' ? 'Thanks, noted.' : "Thanks, I'll do better."}</span>}
+                  </span>
+                </div>
               </div>
             ),
           )}
           {busy && (
-            <div className={s.chatTheirs} style={{ color: C.textMuted }}>
-              <span>
-                Thinking…{waited >= 3 ? ` ${waited}s` : ''}
+            <div className={s.chatTheirsRow} role="status" aria-live="polite">
+              <Logo size={28} />
+              <span className={s.thinking}>
+                <span className={s.thinkLabel}>{thinkingLabel(waited)}</span>
+                <ThinkingArcs />
               </span>
-              {waited >= 20 && <span style={{ fontSize: 12 }}>Gemini can take up to a minute on a long question.</span>}
             </div>
           )}
           {problem && <Problem p={problem} onRetry={() => messages.length && send(messages[messages.length - 1].text)} />}
@@ -178,7 +217,7 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
               rows={1}
               value={text}
               maxLength={1000}
-              placeholder="Ask about your spending…"
+              placeholder="Ask Maxie anything"
               aria-label="Your question"
               onChange={e => setText(e.target.value)}
               onKeyDown={e => {
@@ -194,8 +233,9 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
           </div>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.textMuted }}>
             <input type="checkbox" checked={withNotes} onChange={e => setWithNotes(e.target.checked)} />
-            Include my notes. Sends this cycle's spending summary to Google Gemini
+            Include my notes. Maxie runs on Google Gemini: this cycle's spending summary is sent there
           </label>
+          <span className={s.chatDisclosure}>Maxie is AI and can get things wrong, so double-check anything important.</span>
         </form>
       </section>
     </div>
@@ -203,7 +243,7 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
 }
 
 /** Gemini's text: paragraphs, "- " bullets and **bold**. */
-function Rich({ text }: { text: string }) {
+export function Rich({ text }: { text: string }) {
   const inline = (line: string): ReactNode[] => line.split(/(\*\*[^*]+\*\*)/g).map((part, i) => (part.startsWith('**') && part.endsWith('**') ? <strong key={i}>{part.slice(2, -2)}</strong> : part));
   const lines = text.split('\n').filter(l => l.trim());
   return (
@@ -224,11 +264,11 @@ function Rich({ text }: { text: string }) {
   );
 }
 
-function Problem({ p, onRetry }: { p: { kind: string; detail?: string }; onRetry: () => void }) {
+export function Problem({ p, onRetry }: { p: { kind: string; detail?: string }; onRetry: () => void }) {
   if (p.kind === 'no_key')
     return (
       <div className={s.chatNote}>
-        <strong>Gemini isn't set up yet.</strong>
+        <strong>Maxie isn't set up yet.</strong>
         <span>
           Create an API key in Google AI Studio, then in the Apps Script editor open <strong>Project Settings → Script properties</strong> and add{' '}
           <code>GEMINI_API_KEY</code> with your key. Then ask again.
@@ -238,7 +278,7 @@ function Problem({ p, onRetry }: { p: { kind: string; detail?: string }; onRetry
   if (p.kind === 'slow')
     return (
       <div className={s.chatNote}>
-        <strong>Gemini is taking too long.</strong>
+        <strong>Maxie is taking too long.</strong>
         <span>
           Try again. If it keeps happening, switch to the faster model: in <strong>Script properties</strong> add <code>GEMINI_MODEL</code> ={' '}
           <code>gemini-3.5-flash-lite</code>.
@@ -250,7 +290,7 @@ function Problem({ p, onRetry }: { p: { kind: string; detail?: string }; onRetry
     );
   return (
     <div className={s.chatNote} style={{ background: 'var(--red-tint)', color: 'var(--red-ink)' }}>
-      <strong>{p.kind === 'blocked' ? "Gemini didn't answer that." : "Couldn't reach Gemini."}</strong>
+      <strong>{p.kind === 'blocked' ? "Maxie didn't answer that." : "Couldn't reach Maxie."}</strong>
       {p.detail && <span style={{ wordBreak: 'break-word' }}>{p.detail}</span>}
       <button type="button" className={s.textBtnSm} onClick={onRetry} style={{ alignSelf: 'flex-start', color: 'inherit', padding: 0 }}>
         Try again
@@ -263,7 +303,7 @@ function Problem({ p, onRetry }: { p: { kind: string; detail?: string }; onRetry
 const known = (name: string | undefined) => [...CATEGORIES.map(c => c.name), ...OTHER_CATEGORIES].find(n => n.toLowerCase() === (name ?? '').trim().toLowerCase());
 
 /** A change Gemini suggests: what it does and why, Apply, then Undo. Suggestions that don't fit your data aren't shown. */
-function ActionCard({ action: a, allTxs }: { action: ChatAction; allTxs: TxView[] }) {
+export function ActionCard({ action: a, allTxs }: { action: ChatAction; allTxs: TxView[] }) {
   const { settings, short, ofIncome } = useSettings();
   const { rules, ruleSubs, subs, setRules, setSub, setOverride } = useData();
   const setLimits = useSetLimits();
@@ -351,7 +391,7 @@ function ActionCard({ action: a, allTxs }: { action: ChatAction; allTxs: TxView[
           </button>
         ) : (
           <>
-            <span style={{ fontSize: 13, fontWeight: 600, color: C.accent800 }}>✓ Applied</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.good }}>✓ Applied</span>
             {undo && (
               <button
                 type="button"

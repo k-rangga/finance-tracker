@@ -4,11 +4,17 @@ import type { Settings } from './settings';
 import type { Prices, Snap, Trade, TradeUpdate } from '../screens/invest/model';
 import { merchantKey, type InstallmentPlan } from '../data/transactions';
 import type { Subscription } from './subscriptions';
-import { getCycle } from './cycle';
-import { addDays, startOfToday } from './format';
+import { startOfToday } from './format';
 
 /** Load transactions from the start of the previous pay cycle (needed for last-cycle comparisons). */
-const importsSince = () => getCycle(addDays(getCycle(startOfToday()).start, -1)).start;
+/**
+ * Imports from the 1st of the month two months back: settings (and so your payday) arrive with this same load, so
+ * the window has to cover the previous pay cycle whatever day you're paid.
+ */
+const importsSince = () => {
+  const t = startOfToday();
+  return new Date(t.getFullYear(), t.getMonth() - 2, 1);
+};
 
 type Ctx = UserData & {
   /** Re-read imported transactions and Gmail status. */

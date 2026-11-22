@@ -52,7 +52,7 @@ export function Portfolio({ cycle, P }: { cycle: Cycle; P: PortfolioModel }) {
   return (
     <div className={s.stack}>
       <Card style={{ gap: 24 }}>
-        <CardHead title="Allocation" caption={`${dS(P.tot)} in ${P.pos.length} open ${P.pos.length === 1 ? 'position' : 'positions'}, USD at Rp ${settings.fxRate.toLocaleString('id-ID')}`} />
+        <CardHead title="Allocation" caption={`${dS(P.tot)} in ${P.pos.length} open ${P.pos.length === 1 ? 'position' : 'positions'}, USD at Rp${settings.fxRate.toLocaleString('id-ID')}`} />
         {capWarn && (
           <div role="status" style={{ background: C.amberTint, color: C.amberInk, borderRadius: 12, padding: '12px 16px', fontSize: 14, lineHeight: 1.5 }}>
             <strong>Over cap.</strong> {capWarn}
@@ -101,7 +101,7 @@ export function Portfolio({ cycle, P }: { cycle: Cycle; P: PortfolioModel }) {
             <div key={i} style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center' }}>
               <div
                 title={`${labels[i]}: ${p.toFixed(1)}%, ${full(ofIncome(p))}`}
-                style={{ width: '100%', maxWidth: 64, borderRadius: 12, height: pc((p / cmax) * 100), background: i === 5 ? C.accent700 : C.mint[5] }}
+                style={{ width: '100%', maxWidth: 64, borderRadius: 12, height: pc((p / cmax) * 100), background: i === 5 ? C.accent700 : C.series[1] }}
               />
             </div>
           ))}

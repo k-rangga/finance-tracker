@@ -67,7 +67,7 @@ export function ReceiptPreview({ txId, receipt, title, onClose }: Props) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, color: C.textMuted }}>
         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{receipt.name}</span>
         {!drive.startsWith('data:') && (
-          <a href={drive} target="_blank" rel="noopener noreferrer" style={{ color: C.accent800, fontWeight: 600, whiteSpace: 'nowrap' }}>
+          <a href={drive} target="_blank" rel="noopener noreferrer" style={{ color: C.clayInk, fontWeight: 600, whiteSpace: 'nowrap' }}>
             Open in Drive
           </a>
         )}

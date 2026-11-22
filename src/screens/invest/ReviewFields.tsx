@@ -138,4 +138,4 @@ export function useAutosave(initial: ReviewDraft, save: (d: ReviewDraft) => void
   return { draft, change, label };
 }
 
-export const SavedLabel = ({ label }: { label: string }) => (label ? <span style={{ fontSize: 12, color: label === 'Saved ✓' ? C.accent800 : C.textMuted }}>{label}</span> : null);
+export const SavedLabel = ({ label }: { label: string }) => (label ? <span style={{ fontSize: 12, color: label === 'Saved ✓' ? C.good : C.textMuted }}>{label}</span> : null);

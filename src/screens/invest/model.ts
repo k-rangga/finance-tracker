@@ -55,7 +55,7 @@ export const UPDATE_LABEL: Record<UpdateKind, string> = { avg_up: 'Avg up', avg_
 export type Snap = { d: string; v: number; c: number };
 
 export const MARKETS: Market[] = ['IDX', 'US', 'Crypto'];
-export const MK_COLOR: Record<Market, string> = { IDX: '#0b6b5c', US: '#2fc2a4', Crypto: '#a6e4d6' };
+export const MK_COLOR: Record<Market, string> = { IDX: 'var(--category-1)', US: 'var(--category-7)', Crypto: 'var(--category-4)' };
 export const MK_NAME: Record<Market, string> = { IDX: 'IDX stocks', US: 'US stocks', Crypto: 'Crypto' };
 
 /** Parse a typed number. IDX prices are whole rupiah, so `.` is a thousands separator there. */
@@ -64,7 +64,7 @@ export const numIn = (v: string | number | undefined, mk?: Market) => parseFloat
 /** Native price label: `Rp 9.375` for IDX, `$548.20` / `$104,500` otherwise. */
 export const nat = (v: number, mk: Market) =>
   mk === 'IDX'
-    ? 'Rp ' + Math.round(v).toLocaleString('id-ID')
+    ? 'Rp' + Math.round(v).toLocaleString('id-ID')
     : '$' + (v >= 1000 ? Math.round(v).toLocaleString('en-US') : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
 export const qtyLabel = (t: Pick<Trade, 'mk' | 'q' | 'tk'>) =>

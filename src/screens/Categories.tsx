@@ -226,12 +226,12 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
               <>
                 <button type="button" className={s.catFold} aria-expanded={showUnused} onClick={() => setShowUnused(!showUnused)}>
                   <Icon d={IC.chevDown} size={14} style={{ transform: showUnused ? 'rotate(180deg)' : 'none' }} />
-                  Not used yet ({unused.length}), {unused.map(r => r.c.name).join(', ')}
+                  Not used yet ({unused.length}): {unused.map(r => r.c.name).join(', ')}
                 </button>
                 {showUnused && unused.map(row)}
               </>
             )}
-            <button type="button" className={s.catFold} onClick={onNewCategory} style={{ color: C.accent800, fontWeight: 600 }}>
+            <button type="button" className={s.catFold} onClick={onNewCategory} style={{ color: C.clayInk, fontWeight: 600 }}>
               <Icon d={IC.plus} size={14} />
               New category
             </button>
@@ -245,7 +245,7 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
               right={
                 fixed.length > 0 ? (
                   fixed.every(isPaid) ? (
-                    <span style={{ color: C.accent800, fontWeight: 600 }}>All paid ✓</span>
+                    <span style={{ color: C.good, fontWeight: 600 }}>All paid ✓</span>
                   ) : (
                     `${short(sum(fixed.filter(isPaid).map(r => r.cur || r.lim)))} of ${short(sum(fixed.map(r => Math.max(r.lim, r.cur))))} paid`
                   )
@@ -279,7 +279,7 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
                 className={s.catFold}
                 aria-expanded={adding != null}
                 onClick={() => setAdding(adding == null ? '' : null)}
-                style={{ color: C.accent800, fontWeight: 600 }}
+                style={{ color: C.clayInk, fontWeight: 600 }}
               >
                 <Icon d={IC.plus} size={14} />
                 Add a fixed bill
@@ -379,13 +379,15 @@ function CategoryRow({
 }) {
   const { full, short } = useSettings();
   const phone = useIsPhone();
-  // Short amounts in the list ("1,8 jt / 2,1 jt" on phones, so the name keeps its room); exact ones when opened.
+  // Short amounts in the list ("Rp1.8M / Rp2.1M" on phones, so the name keeps its room); exact ones when opened.
   const fit = (v: number) => (phone ? short(v).replace(/^Rp\s?/, '') : short(v));
   const { c, cur, last, lim, scale, mine } = r;
   const toSort = c.name === UNSORTED ? mine.length : 0;
   const expected = lim * todayFrac;
-  // One quiet colour while on pace; amber when running ahead of today's mark, red past the limit.
-  const bar = lim > 0 && cur > lim ? C.red : expected > 0 && cur > expected * 1.1 ? C.amber : C.accent500;
+  // BudgetMeter: the category's own colour while on pace; amber when running ahead of today's mark; red past the
+  // limit, with a word and an icon so the state never rests on colour alone.
+  const over = lim > 0 && cur > lim;
+  const bar = over ? C.red : expected > 0 && cur > expected * 1.1 ? C.amber : c.color;
   return (
     <div id={'cat-' + c.name}>
       <button type="button" className={s.catRow} aria-expanded={open} onClick={onToggle}>
@@ -398,6 +400,11 @@ function CategoryRow({
           </span>
           {/* Phones: the change against last time is in the opened row, so the name keeps its room. */}
           {!phone && <ChangeChip cur={cur} last={last} />}
+          {over && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: C.redInk, whiteSpace: 'nowrap', alignSelf: 'center' }}>
+              <Icon d={IC.alert} size={13} /> {short(cur - lim)} over
+            </span>
+          )}
           {cur <= lim && <StreakChip n={streak} />}
           {challenge && <ChallengeChip text={challenge.text} kind={challenge.key} />}
         </span>

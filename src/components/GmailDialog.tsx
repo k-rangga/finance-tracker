@@ -237,7 +237,7 @@ export function GmailDialog({ onClose, notice }: { onClose: () => void; notice?:
         )}
       </div>
       {msg && (
-        <span role="status" style={{ fontSize: 14, color: C.accent800, background: C.accentTint, borderRadius: 12, padding: '10px 12px' }}>
+        <span role="status" style={{ fontSize: 14, color: C.good, background: C.goodTint, borderRadius: 12, padding: '10px 12px' }}>
           {msg}
         </span>
       )}

@@ -2,7 +2,8 @@ import { useState } from 'react';
 import s from '../styles/ui.module.css';
 import { IconChip, Modal, Options } from './ui';
 import { CATEGORIES, toCategory } from '../data/categories';
-import { sum } from '../lib/format';
+import { dayLabel, startOfToday, sum } from '../lib/format';
+import { DEFAULT_PAYDAY, nextPaydayFor, type PaydayRule } from '../lib/cycle';
 import { DEFAULT_INCOME, useSettings, type Settings } from '../lib/settings';
 import type { Currency } from '../lib/format';
 import { applyTheme, getTheme, type Theme } from '../lib/theme';
@@ -118,6 +119,37 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
         {num('savingsPct', 'Savings target', '% of income')}
         {num('investPct', 'Invest each payday', '% of income')}
       </div>
+      {(() => {
+        // Your pay cycle runs from one payday to the day before the next; everything (plans, pace, bills) follows it.
+        const rule: PaydayRule = { ...DEFAULT_PAYDAY, ...d.payday };
+        const setRule = (patch: Partial<PaydayRule>) => setD(p => ({ ...p, payday: { ...DEFAULT_PAYDAY, ...p.payday, ...patch } }));
+        const WEEKEND: Record<string, PaydayRule['weekend']> = { 'Friday before': 'before', 'Monday after': 'after', 'Keep the date': 'same' };
+        const weekendLabel = Object.keys(WEEKEND).find(k => WEEKEND[k] === rule.weekend) ?? 'Friday before';
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span className={s.label}>Payday</span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, alignItems: 'end' }}>
+              <label className={s.field}>
+                <span>Day of the month</span>
+                <select className={s.input} value={rule.day} onChange={e => setRule({ day: Number(e.target.value) })}>
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map(n => (
+                    <option key={n} value={n}>
+                      {n === 31 ? 'Last day of the month' : n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }}>On a weekend, paid</span>
+                <Options label="On a weekend, paid" items={Object.keys(WEEKEND)} value={weekendLabel} onChange={k => setRule({ weekend: WEEKEND[k] })} />
+              </div>
+            </div>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              Next payday {dayLabel(nextPaydayFor(rule, startOfToday()))}. Your cycle runs from one payday to the day before the next.
+            </span>
+          </div>
+        );
+      })()}
       {(() => {
         // Category limits are your spending budget; with the savings target they must fit in your income.
         const budgetPct = Math.round(sum(CATEGORIES.map(c => c.limitPct)));

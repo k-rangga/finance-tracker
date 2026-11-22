@@ -60,12 +60,13 @@ export default function App() {
   useEffect(() => {
     if (googleNotice) history.replaceState(null, '', location.pathname);
   }, [googleNotice]);
-  /** Ask Gemini panel; `ask` is a question to send as it opens. */
+  /** Ask Maxie panel (Google Gemini underneath); `ask` is a question to send as it opens. */
   const [chat, setChat] = useState<{ ask?: string } | null>(null);
   const { settings, update } = useSettings();
 
   const today = useMemo(startOfToday, []);
-  const cycle = useMemo(() => getCycle(today), [today]);
+  // Recomputed when you change your payday in Settings.
+  const cycle = useMemo(() => getCycle(today), [today, settings.payday?.day, settings.payday?.weekend]);
   const prevCycle = useMemo(() => getCycle(addDays(cycle.start, -1)), [cycle]);
   const imported = useMemo(() => txRows.map(r => toTransaction(r, settings.currency, settings.fxRate)), [txRows, settings.currency, settings.fxRate]);
   const removedIds = useMemo(() => new Set(removed), [removed]);
@@ -302,9 +303,11 @@ export default function App() {
               {nextNote}
             </span>
             <div className={s.headerActions}>
-              <button type="button" className={s.chip} onClick={() => setChat({})} aria-label="Ask Gemini" title="Ask Gemini about your spending">
-                <Icon d={IC.sparkle} size={14} />
-                <span className={s.desktopOnly}>Ask Gemini</span>
+              <button type="button" className={s.chip} onClick={() => setChat({})} aria-label="Ask Maxie" title="Ask Maxie about your spending">
+                <span className={s.purrMark} aria-hidden="true">
+                  <Logo size={18} />
+                </span>
+                <span className={s.desktopOnly}>Ask Maxie</span>
               </button>
               <button
                 type="button"
@@ -352,9 +355,7 @@ export default function App() {
                 cycle={cycle}
                 budget={budget}
                 onOpenCategory={showCategory}
-                onOpenSettings={() => setSettingsOpen(true)}
                 onDismissBill={dismissBill}
-                onAsk={ask => setChat({ ask })}
                 onShowTransactions={(range, cat = '') => {
                   setTxFilter({ range, cat, q: '' });
                   setTab('tx');

@@ -11,6 +11,8 @@ import {
   categoryByName,
   categoryLabel,
   HUES,
+  HUE_NAMES,
+  hueOf,
   isReservedName,
   nextHue,
   OTHER_CATEGORIES,
@@ -80,7 +82,7 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
     setAmtText(fmtAmt(ofIncome(p)));
   };
   const [icon, setIcon] = useState<string>(existing?.icon ?? 'wallet');
-  const [color, setColor] = useState(existing?.color ?? current?.color ?? nextHue(CATEGORIES).color);
+  const [color, setColor] = useState(hueOf(existing?.color)?.color ?? current?.color ?? nextHue(CATEGORIES).color);
   const [err, setErr] = useState('');
   const [deleting, setDeleting] = useState(false);
   /** Sub-categories: labels inside this category (they share its limit). */
@@ -394,19 +396,19 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span className={s.label}>Colour</span>
         <div className={s.swatches} role="radiogroup" aria-label="Colour">
-          {HUES.map(h => (
+          {HUES.map((h, hi) => (
             <button
               key={h.color}
               type="button"
               role="radio"
               aria-checked={color === h.color}
-              aria-label={h.color + (used.has(h.color) ? ' (used by another category)' : '')}
+              aria-label={HUE_NAMES[hi] + (used.has(h.color) ? ' (used by another category)' : '')}
               title={used.has(h.color) ? 'Used by another category' : undefined}
               className={s.swatch}
               onClick={() => setColor(h.color)}
               style={{
                 background: h.color,
-                boxShadow: color === h.color ? `0 0 0 2px #fff, 0 0 0 4px ${h.color}` : undefined,
+                boxShadow: color === h.color ? `0 0 0 2px var(--surface), 0 0 0 4px ${h.color}` : undefined,
                 opacity: used.has(h.color) && color !== h.color ? 0.45 : 1,
               }}
             >

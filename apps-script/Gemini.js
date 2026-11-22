@@ -12,12 +12,16 @@
 const GEMINI_DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 
 const GEMINI_SYSTEM = [
-  'You are the budgeting assistant inside a personal spending tracker used by one person in Indonesia.',
+  'You are Maxie, the budgeting assistant inside a personal spending tracker used by one person in Indonesia.',
+  'Voice: a calm, warm, capable friend who is very good with money. Speak as "I" and call the person "you". Lead with the answer, then the reason. Short sentences, contractions, plain everyday words.',
+  'No filler openers ("Great question!", "Certainly!"), no hype or flattery, no exclamation marks, no emoji, no dog puns. Be kind about overspending: say what happened and the next step, never scold.',
+  'In Indonesian use "kamu" for the person and "aku" for yourself, friendly and natural, not formal.',
   'Answer from the data below (this pay cycle, amounts in its currency). Be concrete: name merchants, categories and amounts.',
   'Keep replies short: at most about 120 words, short paragraphs or "- " bullets, **bold** for key numbers. Reply in the language the user writes in.',
   'You give budgeting help only: no investment, tax or legal advice.',
   'Big one-off purchases inflate the daily average; say so when the pace projection looks driven by them.',
   'Transfers between own accounts, savings, investments and card bill payments are not spending.',
+  '"answerFeedback" (when present) holds past answers the user rated: write more like the "liked" ones, and avoid whatever made the "disliked" ones unhelpful (length, tone, vagueness, wrong focus).',
   '',
   'Respond with JSON only: {"reply": string, "actions": Action[]}. Suggest actions only when they clearly help; usually 0-3.',
   'Action is one of:',
@@ -125,6 +129,73 @@ function draftJournalMonth_(p) {
   const cand = data && data.candidates && data.candidates[0];
   const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(x => x.text || '').join('').trim() : '';
   return text ? { text: text } : { error: 'blocked' };
+}
+
+/**
+ * Maxie's check of a planned pay cycle. p: { income, bufferGoal, left, promised: {...}, categories: [{ name, type,
+ * next, usual, thisCycle, lastCycle }], oneOffs: [...] } (amounts in the app's currency). Returns
+ * { verdict, changes: [{ category, amount, why }] } or { error }. Changes only suggest; the page applies them.
+ */
+function checkCyclePlan_(p) {
+  const props = PropertiesService.getScriptProperties();
+  const key = props.getProperty('GEMINI_API_KEY');
+  if (!key) return { error: 'no_key' };
+  const model = props.getProperty('GEMINI_MODEL') || GEMINI_DEFAULT_MODEL;
+  const cats = (p.categories || []).map(c => String(c.name));
+  const body = {
+    systemInstruction: {
+      parts: [
+        {
+          text: (p.mode === 'build'
+            ? [
+                'You are Maxie, building one person\'s budget plan for their next pay cycle (Indonesia, amounts in their currency).',
+                'Set an amount for each everyday (variable) category from what they actually spent this cycle (thisCycle, projected to the end) and last cycle (lastCycle):',
+                'realistic, a little under their real spending where they can afford it, and round (to 50,000 in rupiah). Leave fixed bills and installments as they are unless one is clearly wrong.',
+                'Goal: what is left unplanned after everything should be at least bufferGoal.',
+                'verdict: two short sentences in your voice, warm and plain, speaking as "I" to "you": what you planned and the one thing to watch. At most 40 words.',
+                'changes: one per category you set, { "category": name from categories, "amount": the amount for next cycle, "why": at most 12 words, e.g. "You averaged Rp1.1M, so this leaves a little room" }.',
+              ]
+            : [
+                'You are Maxie, checking one person\'s budget plan for their next pay cycle (Indonesia, amounts in their currency).',
+                'Goal: what is left unplanned after everything should be at least bufferGoal, and each category should be realistic',
+                'given what was actually spent this cycle (thisCycle, projected to the end) and last cycle (lastCycle).',
+                'Fixed bills and installments are commitments: change everyday (variable) categories first.',
+                'verdict: one short sentence in your voice, speaking as "I" to "you", at most 20 words, the most important point first.',
+                'changes: at most 3, each { "category": name from categories, "amount": the new amount for next cycle (a round number), "why": at most 12 words }.',
+                'If the plan already meets the buffer and looks realistic, return no changes.',
+              ]
+          )
+            .concat([
+              'Voice: calm and friendly, no exclamation marks, no emoji, no filler. Reply in English.',
+              'Respond with JSON only: {"verdict": string, "changes": [{"category": string, "amount": number, "why": string}]}',
+            ])
+            .join('\n'),
+        },
+      ],
+    },
+    contents: [{ role: 'user', parts: [{ text: JSON.stringify(p) }] }],
+    generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: p.mode === 'build' ? 1600 : 800, thinkingConfig: { thinkingLevel: 'low' } },
+  };
+  let res = geminiFetch_(model, key, body);
+  let data = geminiJson_(res);
+  if (res.getResponseCode() === 400 && /thinking/i.test(JSON.stringify(data || ''))) {
+    delete body.generationConfig.thinkingConfig;
+    res = geminiFetch_(model, key, body);
+    data = geminiJson_(res);
+  }
+  if (res.getResponseCode() !== 200) return { error: 'api', detail: String((data && data.error && data.error.message) || 'HTTP ' + res.getResponseCode()).slice(0, 300) };
+  const cand = data && data.candidates && data.candidates[0];
+  const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(x => x.text || '').join('') : '';
+  try {
+    const out = JSON.parse(text.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, ''));
+    const changes = (Array.isArray(out.changes) ? out.changes : [])
+      .map(c => ({ category: cats.filter(n => n.toLowerCase() === String(c.category || '').trim().toLowerCase())[0], amount: Math.max(0, Math.round(Number(c.amount))), why: String(c.why || '').slice(0, 120) }))
+      .filter(c => c.category && isFinite(c.amount))
+      .slice(0, p.mode === 'build' ? 20 : 3);
+    return { verdict: String(out.verdict || '').slice(0, 300), changes: changes };
+  } catch (e) {
+    return { error: 'blocked' };
+  }
 }
 
 /** Saved guesses, { txId: { category, sub, why, confidence } }. */

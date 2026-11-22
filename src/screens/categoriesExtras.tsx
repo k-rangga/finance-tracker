@@ -16,8 +16,8 @@ const isSpend = (t: TxView) => !t.isIncome && !t.isTransfer;
 export function moodOf(spent: number, limit: number, expected: number) {
   if (limit > 0 && spent > limit) return { label: 'Over the plan', ink: C.redInk, bar: C.red };
   if (expected > 0 && spent > expected * 1.1) return { label: 'Spending faster than planned', ink: C.amberInk, bar: C.amber };
-  if (expected > 0 && spent < expected * 0.8) return { label: 'Nicely under pace', ink: C.accent800, bar: C.accent500 };
-  return { label: 'On pace', ink: C.accent800, bar: C.accent500 };
+  if (expected > 0 && spent < expected * 0.8) return { label: 'Nicely under pace', ink: C.good, bar: 'var(--category-1)' };
+  return { label: 'On pace', ink: C.good, bar: 'var(--category-1)' };
 }
 
 /**

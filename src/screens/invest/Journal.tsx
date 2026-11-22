@@ -30,7 +30,7 @@ import { ReviewFields, useAutosave, type ReviewDraft } from './ReviewFields';
 import { PerpDetail, px, ReviewBox, when, type Perps } from './Perps';
 
 /** Perps' colour: beside their trades and on the Perps switch, as markets have theirs. */
-export const HL_COLOR = '#7c6cf0';
+export const HL_COLOR = 'var(--category-3)';
 
 
 /** A trade's row: name and what kind, dates and size, return and P/L, and its review at a glance. */
@@ -128,7 +128,7 @@ type Props = {
 export type PriceRefresh = { refresh: () => void; busy: boolean; msg: string };
 
 export const FP_COLORS: Record<FollowedPlan, [string, string]> = {
-  Yes: [C.accentTint, C.accent800],
+  Yes: [C.goodTint, C.good],
   Partly: [C.amberTint, C.amberInk],
   No: [C.redTint, C.redInk],
 };

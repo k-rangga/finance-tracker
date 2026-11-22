@@ -231,7 +231,7 @@ export function EntryModal({ todayISO, portfolioValue, editing, onClose, onSave 
               <span
                 key={r.label}
                 className={s.badge}
-                style={{ fontSize: 13, padding: '6px 12px', background: r.ok ? C.accentTint : C.redTint, color: r.ok ? C.accent800 : C.redInk }}
+                style={{ fontSize: 13, padding: '6px 12px', background: r.ok ? C.goodTint : C.redTint, color: r.ok ? C.good : C.redInk }}
               >
                 {r.ok ? '✓' : '✕'} {r.label}
               </span>

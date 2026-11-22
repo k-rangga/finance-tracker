@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import s from '../styles/ui.module.css';
 import { Card } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
@@ -7,7 +7,9 @@ import { builtInCategory, CATEGORIES, categoryByName, type Category } from '../d
 import type { Bill } from '../data/transactions';
 import type { Budget } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { cycleKey, type CyclePlan, type PlannedCost } from '../lib/cyclePlans';
+import { checkPlan, cycleKey, type CyclePlan, type PlanCheck, type PlannedCost } from '../lib/cyclePlans';
+import { Logo } from '../components/Logo';
+import { ThinkingArcs, thinkingLabel } from '../components/Chat';
 import { dayLabel, dayMonth, sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
@@ -30,6 +32,9 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
   const { settings, update, full } = useSettings();
   const key = cycleKey(next);
   const plan: CyclePlan = settings.cyclePlans?.[key] ?? {};
+  // The newest plan, so several changes in a row (Apply, Apply) each build on the last one.
+  const latest = useRef(plan);
+  latest.current = plan;
   const income = settings.income;
   const pctOf = (amount: number) => (income > 0 ? (amount / income) * 100 : 0);
   const amountOf = (pct: number) => (pct / 100) * income;
@@ -40,12 +45,14 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
   const nextPct = (c: Category) => plan.limits?.[c.name] ?? regularPct(c);
 
   const save = (p: CyclePlan) => {
+    latest.current = p;
     // Only this cycle's and later plans are kept.
     const now = cycleKey(cycle);
     const kept = Object.fromEntries(Object.entries(settings.cyclePlans ?? {}).filter(([k]) => k >= now && k !== key));
     update({ cyclePlans: { ...kept, [key]: p } });
   };
   const setAmount = (c: Category, amount: number) => {
+    const plan = latest.current;
     const limits = { ...(plan.limits ?? {}) };
     // Enough decimals that the amount you typed comes back exactly (Rp 1.100.000, not 1.100.010).
     const pct = Math.round(pctOf(amount) * 1e8) / 1e8;
@@ -54,7 +61,7 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
     save({ ...plan, limits });
   };
   const costs = plan.costs ?? [];
-  const setCosts = (list: PlannedCost[]) => save({ ...plan, costs: list });
+  const setCosts = (list: PlannedCost[]) => save({ ...latest.current, costs: list });
 
   const fixed = CATEGORIES.filter(c => c.type === 'fixed' && !c.auto);
   const everyday = CATEGORIES.filter(c => c.type === 'variable');
@@ -66,6 +73,7 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
   const everydayTotal = sum(everyday.map(c => amountOf(nextPct(c))));
   const left = free - everydayTotal;
   const changed = Object.keys(plan.limits ?? {}).length;
+  const bufferPct = settings.bufferPct ?? 10;
 
   return (
     <div className={s.stack}>
@@ -99,15 +107,38 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
           <div className={s.planDivider} />
           <Line label="Free for everyday spending" value={full(free)} strong ink={free < 0 ? C.redInk : undefined} />
           <Line label="Everyday plan" value={'− ' + full(everydayTotal)} />
-          <Line
-            label={left >= 0 ? 'Left unplanned' : 'Planned beyond income'}
-            value={full(Math.abs(left))}
-            strong
-            ink={left < 0 ? C.redInk : left > 0 ? C.accent800 : undefined}
-            note={left > 0 ? 'Give it a job: raise a category below, a one-off cost, or more savings.' : left < 0 ? 'Lower a category below, or a one-off cost.' : undefined}
-          />
         </div>
+        <BufferBar left={left} income={income} pct={bufferPct} onPct={v => update({ bufferPct: v })} />
       </Card>
+
+      <PurrCheck
+        payload={() => ({
+          income,
+          bufferGoal: amountOf(bufferPct),
+          left,
+          promised: { fixedBills: fixedTotal, installments, oneOffs, savings },
+          oneOffs: costs.map(c => ({ name: c.name, amount: c.amount, date: c.date, category: c.category })),
+          categories: [...everyday, ...fixed].map(c => {
+            const now = budget.cats.find(x => x.name === c.name);
+            return {
+              name: c.name,
+              type: c.type,
+              next: Math.round(amountOf(nextPct(c))),
+              usual: Math.round(amountOf(regularPct(c))),
+              thisCycle: now ? Math.round((now.spent / Math.max(1, cycle.dayN)) * cycle.cycleDays) : 0,
+              lastCycle: now ? Math.round(sum(now.prev)) : 0,
+            };
+          }),
+        })}
+        amountOfCategory={name => {
+          const c = CATEGORIES.find(x => x.name === name);
+          return c ? amountOf(nextPct(c)) : 0;
+        }}
+        onApply={(name, amount) => {
+          const c = CATEGORIES.find(x => x.name === name);
+          if (c) setAmount(c, amount);
+        }}
+      />
 
       <Suggestions cycle={cycle} budget={budget} nextPct={nextPct} onApply={(c, amount) => setAmount(c, amount)} />
 
@@ -129,6 +160,159 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
 
       <OneOffs next={next} costs={costs} onChange={setCosts} />
     </div>
+  );
+}
+
+/** What's left unplanned against the buffer goal (a share of income you keep free), with the goal adjustable. */
+function BufferBar({ left, income, pct, onPct }: { left: number; income: number; pct: number; onPct: (v: number) => void }) {
+  const { short } = useSettings();
+  const goal = (pct / 100) * income;
+  const state = left < 0 ? 'over' : left < goal ? 'short' : 'met';
+  const ink = state === 'over' ? C.redInk : state === 'short' ? C.amberInk : C.good;
+  const bar = state === 'over' ? C.red : state === 'short' ? C.amber : C.good;
+  const fill = goal > 0 ? Math.max(0, Math.min(1, left / goal)) : left >= 0 ? 1 : 0;
+  return (
+    <div className={s.bufferBox}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+        <span style={{ fontWeight: 600, marginRight: 'auto' }}>Buffer</span>
+        <span style={{ fontWeight: 650, color: ink, whiteSpace: 'nowrap' }}>
+          {state === 'over' ? `${short(-left)} over income` : `${short(left)} of ${short(goal)}`}
+        </span>
+      </div>
+      <span className={s.sumTrack} role="img" aria-label={`Buffer ${Math.round(fill * 100)}% of the goal`}>
+        <span className={s.sumFill} style={{ width: fill * 100 + '%', background: bar }} />
+      </span>
+      <label className={s.bufferGoal}>
+        <span>Goal</span>
+        <input type="range" min={0} max={25} step={1} value={pct} onChange={e => onPct(Number(e.target.value))} aria-label="Buffer goal, % of income" />
+        <span style={{ minWidth: 36, textAlign: 'right', fontWeight: 600 }}>{pct}%</span>
+      </label>
+    </div>
+  );
+}
+
+/**
+ * Maxie on the next cycle: "Plan it for me" sets an amount for each everyday category from your real spending,
+ * "Check my plan" reviews the plan you made. Either way, each amount is applied with a tap (or all at once) and
+ * can be undone.
+ */
+function PurrCheck({
+  payload,
+  amountOfCategory,
+  onApply,
+}: {
+  payload: () => unknown;
+  amountOfCategory: (name: string) => number;
+  onApply: (name: string, amount: number) => void;
+}) {
+  const { short } = useSettings();
+  const [state, setState] = useState<'' | 'working' | 'done'>('');
+  const [mode, setMode] = useState<'build' | 'check'>('build');
+  const [waited, setWaited] = useState(0);
+  const [result, setResult] = useState<PlanCheck | null>(null);
+  const [applied, setApplied] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (state !== 'working') return;
+    const t = setInterval(() => setWaited(w => w + 1), 1000);
+    return () => clearInterval(t);
+  }, [state]);
+  const run = async (m: 'build' | 'check') => {
+    setMode(m);
+    setState('working');
+    setWaited(0);
+    setApplied({});
+    try {
+      setResult(await checkPlan({ ...(payload() as object), mode: m }));
+    } catch (e) {
+      setResult({ error: 'api', detail: e instanceof Error ? e.message : String(e) });
+    }
+    setState('done');
+  };
+  // Changes that would actually change something.
+  const changes = (result?.changes ?? []).filter(c => applied[c.category] != null || Math.abs(amountOfCategory(c.category) - c.amount) >= 1);
+  const open = changes.filter(c => applied[c.category] == null);
+  const apply = (c: { category: string; amount: number }) => {
+    setApplied(a => ({ ...a, [c.category]: amountOfCategory(c.category) }));
+    onApply(c.category, c.amount);
+  };
+  return (
+    <Card style={{ gap: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Logo size={28} />
+        <span style={{ fontFamily: 'var(--font-serif)', fontSize: 19, fontWeight: 500, marginRight: 'auto' }}>Maxie</span>
+      </div>
+      {state === 'working' ? (
+        <span className={s.thinking} role="status" aria-live="polite">
+          <span className={s.thinkLabel}>{mode === 'build' ? (waited < 3 ? 'Reading this cycle…' : 'Setting your amounts…') : thinkingLabel(waited)}</span>
+          <ThinkingArcs />
+        </span>
+      ) : state === 'done' && result?.error ? (
+        <span style={{ fontSize: 14, color: C.redInk }}>{result.error === 'no_key' ? "I can't plan yet: I need my Gemini API key." : "Sorry, I couldn't do that just now. Try again in a minute?"}</span>
+      ) : state === 'done' && result?.verdict ? (
+        <p className={s.insightBody} style={{ fontSize: 17, lineHeight: '26px' }}>
+          {result.verdict}
+        </p>
+      ) : (
+        <p className={s.insightBody} style={{ fontSize: 17, lineHeight: '26px' }}>
+          Want me to plan next cycle from what you actually spend? I'll keep your buffer covered.
+        </p>
+      )}
+      {changes.map(c => {
+        const done = applied[c.category] != null;
+        const from = done ? applied[c.category] : amountOfCategory(c.category);
+        return (
+          <div key={c.category} className={s.changeRow}>
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
+              <span style={{ fontWeight: 600 }}>
+                {c.category}{' '}
+                <span style={{ fontWeight: 500, color: C.textMuted }}>
+                  {short(from)} → {short(c.amount)}
+                </span>
+              </span>
+              {c.why && <span style={{ fontSize: 13, color: C.textMuted }}>{c.why}</span>}
+            </span>
+            {done ? (
+              <button
+                type="button"
+                className={s.textBtnSm}
+                onClick={() => {
+                  onApply(c.category, applied[c.category]);
+                  setApplied(a => Object.fromEntries(Object.entries(a).filter(([k]) => k !== c.category)));
+                }}
+              >
+                Undo
+              </button>
+            ) : (
+              <button type="button" className={s.btnOutlineSm} onClick={() => apply(c)}>
+                Apply
+              </button>
+            )}
+          </div>
+        );
+      })}
+      {state !== 'working' && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {open.length > 1 && (
+            <button type="button" className={s.btnPrimarySm} onClick={() => open.forEach(apply)}>
+              Apply all {open.length}
+            </button>
+          )}
+          {state !== 'done' && (
+            <button type="button" className={s.btnPrimarySm} onClick={() => run('build')}>
+              Plan it for me
+            </button>
+          )}
+          <button type="button" className={s.btnOutlineSm} onClick={() => run('check')}>
+            {state === 'done' && mode === 'check' ? 'Check again' : 'Check my plan'}
+          </button>
+          {state === 'done' && (
+            <button type="button" className={s.textBtnSm} onClick={() => run('build')}>
+              Plan it again
+            </button>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -314,7 +498,7 @@ function OneOffs({ next, costs, onChange }: { next: Cycle; costs: PlannedCost[];
           </div>
         </form>
       ) : (
-        <button type="button" className={s.catFold} style={{ color: C.accent800, fontWeight: 600, borderTop: costs.length ? undefined : 'none', paddingLeft: 0 }} onClick={() => setAdding(true)}>
+        <button type="button" className={s.catFold} style={{ color: C.clayInk, fontWeight: 600, borderTop: costs.length ? undefined : 'none', paddingLeft: 0 }} onClick={() => setAdding(true)}>
           <Icon d={IC.plus} size={14} />
           Add a one-off cost
         </button>

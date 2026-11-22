@@ -95,7 +95,7 @@ export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
                 borderRadius: 999,
                 border: 'none',
                 background: rg === k ? C.surface : 'transparent',
-                color: rg === k ? C.accent800 : C.textMuted,
+                color: rg === k ? C.clayInk : C.textMuted,
                 boxShadow: rg === k ? '0 1px 3px rgba(23,32,27,.12)' : 'none',
               }}
             >
@@ -120,7 +120,7 @@ export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
           Contributed <strong>{dF(hp.c)}</strong>
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 3, background: C.accentTint }} />
+          <span style={{ width: 12, height: 12, borderRadius: 3, background: C.goodTint }} />
           Gain{' '}
           <strong style={{ color: plInk(hg) }}>
             {dS(hg, true)} ({fmtPct((hg / hp.c) * 100)})
@@ -140,7 +140,7 @@ export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
             <div key={k} style={{ position: 'absolute', left: 0, right: 0, top: pc(100 - k * 25), borderTop: `1px solid ${C.divider}` }} />
           ))}
           <svg viewBox="0 0 1000 300" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }}>
-            <path d={gainArea} fill="#cdeee6" opacity={0.7} />
+            <path d={gainArea} fill="var(--clay-soft)" opacity={0.7} />
             <path d={cPath} fill="none" style={{ stroke: C.textMuted }} strokeWidth={2} strokeDasharray="6 5" vectorEffect="non-scaling-stroke" />
             <path d={vPath} fill="none" style={{ stroke: C.accent700 }} strokeWidth={3} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
           </svg>

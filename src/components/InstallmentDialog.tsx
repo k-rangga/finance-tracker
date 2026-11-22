@@ -32,7 +32,7 @@ export function InstallmentDialog({ tx, plan, onSave, onUndo, onClose }: Props) 
   const parse = (text: string) => (idr ? Number(text.replace(/\D/g, '')) : Number(text.replace(/[^\d.]/g, '')));
   const price = tx.amount;
   /** Exact amounts here (Rp 82.500, not Rp 83.000): this is where you match your statement. */
-  const exact = (v: number) => (idr ? 'Rp ' + Math.round(v).toLocaleString('id-ID') : full(v));
+  const exact = (v: number) => (idr ? 'Rp' + Math.round(v).toLocaleString('id-ID') : full(v));
 
   const [months, setMonths] = useState(plan?.amounts.length ?? 6);
   const [monthsText, setMonthsText] = useState(String(plan?.amounts.length ?? 6));
@@ -179,7 +179,7 @@ export function InstallmentDialog({ tx, plan, onSave, onUndo, onClose }: Props) 
         <span style={{ color: C.textSoft }}>
           Total {exact(paid)}, price {exact(price)}
         </span>
-        <span style={{ fontWeight: 600, color: interest <= -tiny ? C.redInk : interest >= tiny ? C.amberInk : C.accent800 }}>
+        <span style={{ fontWeight: 600, color: interest <= -tiny ? C.redInk : interest >= tiny ? C.amberInk : C.good }}>
           {interest <= -tiny ? `${exact(-interest)} less than the price` : interest >= tiny ? `${exact(interest)} interest` : 'No interest'}
         </span>
       </div>

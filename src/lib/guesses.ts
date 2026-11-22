@@ -21,7 +21,7 @@ export const guessCategories = (payload: { items: unknown[]; examples: unknown[]
 export const needsSorting = (t: TxView) => t.cat === UNSORTED && !t.isIncome && !t.isTransfer && !t.isCcPayment && !t.isInstallment;
 
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const rp = (v: number) => 'Rp ' + Math.round(v).toLocaleString('id-ID');
+const rp = (v: number) => 'Rp' + Math.round(v).toLocaleString('id-ID');
 
 /** What you already sorted, by merchant: the pattern guesses learn from it. */
 export function sortedByMerchant(all: TxView[]) {
