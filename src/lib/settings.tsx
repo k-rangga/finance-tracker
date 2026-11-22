@@ -53,6 +53,8 @@ export type Settings = {
   trackedInstallments?: TrackedInstallment[];
   /** Charges you said aren't installments ("account|merchant"), so they aren't suggested again. */
   notInstallments?: string[];
+  /** The language Maxie answers in when it can't tell from what you wrote (plans, checks): English or Bahasa Indonesia. */
+  maxieLanguage?: 'en' | 'id';
   /** Where you live (e.g. "Jakarta Selatan"), so Maxie can compare your spending with local prices. */
   city?: string;
   /** When you're paid: your pay cycle runs from one payday to the day before the next. Default the 25th. */

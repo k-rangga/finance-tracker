@@ -241,8 +241,10 @@ export function computeBudget(args: {
     const prevMine = prevTransactions.filter(t => (recat[t.id] ?? t.category) === c.name);
     const prev = [0, 1, 2, 3].map(w => sum(prevMine.filter(t => weekOf(prevCycle.offsetOf(t.date)) === w).map(netOf)));
     const spent = sum(cur);
-    // Installments: the plan is what's billed this cycle (paid so far plus still due), so it's always covered.
-    const limit = c.auto ? spent + sum(bills.filter(b => b.category === c.name).map(b => b.amount)) : ofIncome(c.limitPct);
+    // Installment payments count in their own category, and its plan grows by them (paid so far plus still due),
+    // so a payment you already committed to never reads as overspending.
+    const planned = sum(mine.filter(t => t.plan && cycle.offsetOf(t.date) >= 0).map(t => t.net)) + sum(bills.filter(b => b.source === 'Installment' && b.category === c.name).map(b => b.amount));
+    const limit = c.auto ? spent + sum(bills.filter(b => b.category === c.name).map(b => b.amount)) : ofIncome(c.limitPct) + planned;
     const used = limit ? (spent / limit) * 100 : 0;
     const lastSameDays = sum(prev.slice(0, cycle.weekIdx)) + prev[cycle.weekIdx] * weekFrac;
     // An auto plan reads as its share of income too, so the plan's percentages add up.

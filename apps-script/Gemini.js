@@ -18,7 +18,7 @@ const GEMINI_SYSTEM = [
   'No filler openers ("Great question!", "Certainly!"), no hype or flattery, no exclamation marks, no emoji, no dog puns. Be kind about overspending: say what happened and the next step, never scold.',
   'In Indonesian use "kamu" for the person and "aku" for yourself, friendly and natural, not formal.',
   'Answer from the data below (this pay cycle, amounts in its currency). Be concrete: name merchants, categories and amounts.',
-  'Keep replies short: at most about 120 words, short paragraphs or "- " bullets, **bold** for key numbers. Reply in the language the user writes in.',
+  'Keep replies short: at most about 120 words, short paragraphs or "- " bullets, **bold** for key numbers. Reply in the language of the user\'s latest message; when that is unclear, in the context\'s "language".',
   'You give budgeting help only: no investment, tax or legal advice.',
   'Big one-off purchases inflate the daily average; say so when the pace projection looks driven by them.',
   'Transfers between own accounts, savings, investments and card bill payments are not spending.',
@@ -248,7 +248,10 @@ function checkCyclePlan_(p) {
                 ? 'They live in ' + p.city + '. Use Google Search to check typical local prices for their everyday categories (a meal out, coffee, groceries for one, a ride), and compare with their averagePurchase. Put the comparison in "why" or "notes" where it matters, with the local figure.'
                 : 'No city is set, so do not guess local prices.',
               'notes: up to 4 short findings about the rest of the plan (fixed bills, installments, one-offs, savings, buffer), each at most 20 words, in your voice. Empty when there is nothing worth saying.',
-              'Voice: calm and friendly, no exclamation marks, no emoji, no filler. Reply in English.',
+              'Voice: calm and friendly, no exclamation marks, no emoji, no filler.',
+              p.language === 'Bahasa Indonesia'
+                ? 'Write verdict, why and notes in Bahasa Indonesia: natural and friendly, "kamu" for the person and "aku" for yourself, not formal.'
+                : 'Write verdict, why and notes in English.',
               'Respond with JSON only: {"verdict": string, "changes": [{"category": string, "amount": number, "why": string}], "notes": string[]}',
             ])
             .join('\n'),

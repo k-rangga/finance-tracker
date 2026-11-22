@@ -88,11 +88,10 @@ export default function App() {
   const recat = useMemo(() => {
     const out = { ...fixedAndRules };
     for (const id of Object.keys(installments)) out[id] = INSTALLMENT_CATEGORY;
-    for (const list of matched.values()) for (const t of list) out[t.id] = INSTALLMENTS_CATEGORY;
     return out;
-  }, [fixedAndRules, installments, matched]);
+  }, [fixedAndRules, installments]);
   /** Every installment plan's payments: the one schedule Fixed bills, Next cycle, transactions and card bills read. */
-  const plans = useMemo(() => planViews(payments, keptRaw, tracked, matched, today), [payments, keptRaw, tracked, matched, today]);
+  const plans = useMemo(() => planViews(payments, keptRaw, tracked, matched, today, t => recat[t.id] ?? t.category), [payments, keptRaw, tracked, matched, today, recat]);
   /** Sub-categories: yours, else your rules', else a guess from the merchant name. */
   const subs = useMemo(() => resolveSubs(all, t => recat[t.id] ?? t.category, picked, ruleSubs, settings.subcategories), [all, recat, picked, ruleSubs, settings.subcategories]);
   const transactions = useMemo(() => inCycle(all, cycle), [all, cycle]);

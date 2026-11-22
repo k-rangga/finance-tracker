@@ -1,31 +1,18 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import s from '../styles/ui.module.css';
-import { FoundInstallments, PlanLines } from '../components/Plans';
-import { Badge, IconChip } from '../components/ui';
+import { FoundInstallments } from '../components/Plans';
+import { BillItem, BudgetCard, InstallmentsGroup, useInstallmentTotals } from './categoryCards';
+import { Badge } from '../components/ui';
 import { Celebrate } from '../components/Delight';
 import { IC, Icon } from '../components/Icon';
-import { categoryStatus, changeBadge, iconChip, type Budget, type CatView, type TxView } from '../lib/budget';
+import { categoryStatus, changeBadge, type Budget, type CatView, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { dayMonth, pc, sum, toISO } from '../lib/format';
+import { sum, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
-import { catFilter } from '../data/categories';
 import { useSetLimits } from '../lib/limits';
-import {
-  ChallengeBox,
-  ChallengeChip,
-  challengeState,
-  MoveBudget,
-  SectionHead,
-  startChallenge,
-  StreakChip,
-  streaks,
-  Summary,
-  TopMerchants,
-  useSwipeRight,
-  WeekBars,
-} from './categoriesExtras';
+import { ChallengeBox, challengeState, SectionHead, startChallenge, Summary } from './categoriesExtras';
 
 type Mode = 'cycle' | 'week';
 
@@ -90,7 +77,8 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
   const fixedAll = mode === 'cycle' ? budget.cats.filter(c => c.type === 'fixed').map(view) : [];
   /** A fixed bill shows once it has an amount, a payment or a bill coming; the rest wait under "Add a fixed bill". */
   const isSet = (r: Row) => r.lim > 0 || r.cur > 0 || budget.bills.some(b => b.category === r.c.name);
-  const fixed = fixedAll.filter(isSet);
+  // Installments are a group of plans (InstallmentsGroup), their payments counted in their own categories.
+  const fixed = fixedAll.filter(r => isSet(r) && !r.c.auto);
   // Installments plan themselves from your plans, so they're never added by hand.
   const addable = fixedAll.filter(r => !isSet(r) && !r.c.auto);
   const [adding, setAdding] = useState<string | null>(null);
@@ -107,10 +95,6 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
 
   /** Where spending should be by today, as a share of a limit: days gone in the cycle, or in the week. */
   const todayFrac = mode === 'cycle' ? cycle.dayN / cycle.cycleDays : Math.min(1, (cycle.dayIdx - wi * 7 + 1) / 7);
-  const streakOf = useMemo(
-    () => streaks(allTxs, cycle, Object.fromEntries(budget.cats.filter(c => c.type === 'variable').map(c => [c.name, c.limit]))),
-    [allTxs, cycle, budget.cats],
-  );
   const challenges = settings.challenges ?? [];
   const challengeOf = (name: string) => {
     const ch = challenges.find(x => x.category === name);
@@ -145,24 +129,34 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
   const isPaid = (r: Row) => r.cur > 0 || marked.has(r.c.name);
 
   const toggle = (name: string) => setOpen(open === name ? null : name);
-  const row = (r: Row) => (
-    <CategoryRow
+
+  /** An everyday category as a card (Maxie's budget detail design). */
+  const card = (r: Row) => (
+    <BudgetCard
       key={r.c.name}
       r={r}
-      mode={mode}
       cycle={cycle}
       open={open === r.c.name}
       onToggle={() => toggle(r.c.name)}
-      todayFrac={todayFrac}
-      streak={streakOf[r.c.name]}
-      challenge={mode === 'cycle' ? challengeOf(r.c.name) : null}
-      onChallenge={on => setChallenge(r.c.name, on)}
       donors={mode === 'cycle' && r.c.type === 'variable' ? donorsFor(r.c.name) : []}
       onMove={(from, amount) => move(from, r.c.name, amount)}
       onShowTransactions={onShowTransactions}
       onEditCategory={onEditCategory}
+      extra={
+        r.c.name === UNSORTED && r.mine.length > 0 ? (
+          <button type="button" className={s.btnOutlineSm} style={{ alignSelf: 'flex-start' }} onClick={() => onShowTransactions(r.c.name)}>
+            Sort {r.mine.length} {r.mine.length === 1 ? 'transaction' : 'transactions'}
+          </button>
+        ) : mode === 'cycle' && r.c.type === 'variable' ? (
+          <div style={{ alignSelf: 'flex-start' }}>
+            <ChallengeBox name={r.c.name} state={challengeOf(r.c.name)} onStart={() => setChallenge(r.c.name, true)} onClear={() => setChallenge(r.c.name, false)} />
+          </div>
+        ) : undefined
+      }
     />
   );
+  const inst = useInstallmentTotals(cycle);
+  const [instOpen, setInstOpen] = useState(false);
 
   return (
     <div className={s.splitGrid}>
@@ -220,19 +214,19 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
               ) : undefined
             }
           />
-          <div className={s.cardFlush} style={{ padding: '4px 0' }}>
-            {used.length === 0 && <div style={{ padding: '16px 20px', fontSize: 14, color: C.textMuted }}>Nothing spent yet {mode === 'cycle' ? 'this cycle' : 'this week'}.</div>}
-            {used.map(row)}
+          <div className={s.mxCards}>
+            {used.length === 0 && <div className={s.mxCard} style={{ padding: '16px 20px', fontSize: 14, color: C.textMuted }}>Nothing spent yet {mode === 'cycle' ? 'this cycle' : 'this week'}.</div>}
+            {used.map(card)}
+            {showUnused && unused.map(card)}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {unused.length > 0 && (
-              <>
-                <button type="button" className={s.catFold} aria-expanded={showUnused} onClick={() => setShowUnused(!showUnused)}>
-                  <Icon d={IC.chevDown} size={14} style={{ transform: showUnused ? 'rotate(180deg)' : 'none' }} />
-                  Not used yet ({unused.length}): {unused.map(r => r.c.name).join(', ')}
-                </button>
-                {showUnused && unused.map(row)}
-              </>
+              <button type="button" className={s.catFold} style={{ border: 'none' }} aria-expanded={showUnused} onClick={() => setShowUnused(!showUnused)}>
+                <Icon d={IC.chevDown} size={14} style={{ transform: showUnused ? 'rotate(180deg)' : 'none' }} />
+                {showUnused ? 'Hide unused' : `Not used yet (${unused.length}): ${unused.map(r => r.c.name).join(', ')}`}
+              </button>
             )}
-            <button type="button" className={s.catFold} onClick={onNewCategory} style={{ color: C.clayInk, fontWeight: 600 }}>
+            <button type="button" className={s.catFold} onClick={onNewCategory} style={{ color: C.clayInk, fontWeight: 600, border: 'none' }}>
               <Icon d={IC.plus} size={14} />
               New category
             </button>
@@ -245,43 +239,44 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
             <SectionHead
               title="Fixed bills"
               right={
-                fixed.length > 0 ? (
-                  fixed.every(isPaid) ? (
-                    <span style={{ color: C.good, fontWeight: 600 }}>All paid ✓</span>
+                fixed.length > 0 || inst.planned > 0 ? (
+                  fixed.every(isPaid) && inst.paid >= inst.planned ? (
+                    <span style={{ color: C.good, fontWeight: 600 }}>All paid</span>
                   ) : (
-                    `${short(sum(fixed.filter(isPaid).map(r => r.cur || r.lim)))} of ${short(sum(fixed.map(r => Math.max(r.lim, r.cur))))} paid`
+                    `${short(sum(fixed.filter(isPaid).map(r => r.cur || r.lim)) + inst.paid)} of ${short(sum(fixed.map(r => Math.max(r.lim, r.cur))) + inst.planned)} paid`
                   )
                 ) : undefined
               }
             />
             <Celebrate id={'bills-' + cycleKey} when={fixed.length > 0 && fixed.every(isPaid)} />
-            <div className={s.cardFlush} style={{ padding: '4px 0' }}>
-              {fixed.length === 0 && (
+            <div className={s.mxBills}>
+              {fixed.length === 0 && inst.planned === 0 && (
                 <div style={{ padding: '16px 20px', fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>
                   No fixed bills yet. Add what you pay every month (rent, electricity, insurance) so your plan sets it aside.
                 </div>
               )}
               {billOrder(fixed, budget, isPaid).map(r => (
-                <BillRow
+                <BillItem
                   key={r.c.name}
                   r={r}
-                  budget={budget}
                   cycle={cycle}
+                  due={budget.bills.filter(x => x.category === r.c.name).sort((x, y) => x.date.getTime() - y.date.getTime())}
                   open={open === r.c.name}
                   onToggle={() => toggle(r.c.name)}
-                  onShowTransactions={onShowTransactions}
-                  onEditCategory={onEditCategory}
-                  onAmount={amount => setAmount(r.c.name, amount, r.lim)}
                   marked={marked.has(r.c.name)}
                   onMark={() => toggleMarked(r.c.name)}
+                  onAmount={amount => setAmount(r.c.name, amount, r.lim)}
+                  editor={<AmountEditor key={r.lim} label="Each month" initial={r.lim} onSave={amount => setAmount(r.c.name, amount, r.lim)} onRemove={() => setAmount(r.c.name, 0, r.lim)} />}
+                  onShowTransactions={onShowTransactions}
                 />
               ))}
+              <InstallmentsGroup cycle={cycle} open={instOpen} onToggle={() => setInstOpen(!instOpen)} />
               <button
                 type="button"
                 className={s.catFold}
                 aria-expanded={adding != null}
                 onClick={() => setAdding(adding == null ? '' : null)}
-                style={{ color: C.clayInk, fontWeight: 600 }}
+                style={{ color: C.clayInk, fontWeight: 600, borderTop: '1px solid var(--line)' }}
               >
                 <Icon d={IC.plus} size={14} />
                 Add a fixed bill
@@ -342,210 +337,11 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
   );
 }
 
-/** "↑ 12%" against last time, only when there is a last time. */
-function ChangeChip({ cur, last }: { cur: number; last: number }) {
-  if (last <= 0 || cur === last) return null;
-  const ch = changeBadge(cur, last);
-  return <span style={{ fontSize: 12, fontWeight: 600, color: ch.ink, whiteSpace: 'nowrap' }}>{ch.label}</span>;
-}
-
-/** One line per category: name, how much of its limit, and a bar with where you should be by today. */
-function CategoryRow({
-  r,
-  mode,
-  cycle,
-  open,
-  onToggle,
-  todayFrac,
-  streak,
-  challenge,
-  onChallenge,
-  donors,
-  onMove,
-  onShowTransactions,
-  onEditCategory,
-}: {
-  r: Row;
-  mode: Mode;
-  cycle: Cycle;
-  open: boolean;
-  onToggle: () => void;
-  todayFrac: number;
-  streak?: number;
-  challenge: ReturnType<typeof challengeState> | null;
-  onChallenge: (on: boolean) => void;
-  donors: { name: string; room: number }[];
-  onMove: (from: string, amount: number) => void;
-  onShowTransactions: (cat: string) => void;
-  onEditCategory: (name: string) => void;
-}) {
-  const { full, short } = useSettings();
-  const phone = useIsPhone();
-  // Short amounts in the list ("Rp1.8M / Rp2.1M" on phones, so the name keeps its room); exact ones when opened.
-  const fit = (v: number) => (phone ? short(v).replace(/^Rp\s?/, '') : short(v));
-  const { c, cur, last, lim, scale, mine } = r;
-  const toSort = c.name === UNSORTED ? mine.length : 0;
-  const expected = lim * todayFrac;
-  // BudgetMeter: the category's own colour while on pace; amber when running ahead of today's mark; red past the
-  // limit, with a word and an icon so the state never rests on colour alone.
-  const over = lim > 0 && cur > lim;
-  const bar = over ? C.red : expected > 0 && cur > expected * 1.1 ? C.amber : c.color;
-  return (
-    <div id={'cat-' + c.name}>
-      <button type="button" className={s.catRow} aria-expanded={open} onClick={onToggle}>
-        <span className={s.catIcon}>
-          <IconChip d={c.icon} bg={iconChip(c.name).bg} ink={iconChip(c.name).ink} size={32} iconSize={15} />
-        </span>
-        <span className={s.catName}>
-          <span className={s.ellipsis} style={{ fontSize: 14, fontWeight: 500 }}>
-            {c.name}
-          </span>
-          {/* Phones: the change against last time is in the opened row, so the name keeps its room. */}
-          {!phone && <ChangeChip cur={cur} last={last} />}
-          {over && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: C.redInk, whiteSpace: 'nowrap', alignSelf: 'center' }}>
-              <Icon d={IC.alert} size={13} /> {short(cur - lim)} over
-            </span>
-          )}
-          {cur <= lim && <StreakChip n={streak} />}
-          {challenge && <ChallengeChip text={challenge.text} kind={challenge.key} />}
-        </span>
-        <span className={s.catBar} title={last > 0 ? `Last ${mode === 'cycle' ? 'cycle by now' : 'week'}: ${full(last)}` : undefined}>
-          <span className={s.track} style={{ display: 'block', height: 6 }}>
-            <span className={s.fill} style={{ width: pc((cur / scale) * 100), background: bar }} />
-            {/* The limit only needs marking once you're past it. */}
-            {cur > lim && <span className={s.tick} style={{ left: pc((lim / scale) * 100) }} />}
-            {lim > 0 && todayFrac > 0 && todayFrac < 1 && cur <= lim && <span className={s.todayMark} style={{ left: pc((expected / scale) * 100) }} />}
-          </span>
-        </span>
-        <span className={s.catAmount}>
-          <span style={{ fontWeight: 600, color: C.text }}>{fit(cur)}</span> / {fit(lim)}
-        </span>
-        <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ gridArea: 'chev', transform: open ? 'rotate(180deg)' : 'none' }} />
-      </button>
-      {toSort > 0 && !open && (
-        <button type="button" className={s.catSortLink} onClick={() => onShowTransactions(c.name)}>
-          {toSort} {toSort === 1 ? 'transaction' : 'transactions'} to sort <Icon d={IC.arrowRight} size={13} />
-        </button>
-      )}
-      {open && (
-        <CategoryDetail r={r} mode={mode} cycle={cycle} toSort={toSort} onShowTransactions={onShowTransactions} onEditCategory={onEditCategory}>
-          {donors.length > 0 && <MoveBudget name={c.name} need={Math.max(0, cur - lim)} donors={donors} onMove={onMove} />}
-          {mode === 'cycle' && c.type === 'variable' && <ChallengeBox name={c.name} state={challenge} onStart={() => onChallenge(true)} onClear={() => onChallenge(false)} />}
-        </CategoryDetail>
-      )}
-    </div>
-  );
-}
-
 /** Fixed bills sorted for a checklist: due soonest first, then not seen yet, then paid. */
 function billOrder(rows: Row[], b: Budget, isPaid: (r: Row) => boolean) {
   const due = (r: Row) => b.bills.filter(x => x.category === r.c.name).sort((x, y) => x.date.getTime() - y.date.getTime())[0];
   const key = (r: Row) => (isPaid(r) ? 2 : due(r) ? 0 : 1);
   return [...rows].sort((x, y) => key(x) - key(y) || (due(x)?.date.getTime() ?? 0) - (due(y)?.date.getTime() ?? 0) || x.c.name.localeCompare(y.c.name));
-}
-
-/** A fixed bill: paid (✓, from a payment or ticked by hand), due on a date (from last cycle's charge), or not paid yet. */
-function BillRow({
-  r,
-  budget: b,
-  cycle,
-  open,
-  onToggle,
-  onShowTransactions,
-  onEditCategory,
-  onAmount,
-  marked,
-  onMark,
-}: {
-  r: Row;
-  budget: Budget;
-  cycle: Cycle;
-  open: boolean;
-  onToggle: () => void;
-  onShowTransactions: (cat: string) => void;
-  onEditCategory: (name: string) => void;
-  /** Set the monthly amount (0 removes it from fixed bills). */
-  onAmount: (amount: number) => void;
-  /** Ticked off by hand this cycle. */
-  marked: boolean;
-  onMark: () => void;
-}) {
-  const { short } = useSettings();
-  const { c, cur, lim } = r;
-  const due = b.bills.filter(x => x.category === c.name).sort((x, y) => x.date.getTime() - y.date.getTime());
-  const dueTotal = sum(due.map(x => x.amount));
-  const inDays = due[0] ? cycle.offsetOf(due[0].date) - cycle.dayIdx : 0;
-  const state = cur > 0 || marked ? 'paid' : due.length ? 'due' : 'none';
-  // Swipe right on a phone to tick it off (or untick one you ticked); a payment ticks it by itself.
-  const canMark = cur === 0 && !c.auto;
-  const swipe = useSwipeRight(() => canMark && onMark());
-  // One fact per line: paid, what's left to pay, over plan, or when it's due.
-  const over = lim > 0 && cur > lim ? cur - lim : 0;
-  const line =
-    state === 'paid'
-      ? over
-        ? `${short(over)} over plan`
-        : due.length
-          ? `${short(dueTotal)} left to pay`
-          : cur > 0
-            ? lim > 0
-              ? 'Paid'
-              : 'Paid, no amount planned'
-            : 'Ticked off by you'
-      : state === 'due'
-        ? inDays <= 0
-          ? 'Due today'
-          : inDays === 1
-            ? 'Due tomorrow'
-            : `Due ${dayMonth(due[0].date)}`
-        : 'Not paid yet';
-  return (
-    <div id={'cat-' + c.name} className={s.billWrap}>
-      {swipe.swiping && (
-        <span className={s.billSwipeHint} aria-hidden="true">
-          {marked ? 'Untick' : 'Paid ✓'}
-        </span>
-      )}
-      <button
-        type="button"
-        className={s.billRow}
-        aria-expanded={open}
-        onClick={() => !swipe.swiping && onToggle()}
-        {...swipe.handlers}
-        style={swipe.dx ? { transform: `translateX(${swipe.dx}px)` } : undefined}
-      >
-        <span className={s.billMark} data-state={state} aria-hidden="true">
-          <Icon d={state === 'paid' ? 'M20 6 9 17l-5-5' : IC.calendar} size={15} strokeWidth={state === 'paid' ? 3 : 2} />
-        </span>
-        <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
-          <span style={{ fontSize: 14, fontWeight: 500 }}>{c.name}</span>
-          <span style={{ fontSize: 13, whiteSpace: 'nowrap', color: over ? C.redInk : state === 'due' && inDays <= 3 ? C.amberInk : C.textMuted }}>{line}</span>
-        </span>
-        <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', color: state === 'none' ? C.textMuted : C.text }}>
-          {state === 'paid' ? short(cur || lim) : state === 'due' ? short(dueTotal) : short(lim)}
-        </span>
-        <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ flex: 'none', transform: open ? 'rotate(180deg)' : 'none' }} />
-      </button>
-      {open && !c.auto && (
-        <div className={s.billAdd} style={{ borderTop: 'none', paddingTop: 0 }}>
-          <AmountEditor label="Each month" initial={lim} onSave={onAmount} onRemove={() => onAmount(0)} />
-          {canMark && (
-            <button type="button" className={s.btnOutlineSm} style={{ alignSelf: 'flex-start' }} onClick={onMark}>
-              {marked ? 'Mark as not paid' : '✓ Mark as paid'}
-            </button>
-          )}
-        </div>
-      )}
-      {/* Installments: each plan on its own line, from the same schedule as Next cycle and the transactions. */}
-      {c.auto && !open && (
-        <div className={s.planLinesWrap}>
-          <PlanLines cycle={cycle} />
-        </div>
-      )}
-      {open && <CategoryDetail r={r} mode="cycle" cycle={cycle} toSort={0} onShowTransactions={onShowTransactions} onEditCategory={onEditCategory} />}
-    </div>
-  );
 }
 
 /** A monthly amount typed in rupiah (or dollars), saved as the bill's plan. */
@@ -590,83 +386,6 @@ export function AmountEditor({ label, initial, onSave, onCancel, onRemove }: { l
         </button>
       )}
     </form>
-  );
-}
-
-/** Opened row: the last 7 days, where the money went, against last time, and what you can do about it. */
-function CategoryDetail({
-  r,
-  mode,
-  cycle,
-  toSort,
-  onShowTransactions,
-  onEditCategory,
-  children,
-}: {
-  r: Row;
-  mode: Mode;
-  cycle: Cycle;
-  toSort: number;
-  onShowTransactions: (cat: string) => void;
-  onEditCategory: (name: string) => void;
-  /** Extra actions (moving budget, a challenge). */
-  children?: ReactNode;
-}) {
-  const { full, short, settings } = useSettings();
-  const { c, cur, last, mine } = r;
-  // What it went on inside the category, biggest first; untagged spending is "Other".
-  const subNames = settings.subcategories[c.name] ?? [];
-  const bySub = subNames.length
-    ? [...subNames, null]
-        .map(sub => ({ sub, total: sum(mine.filter(t => (t.sub ?? null) === sub).map(t => t.net)) }))
-        .filter(x => x.total > 0)
-        .sort((x, y) => y.total - x.total)
-    : [];
-  return (
-    <div className={`fade-in ${s.catDetail}`}>
-      {c.type === 'variable' && mine.length > 0 && <WeekBars mine={mine} today={cycle.today} color={c.color} />}
-      {bySub.length > 0 && cur > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span className={s.statLabel}>By sub-category</span>
-          {bySub.map(x => (
-            <button key={x.sub ?? ''} type="button" className={s.subRow} onClick={() => onShowTransactions(catFilter(c.name, x.sub))} title={`See ${x.sub ?? 'other ' + c.name.toLowerCase()} transactions`}>
-              <span style={{ display: 'flex', alignItems: 'baseline', gap: 10, fontSize: 14 }}>
-                <span className={s.ellipsis} style={{ marginRight: 'auto', minWidth: 0, color: x.sub ? C.text : C.textMuted }}>
-                  {x.sub ?? 'Other'}
-                </span>
-                <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{short(x.total)}</span>
-                <span style={{ fontSize: 13, color: C.textMuted, minWidth: 36, textAlign: 'right' }}>{Math.round((x.total / cur) * 100)}%</span>
-              </span>
-              <span className={s.track} style={{ display: 'block', height: 4 }}>
-                <span className={s.fill} style={{ width: pc((x.total / cur) * 100), background: x.sub ? c.color : C.textFaint }} />
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-      {mine.length === 0 ? (
-        <span style={{ fontSize: 13, color: C.textMuted }}>Nothing spent here {mode === 'cycle' ? 'this cycle' : 'this week'}.</span>
-      ) : c.auto ? (
-        <PlanLines cycle={cycle} />
-      ) : (
-        <TopMerchants mine={mine} />
-      )}
-      {last > 0 && (
-        <span style={{ fontSize: 13, color: C.textMuted }}>
-          {mode === 'cycle' ? `Last cycle by day ${cycle.dayN}` : 'Last week'}: {full(last)}{' '}
-          <span style={{ color: changeBadge(cur, last).ink, fontWeight: 600 }}>({changeBadge(cur, last).label})</span>
-        </span>
-      )}
-      {children && <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>{children}</div>}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" className={s.btnOutlineSm} onClick={() => onShowTransactions(c.name)}>
-          {toSort > 0 ? `Sort ${toSort} ${toSort === 1 ? 'transaction' : 'transactions'}` : 'Transactions'}
-        </button>
-        <button type="button" className={s.btnOutlineSm} onClick={() => onEditCategory(c.name)}>
-          {c.custom ? 'Edit category' : 'Adjust limit'}
-        </button>
-      </div>
-    </div>
   );
 }
 

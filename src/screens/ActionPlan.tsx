@@ -184,7 +184,8 @@ function MaxiePlan({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
     setWaited(0);
     setProblem(null);
     try {
-      const a = await askGemini([{ role: 'user', text: PLAN_REQUEST }], {
+      const lang = settings.maxieLanguage === 'id' ? ' Write it in Bahasa Indonesia (kamu and aku, friendly).' : ' Write it in English.';
+      const a = await askGemini([{ role: 'user', text: PLAN_REQUEST + lang }], {
           ...chatContext({ cycle, budget: b, settings, notes, withNotes: false }),
           spendingByCategory: Object.fromEntries(b.cats.filter(c => c.spent > 0).map(c => [c.name, spendingProfile(cycle, b, c.name)])),
         },

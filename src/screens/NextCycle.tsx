@@ -90,14 +90,39 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
         <h2 className={s.h2}>What's already promised</h2>
         <div className={s.planLines}>
           <Line label="Income" value={full(income)} strong />
-          <Line
-            label="Fixed bills"
-            value={'− ' + full(fixedTotal)}
-            note={known.subscriptions.length ? 'Subscriptions due: ' + known.subscriptions.map(b => `${tidyName(b.title)} ${dayMonth(b.date)}`).join(', ') : undefined}
-          />
+          <Line label="Fixed bills" value={'− ' + full(fixedTotal)} />
+          {/* Subscriptions due in that cycle, one per line (they're part of the fixed bills above). */}
+          {known.subscriptions.length > 0 && (
+            <>
+              <span className={s.planSubHead}>Subscriptions due</span>
+              {[...known.subscriptions]
+                .sort((a, b) => a.date.getTime() - b.date.getTime())
+                .map(b => (
+                  <div key={b.title + b.date.getTime()} className={s.planSubLine}>
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
+                      <span className={s.ellipsis}>{tidyName(b.title)}</span>
+                      <span style={{ fontSize: 13, color: C.textMuted }}>
+                        {b.category}, due {dayMonth(b.date)}
+                      </span>
+                    </span>
+                    <span style={{ whiteSpace: 'nowrap' }}>{full(b.amount)}</span>
+                  </div>
+                ))}
+            </>
+          )}
           {installments > 0 && <Line label="Installments" value={'− ' + full(installments)} />}
           {/* Each plan's payment in that cycle: the same schedule as Fixed bills and the transactions. */}
-          {[...known.installments]
+          {[...known.installments
+            // Price and interest of one payment together, on one line (in the price's category).
+            .reduce((m, b) => {
+              const k = b.title.replace(/ interest$/, '');
+              const x = m.get(k);
+              if (x) x.amount += b.amount;
+              else m.set(k, { ...b, title: k, category: b.title.endsWith(' interest') ? '' : b.category });
+              if (!b.title.endsWith(' interest')) m.get(k)!.category = b.category;
+              return m;
+            }, new Map<string, Bill>())
+            .values()]
             .sort((a, b) => a.date.getTime() - b.date.getTime())
             .map(b => {
               const m = b.title.match(/^(.*) \((\d+)\/(\d+)\)$/);
@@ -106,7 +131,7 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
                     <span className={s.ellipsis}>{m ? m[1] : b.title}</span>
                     <span style={{ fontSize: 13, color: C.textMuted }}>
-                      {m ? `${m[2]} of ${m[3]}${m[2] === m[3] ? ', last payment' : ''}, ` : ''}due {dayMonth(b.date)}
+                      {b.category}, {m ? `${m[2]} of ${m[3]}${m[2] === m[3] ? ', last payment' : ''}, ` : ''}due {dayMonth(b.date)}
                       {b.left ? `, ${full(b.left)} left after` : ''}
                     </span>
                   </span>
@@ -127,6 +152,7 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
         payload={() => ({
           // The whole plan, so Maxie checks all of it, not just everyday categories.
           city: settings.city || undefined,
+          language: settings.maxieLanguage === 'id' ? 'Bahasa Indonesia' : 'English',
           currency: settings.currency,
           nextCycle: { start: toISO(next.start), end: toISO(next.end), days: next.cycleDays },
           today: { cycleDay: cycle.dayN, cycleDays: cycle.cycleDays },

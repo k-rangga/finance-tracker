@@ -1,6 +1,6 @@
 import type { Cycle } from '../lib/cycle';
 import { parseISO, type Currency } from '../lib/format';
-import { AUTO_SUBS, CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INSTALLMENTS_CATEGORY, INVESTMENT_CATEGORY, OTHER_CATEGORIES, SAVINGS_CATEGORY, TRANSFER_CATEGORY } from './categories';
+import { AUTO_SUBS, CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INSTALLMENTS_CATEGORY, INTEREST_CATEGORY, INVESTMENT_CATEGORY, OTHER_CATEGORIES, SAVINGS_CATEGORY, TRANSFER_CATEGORY } from './categories';
 
 export type Transaction = {
   id: string;
@@ -60,9 +60,9 @@ export function billDue(statement: Date, dueDay: number): Date {
 
 /**
  * The monthly payments of each installment plan, as transactions on their statement dates (on the same card), so
- * each counts in the cycle it's billed, under Installments: a fixed bill whose plan is what's due. A payment
- * above its share of the price is split into price and interest rows, both Installments; `plan.for` keeps the
- * purchase's category (after your fixes, from `cat`) as a label.
+ * each counts in the cycle it's billed. Each payment keeps the purchase's category (after your fixes, from `cat`),
+ * so a phone bought in installments is still Shopping; a payment above its share of the price is split into the
+ * price, in that category, and interest, in Interest & fees. The category's plan grows by what's due (budget.ts).
  */
 export function installmentPayments(purchases: Transaction[], plans: Record<string, InstallmentPlan>, cat: (t: Transaction) => string): Transaction[] {
   return purchases.flatMap(t => {
@@ -79,10 +79,10 @@ export function installmentPayments(purchases: Transaction[], plans: Record<stri
       const label = `${t.title} (${i + 1}/${months})`;
       const of = cat(t);
       const rows: Transaction[] = [
-        { ...base, id: `${t.id}~${i + 1}`, title: label, category: INSTALLMENTS_CATEGORY, amount: price, plan: { of: t.id, month: i + 1, months, part: 'price', for: of } },
+        { ...base, id: `${t.id}~${i + 1}`, title: label, category: of, amount: price, plan: { of: t.id, month: i + 1, months, part: 'price', for: of } },
       ];
       if (interest >= (Number.isInteger(t.amount) ? 1 : 0.01))
-        rows.push({ ...base, id: `${t.id}~${i + 1}i`, title: `${label} interest`, category: INSTALLMENTS_CATEGORY, amount: interest, plan: { of: t.id, month: i + 1, months, part: 'interest', for: of } });
+        rows.push({ ...base, id: `${t.id}~${i + 1}i`, title: `${label} interest`, category: INTEREST_CATEGORY, amount: interest, plan: { of: t.id, month: i + 1, months, part: 'interest', for: of } });
       return rows;
     });
   });

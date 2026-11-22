@@ -114,6 +114,14 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
           </label>
         </div>
         <span className={s.setHint}>Your name is for greetings. Your city lets Maxie compare your spending with local prices when it plans.</span>
+        <Row label="Maxie speaks">
+          <Options
+            label="Maxie speaks"
+            items={['English', 'Bahasa Indonesia'] as const}
+            value={d.maxieLanguage === 'id' ? 'Bahasa Indonesia' : 'English'}
+            onChange={v => setD(p => ({ ...p, maxieLanguage: v === 'Bahasa Indonesia' ? 'id' : 'en' }))}
+          />
+        </Row>
         <Row label="Currency">
           <Options label="Currency" items={['IDR', 'USD'] as const} value={d.currency} onChange={setCurrency} />
         </Row>

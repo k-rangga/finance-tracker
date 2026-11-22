@@ -50,6 +50,16 @@ const kept = withTrackedPlans([phone, ...bank], tracked, matched);
 const views = planViews(generated, [phone], tracked, matched, today);
 const all = [...kept, ...generated];
 
+test('payments keep the purchase category; interest goes to Interest & fees', () => {
+  assert.ok(generated.every(t => t.category === 'Shopping'));
+  const withInterest = installmentPayments([phone], { p1: { start: '2026-09-18', amounts: Array(12).fill(1_050_000) } }, t => t.category);
+  assert.ok(withInterest.filter(t => t.plan!.part === 'price').every(t => t.category === 'Shopping'));
+  assert.ok(withInterest.filter(t => t.plan!.part === 'interest').every(t => t.category === 'Interest & fees'));
+  const v = planViews(withInterest, [phone], [], new Map(), today);
+  const bills = planBills(v, next);
+  assert.deepEqual(bills.map(b => b.category).sort(), ['Interest & fees', 'Shopping']);
+});
+
 test('a confirmed bank plan marks its charges as payments 3 and 4 of 6', () => {
   const marked = kept.filter(t => t.plan).map(t => `${t.plan!.month}/${t.plan!.months}`);
   assert.deepEqual(marked, ['3/6', '4/6']);
@@ -76,7 +86,7 @@ test('next cycle: bills equal the schedule, one per plan', () => {
 
 test('the card bill counts the same installment payments', () => {
   const inThisCycle = inCycle(all, cycle);
-  const views2 = inThisCycle.map(t => ({ ...t, cat: t.plan ? INSTALLMENTS_CATEGORY : t.category, isCcPayment: false })) as unknown as TxView[];
+  const views2 = inThisCycle.map(t => ({ ...t, cat: t.category, isCcPayment: false })) as unknown as TxView[];
   const card = cardViews(views2, []).find(c => c.account === 'CC BCA')!;
   const paidInCycle = sum(views.flatMap(v => v.payments.filter(p => p.date >= cycle.start && p.date <= cycle.today).map(p => p.amount)));
   assert.equal(card.installments, paidInCycle);

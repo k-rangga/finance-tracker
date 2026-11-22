@@ -4093,3 +4093,433 @@ button.sxTile:hover {
     padding: 0 16px 8px 16px;
   }
 }
+.planSubHead {
+  margin: 4px 0 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+/* ---------- Monthly spending dashboard (Maxie design): budget cards and the bills list ---------- */
+.mxCards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mxCard {
+  background: var(--surface-000);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.mxHead {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 16px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mxBill .mxHead {
+  padding: 16px;
+}
+.mxHead:focus-visible {
+  outline: 2px solid var(--clay);
+  outline-offset: -2px;
+  border-radius: 16px;
+}
+.mxIcon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+}
+.mxTitles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mxLabel {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+}
+.mxSub {
+  font-size: 13px;
+  line-height: 16px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+.mxStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.mxStatus[data-over] {
+  color: var(--danger);
+  font-weight: 600;
+}
+.mxMeter {
+  position: relative;
+  height: 6px;
+  margin: 0 16px 16px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.mxMeter > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+.mxBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 16px 16px;
+}
+.mxSummary {
+  margin: 0;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--ink-muted);
+}
+.mxSummary strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.mxList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 15px;
+  line-height: 22px;
+}
+.mxList li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.mxWhat {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mxCount {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+.mxAmt {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mxWeek {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  align-items: end;
+  height: 108px;
+}
+.mxDay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 100%;
+  min-width: 0;
+}
+.mxDayVal {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.mxDayVal[data-zero] {
+  color: var(--ink-muted);
+  font-weight: 400;
+}
+.mxDayBar {
+  width: 72%;
+  max-width: 64px;
+  border-radius: 4px 4px 0 0;
+}
+.mxDayLabel {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-muted);
+}
+.mxNote {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--surface-200);
+}
+.mxNoteMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mxNote p {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 26px;
+  color: var(--ink);
+}
+.mxActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.mxLinkBtn {
+  border: 0;
+  background: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--clay-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mxLinkBtn:hover {
+  background: var(--surface-000);
+}
+.mxSources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mxSource {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-000);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.mxSourceLeft {
+  color: var(--ink-muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.mxSource[data-selected] {
+  background: var(--clay-soft);
+  border-color: var(--clay);
+  color: var(--clay-ink);
+  font-weight: 600;
+}
+.mxSource[data-selected] .mxSourceLeft {
+  color: var(--clay-ink);
+}
+.mxLinks {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-size: 14px;
+}
+.mxLink {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--clay-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mxLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Bills list */
+.mxBills {
+  background: var(--surface-000);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.mxBill + .mxBill {
+  border-top: 1px solid var(--line);
+}
+.mxMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.mxTag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--surface-200);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.mxTag[data-tone='success'] {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.mxTag[data-tone='danger'] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.mxNoteText {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-muted);
+}
+.mxOver {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--danger);
+}
+.mxBillAmt {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mxBillAmt[data-unpaid] {
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+.mxBillBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 16px 16px 68px;
+}
+.mxItems {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.mxItems li + li {
+  border-top: 1px solid var(--line);
+}
+.mxItemBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mxItemName {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+}
+.mxSubHead {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+.mxCompare {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-muted);
+}
+@media (max-width: 759px) {
+  .mxBillBody {
+    padding-left: 16px;
+  }
+  .mxItemBtn {
+    flex-wrap: wrap;
+  }
+}
+
+/* By day: average label, the biggest days' amounts, a spike note. */
+.sxAvgLabel {
+  position: absolute;
+  right: 0;
+  bottom: 2px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--ink-muted);
+  background: var(--surface);
+  padding: 0 4px;
+}
+.sxBarTop {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.sxDayBar {
+  position: relative;
+}
+.sxSpike {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+.sxSpikeDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--category-1);
+}
+.sxChartSub {
+  margin-top: -8px;
+  font-size: 13px;
+  color: var(--ink-muted);
+}

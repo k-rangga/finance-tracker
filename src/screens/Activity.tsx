@@ -133,8 +133,22 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
    * An installment payment's sub-category is set on its purchase, so every month follows.
    */
   const recategorise = (t: TxView, to: string, sub: string | null = null, all = true) => {
+    // An installment payment's category is its plan's: a split purchase changes on the purchase (every payment
+    // follows), a plan the bank bills changes on all its charges. Interest stays in Interest & fees.
+    if (t.plan) {
+      const rows = t.plan.of.startsWith('tracked:') ? allTxs.filter(x => x.plan?.of === t.plan!.of) : allTxs.filter(x => x.id === t.plan!.of);
+      const before = rows.map(x => ({ x, was: recat[x.id] }));
+      rows.forEach(x => onRecat(x.id, x.category, to));
+      setSub(t.plan.of, sub);
+      setToast({
+        text: `${tidyName(t.title.replace(/ \(\d+\/\d+\)( interest)?$/, ''))} → ${categoryLabel(to)}, every payment`,
+        action: 'Undo',
+        run: () => before.forEach(({ x, was }) => onRecat(x.id, '', was ?? x.category)),
+      });
+      return;
+    }
     const key = merchantKey(t.title);
-    const prevSubPick = t.plan?.of ?? t.id;
+    const prevSubPick = t.id;
     if (!all || !key) {
       // Keep this row's choice even when it's the category the email gave it, so a merchant rule can't move it.
       const hasRule = !!key && Object.keys(rules).some(m => merchantKey(m) === key);
@@ -735,7 +749,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
     : t.isInstallment
       ? { text: full(t.amount), ink: C.textMuted, note: `in ${installments[t.id]?.amounts.length ?? '?'} payments`, noteInk: C.textMuted }
       : t.plan && thePlan
-        ? { text: '- ' + full(t.amount), ink: C.text, note: `${full(leftAfter(thePlan, t.date))} left`, noteInk: C.textMuted }
+        ? { text: '- ' + full(t.amount), ink: C.text, note: `${t.plan.part === 'interest' ? 'Interest, ' : ''}${t.plan.month} of ${t.plan.months}, ${full(leftAfter(thePlan, t.date))} left`, noteInk: C.textMuted }
       : t.isTransfer
       ? { text: full(t.amount), ink: C.textMuted }
       : t.reimbursed && t.net === 0
@@ -812,14 +826,6 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
           ) : t.isInstallment ? (
             <button type="button" className={s.catPill} onClick={() => (thePlan ? openSchedule(t.id) : onPlan(t.id))} title="See the installment schedule">
               <span className={s.catPillText}>Installment, {thePlan ? planSummary(thePlan, full) : `${installments[t.id]?.amounts.length} months`}</span>
-              <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-            </button>
-          ) : t.plan ? (
-            <button type="button" className={s.catPill} onClick={() => planId && openSchedule(planId)} title="See the installment schedule">
-              <span className={s.catPillText}>
-                Installment {t.plan.month} of {t.plan.months}
-                {t.plan.part === 'interest' ? ', interest' : ''}
-              </span>
               <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
             </button>
           ) : (

@@ -8,7 +8,7 @@
  *   confirmed by you. Its real charges count as they come; the rest are projected a month apart.
  */
 import { addMonths, isCard, merchantKey, type Bill, type Transaction } from '../data/transactions';
-import { INSTALLMENTS_CATEGORY } from '../data/categories';
+import { INTEREST_CATEGORY } from '../data/categories';
 import type { Cycle } from './cycle';
 import { parseISO, tidyName, toISO } from './format';
 
@@ -26,13 +26,16 @@ export type TrackedInstallment = {
   firstDate: string;
 };
 
-export type PlanPayment = { n: number; date: Date; amount: number; paid: boolean };
+/** `amount` is the whole payment; `interest` the part of it that's interest (in Interest & fees). */
+export type PlanPayment = { n: number; date: Date; amount: number; interest: number; paid: boolean };
 export type PlanView = {
   /** Purchase id, or "tracked:<id>". */
   key: string;
   kind: 'purchase' | 'detected';
   title: string;
   account: string;
+  /** Where its payments count: the purchase's category (or the charges'), never a separate Installments one. */
+  category: string;
   months: number;
   /** Payments from the first one known (a detected plan starts at the payment it was found at). */
   payments: PlanPayment[];
@@ -73,7 +76,7 @@ export function matchTracked(txs: Transaction[], tracked: TrackedInstallment[]):
   return out;
 }
 
-/** Tracked plans' real charges marked as installment payments (category Installments, which payment of how many). */
+/** Tracked plans' real charges marked as installment payments (which payment of how many); they keep their category. */
 export function withTrackedPlans(txs: Transaction[], tracked: TrackedInstallment[], matched: Map<string, Transaction[]>): Transaction[] {
   const plan = new Map<string, Transaction['plan']>();
   for (const x of tracked)
@@ -82,7 +85,7 @@ export function withTrackedPlans(txs: Transaction[], tracked: TrackedInstallment
 }
 
 /** Every plan with its payments. `payments`: generated purchase payments; `today` decides what's paid. */
-export function planViews(payments: Transaction[], purchases: Transaction[], tracked: TrackedInstallment[], matched: Map<string, Transaction[]>, today: Date): PlanView[] {
+export function planViews(payments: Transaction[], purchases: Transaction[], tracked: TrackedInstallment[], matched: Map<string, Transaction[]>, today: Date, catOf: (t: Transaction) => string = t => t.category): PlanView[] {
   const views: PlanView[] = [];
   const by = new Map<string, Transaction[]>();
   for (const t of payments) if (t.plan) by.set(t.plan.of, [...(by.get(t.plan.of) ?? []), t]);
@@ -91,8 +94,9 @@ export function planViews(payments: Transaction[], purchases: Transaction[], tra
     const months = list[0].plan!.months;
     const per = new Map<number, PlanPayment>();
     for (const t of list) {
-      const p = per.get(t.plan!.month) ?? { n: t.plan!.month, date: t.date, amount: 0, paid: t.date <= today };
+      const p = per.get(t.plan!.month) ?? { n: t.plan!.month, date: t.date, amount: 0, interest: 0, paid: t.date <= today };
       p.amount += t.amount;
+      if (t.plan!.part === 'interest') p.interest += t.amount;
       per.set(t.plan!.month, p);
     }
     views.push({
@@ -100,6 +104,7 @@ export function planViews(payments: Transaction[], purchases: Transaction[], tra
       kind: 'purchase',
       title: tidyName(purchase?.title ?? list[0].title.replace(/ \(\d+\/\d+\)( interest)?$/, '')),
       account: list[0].account,
+      category: list.find(t => t.plan!.part === 'price')?.category ?? list[0].category,
       months,
       payments: [...per.values()].sort((a, b) => a.n - b.n),
     });
@@ -113,9 +118,10 @@ export function planViews(payments: Transaction[], purchases: Transaction[], tra
       // After the last real charge, the rest follow a month apart from it.
       const lastReal = real[real.length - 1];
       const date = t ? t.date : lastReal ? addMonths(lastReal.date, n - (x.firstPayment + real.length - 1)) : addMonths(first, n - x.firstPayment);
-      list.push({ n, date, amount: t ? t.amount : x.amount, paid: !!t || date <= today });
+      list.push({ n, date, amount: t ? t.amount : x.amount, interest: 0, paid: !!t || date <= today });
     }
-    views.push({ key: 'tracked:' + x.id, kind: 'detected', title: x.name, account: x.account, months: x.months, payments: list });
+    const latest = real[real.length - 1];
+    views.push({ key: 'tracked:' + x.id, kind: 'detected', title: x.name, account: x.account, category: latest ? catOf(latest) : 'Shopping', months: x.months, payments: list });
   }
   return views.sort((a, b) => a.title.localeCompare(b.title));
 }
@@ -135,12 +141,21 @@ export function monthly(p: PlanView) {
   return [...n.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
 }
 
-/** Installment payments still due in a cycle (after its `today`), as bills: the same amounts and dates as the schedule. */
+/**
+ * Installment payments still due in a cycle (after its `today`), as bills: the same amounts and dates as the
+ * schedule. The price is due in the plan's category; interest, if any, in Interest & fees.
+ */
 export function planBills(views: PlanView[], cycle: Cycle): Bill[] {
   return views.flatMap(p =>
     p.payments
-      .filter(x => x.date > cycle.today && x.date <= cycle.end && !(p.kind === 'detected' && x.paid && x.date <= cycle.today))
-      .map(x => ({ date: x.date, title: `${p.title} (${x.n}/${p.months})`, category: INSTALLMENTS_CATEGORY, amount: x.amount, source: 'Installment', left: leftAfter(p, x.date) })),
+      .filter(x => x.date > cycle.today && x.date <= cycle.end)
+      .flatMap(x => {
+        const base = { date: x.date, title: `${p.title} (${x.n}/${p.months})`, source: 'Installment', left: leftAfter(p, x.date) };
+        return [
+          { ...base, category: p.category, amount: x.amount - x.interest },
+          ...(x.interest > 0 ? [{ ...base, title: base.title + ' interest', category: INTEREST_CATEGORY, amount: x.interest }] : []),
+        ];
+      }),
   );
 }
 

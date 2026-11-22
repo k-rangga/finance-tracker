@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { IC, Icon } from '../components/Icon';
 import { Logo } from '../components/Logo';
+import { MaxieNote } from './categoryCards';
+import { storage } from '../lib/storage';
 import { Celebrate, useCountUp } from '../components/Delight';
 import { cycleKey, hasPlan, nextCycleOf } from '../lib/cyclePlans';
 import type { Budget } from '../lib/budget';
@@ -42,7 +44,7 @@ export function Summary({ cycle, budget: b, onOpenCategory, onDismissBill, onSho
       <CycleLine cycle={cycle} budget={b} />
       <Tiles cycle={cycle} budget={b} onSavings={() => onShowTransactions('cycle', TRANSFER_CATEGORY)} />
       <DailyBars cycle={cycle} budget={b} />
-      <WhereMap budget={b} onOpenCategory={onOpenCategory} />
+      <WhereMap cycle={cycle} budget={b} onOpenCategory={onOpenCategory} />
       <BillsTimeline cycle={cycle} budget={b} onDismissBill={onDismissBill} />
       <Recent budget={b} cycle={cycle} onSeeAll={() => onShowTransactions('today')} />
     </div>
@@ -52,7 +54,7 @@ export function Summary({ cycle, budget: b, onOpenCategory, onDismissBill, onSho
 // ---- shared bits ----
 
 /** A chart card: a short title, an info icon whose one-line explanation shows on hover (or tap), and the chart. */
-function ChartCard({ title, info, right, children, wide }: { title: string; info: string | string[]; right?: ReactNode; children: ReactNode; wide?: boolean }) {
+function ChartCard({ title, info, right, sub, children, wide }: { title: string; info: string | string[]; right?: ReactNode; sub?: ReactNode; children: ReactNode; wide?: boolean }) {
   const lines = typeof info === 'string' ? [info] : info;
   const [open, setOpen] = useState(false);
   return (
@@ -72,6 +74,7 @@ function ChartCard({ title, info, right, children, wide }: { title: string; info
         </span>
         {right != null && <span className={s.sxChartRight}>{right}</span>}
       </div>
+      {sub != null && <span className={s.sxChartSub}>{sub}</span>}
       {children}
     </section>
   );
@@ -207,29 +210,73 @@ function Tiles({ cycle, budget: b, onSavings }: { cycle: Cycle; budget: Budget; 
   );
 }
 
+/**
+ * By day (Maxie design): every day's spending, with the average as a dashed line, the three biggest days labelled,
+ * today marked, and a note on a spike (what it was), so one big day explains itself.
+ */
 function DailyBars({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
   const { short, full } = useSettings();
   const phone = useIsPhone();
   const [hover, setHover] = useState<number | null>(null);
   const days = cycle.cycleDays;
   const perDay = new Array<number>(days).fill(0);
-  for (const t of b.txs) if (t.offset >= 0 && t.offset < days && categoryByName(t.cat)?.type === 'variable') perDay[t.offset] += t.net;
-  const plan = b.varBudget / days;
-  const top = Math.max(plan * 1.6, ...perDay, 1);
-  const shown = hover ?? cycle.dayIdx;
+  const catsByDay: Record<string, number>[] = Array.from({ length: days }, () => ({}));
+  for (const t of b.txs)
+    if (t.offset >= 0 && t.offset < days && categoryByName(t.cat) && !t.isIncome && !t.isTransfer) {
+      perDay[t.offset] += t.net;
+      catsByDay[t.offset][t.cat] = (catsByDay[t.offset][t.cat] ?? 0) + t.net;
+    }
+  const sofar = perDay.slice(0, cycle.dayIdx + 1);
+  const total = sum(sofar);
+  const avg = total / Math.max(1, cycle.dayN);
+  const top = Math.max(avg * 1.6, ...perDay, 1);
+  // The three biggest days so far get their amount on top.
+  const labelled = new Set(
+    sofar
+      .map((v, i) => ({ v, i }))
+      .filter(x => x.v > 0)
+      .sort((x, y) => y.v - x.v)
+      .slice(0, phone ? 2 : 3)
+      .map(x => x.i),
+  );
+  // A spike: a day over 2.5× the average, named by its two biggest categories.
+  const spikeIdx = sofar.reduce((m, v, i) => (v > (sofar[m] ?? 0) ? i : m), 0);
+  const spike = sofar[spikeIdx] > avg * 2.5 && cycle.dayN >= 5 ? spikeIdx : null;
+  const spikeText = (() => {
+    if (spike == null) return '';
+    const cats = Object.entries(catsByDay[spike]).sort((x, y) => y[1] - x[1]).slice(0, 2).map(([c]) => c);
+    return `${dayMonth(cycle.dateOf(spike))}: ${cats.length === 2 ? `${cats[0]} and ${cats[1].toLowerCase()}` : cats[0]}, ${short(sofar[spike])}`;
+  })();
+  const shown = hover;
   return (
     <ChartCard
       title="By day"
       wide
-      info="Everyday spending each day, fixed bills left out. The line is the daily share of your everyday plan."
+      info="What you spent each day, bills included. The dashed line is your average day so far."
       right={
-        <span>
-          {dayMonth(cycle.dateOf(shown))} <strong style={{ color: C.text }}>{short(perDay[shown])}</strong>
-        </span>
+        shown != null ? (
+          <span>
+            {dayMonth(cycle.dateOf(shown))} <strong style={{ color: C.text }}>{full(perDay[shown])}</strong>
+          </span>
+        ) : (
+          <span>
+            {dayMonth(cycle.start)} – {dayMonth(cycle.end)} <strong style={{ color: C.text }}>{full(total)}</strong>
+          </span>
+        )
       }
     >
-      <div className={s.sxDayBars} onMouseLeave={() => setHover(null)} role="img" aria-label={`Spending by day; daily plan ${full(plan)}`}>
-        <span className={s.sxPlanLineMark} style={{ bottom: (plan / top) * 100 + '%' }} aria-hidden="true" />
+      {spikeText && (
+        <span className={s.sxSpike}>
+          <span className={s.sxSpikeDot} aria-hidden="true" />
+          {spikeText}
+        </span>
+      )}
+      <div className={s.sxDayBars} style={{ height: phone ? 150 : 180 }} onMouseLeave={() => setHover(null)} role="img" aria-label={`Spending by day, ${full(total)} so far, average ${full(avg)} a day`}>
+        {avg > 0 && (
+          <span className={s.sxPlanLineMark} style={{ bottom: (avg / top) * 100 + '%' }} aria-hidden="true">
+            <span className={s.sxAvgLabel}>avg {short(avg)}</span>
+          </span>
+        )}
         {perDay.map((v, i) => {
           const future = i > cycle.dayIdx;
           return (
@@ -247,24 +294,27 @@ function DailyBars({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
               <span
                 className={s.sxDayBarFill}
                 style={{
+                  position: 'relative',
                   height: !future && v > 0 ? Math.max(4, (v / top) * 100) + '%' : 3,
-                  background: future || v === 0 ? C.divider : v > plan ? C.amber : 'var(--category-1)',
+                  background: future || v === 0 ? C.divider : 'var(--category-1)',
+                  outline: i === spike ? '2px solid var(--category-1)' : undefined,
+                  outlineOffset: i === spike ? 2 : undefined,
                 }}
-              />
+              >
+                {labelled.has(i) && <span className={s.sxBarTop}>{short(v)}</span>}
+              </span>
             </button>
           );
         })}
       </div>
       <div className={s.sxDayAxis} aria-hidden="true">
         <span>{dayMonth(cycle.start)}</span>
-        {!phone && <span>{dayMonth(cycle.dateOf(Math.floor(days / 2)))}</span>}
+        <span style={{ fontWeight: 600, color: C.text }}>Today, {dayMonth(cycle.today)}</span>
         <span>{dayMonth(cycle.end)}</span>
       </div>
     </ChartCard>
   );
 }
-
-// ---- where it went ----
 
 /** A category colour's matching label ink: `var(--category-7)` → `var(--on-category-7)`. */
 const onColor = (color: string) => color.replace('var(--category-', 'var(--on-category-');
@@ -319,8 +369,8 @@ const labelFits = (w: number, h: number, name: string) => name.length * 7.6 + 24
  * Where it went, as a treemap: boxes sized by spending, split by thin gaps, each with its name and share when it
  * fits. Small boxes are named in the legend under it. Tap a box to open the category.
  */
-function WhereMap({ budget: b, onOpenCategory }: { budget: Budget; onOpenCategory: (name: string) => void }) {
-  const { short, full } = useSettings();
+function WhereMap({ cycle, budget: b, onOpenCategory }: { cycle: Cycle; budget: Budget; onOpenCategory: (name: string) => void }) {
+  const { full } = useSettings();
   const phone = useIsPhone();
   const [box, setBox] = useState<HTMLDivElement | null>(null);
   const W = useWidth(box);
@@ -349,7 +399,12 @@ function WhereMap({ budget: b, onOpenCategory }: { budget: Budget; onOpenCategor
   });
   const unlabelled = laid.filter(c => !c.label);
   return (
-    <ChartCard title="Where it went" wide info="This cycle's spending by category: the bigger the box, the bigger its share. Tap one to open it." right={total > 0 ? short(total) : undefined}>
+    <ChartCard
+      title="Where it went"
+      wide
+      info="This cycle's spending by category: the bigger the box, the bigger its share. Tap one to open it."
+      sub={total > 0 ? `${full(total)} spent, ${dayMonth(cycle.start)} – ${dayMonth(cycle.end)}` : undefined}
+    >
       {total === 0 ? (
         <span className={s.sxChartEmpty}>Nothing spent yet</span>
       ) : (
@@ -384,9 +439,45 @@ function WhereMap({ budget: b, onOpenCategory }: { budget: Budget; onOpenCategor
             ))}
             <span className={s.sxTmCaption}>Box size is share of spending, tap one to open</span>
           </div>
+          <WhereFlag cycle={cycle} budget={b} onOpenCategory={onOpenCategory} />
         </>
       )}
     </ChartCard>
+  );
+}
+
+/**
+ * Maxie's flag under the treemap: a category well over its limit because of one big expense, which might be in
+ * the wrong category. "Review it" opens the category; "It's right" hides it for this cycle (this device).
+ */
+function WhereFlag({ cycle, budget: b, onOpenCategory }: { cycle: Cycle; budget: Budget; onOpenCategory: (name: string) => void }) {
+  const { full } = useSettings();
+  const found = b.cats
+    .filter(c => c.type === 'variable' && c.limit > 0 && c.spent > c.limit * 1.5)
+    // The most over its limit first.
+    .sort((x, y) => y.spent / y.limit - x.spent / x.limit)
+    .map(c => {
+      const big = b.txs.filter(t => t.cat === c.name && !t.isIncome && !t.isTransfer).sort((x, y) => y.net - x.net)[0];
+      return big && big.net >= c.spent * 0.4 ? { c, big } : null;
+    })
+    .find(Boolean);
+  const key = found ? `moneyTracker.dismiss.flag.${toISO(cycle.start)}.${found.c.name}` : '';
+  const [gone, setGone] = useState(() => !!key && storage.getRaw(key) === '1');
+  if (!found || gone) return null;
+  return (
+    <MaxieNote
+      text={`${found.c.name} looks high this cycle. One ${tidyName(found.big.title)} expense (${full(found.big.net)}) might be in the wrong category.`}
+      actions={[
+        { label: 'Review it', primary: true, onClick: () => onOpenCategory(found.c.name) },
+        {
+          label: "It's right",
+          onClick: () => {
+            storage.setRaw(key, '1');
+            setGone(true);
+          },
+        },
+      ]}
+    />
   );
 }
 

@@ -35,6 +35,7 @@ export function chatContext({ cycle, budget: b, settings, notes, withNotes }: { 
     cycle: { start: toISO(cycle.start), end: toISO(cycle.dateOf(cycle.cycleDays - 1)), day: cycle.dayN, days: cycle.cycleDays, daysLeft: cycle.daysLeft },
     currency: settings.currency,
     ...(settings.city ? { city: settings.city } : {}),
+    language: settings.maxieLanguage === 'id' ? 'Bahasa Indonesia' : 'English',
     income: r(settings.income),
     savingsTargetPct: SAVINGS_TARGET_PCT,
     budget: r(b.budget),
