@@ -48,6 +48,8 @@ export type Settings = {
   chatFeedback?: ChatFeedback[];
   /** Plans for particular pay cycles, by the cycle's start (YYYY-MM-DD): see lib/cyclePlans. */
   cyclePlans?: Record<string, CyclePlan>;
+  /** Where you live (e.g. "Jakarta Selatan"), so Maxie can compare your spending with local prices. */
+  city?: string;
   /** When you're paid: your pay cycle runs from one payday to the day before the next. Default the 25th. */
   payday?: PaydayRule;
   /** Per credit card (account name, e.g. "CC BCA"): the day its statement closes and the day the bill is due. */

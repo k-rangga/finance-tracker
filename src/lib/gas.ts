@@ -151,7 +151,12 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
         const changes = p.categories
           .filter(c => c.type === 'variable' && c.thisCycle > 0)
           .map(c => ({ category: c.name, amount: Math.max(50_000, Math.round((c.thisCycle * 0.95) / 50_000) * 50_000), why: '(dev stand-in) A little under what you spent this cycle.' }));
-        return { verdict: "(dev stand-in) I set each everyday category a little under what you spent this cycle. Dining is the one I'd watch.", changes };
+        return {
+          verdict: "(dev stand-in) I set each everyday category a little under what you spent this cycle. Dining is the one I'd watch.",
+          changes,
+          notes: ['(dev stand-in) Your fixed bills match last cycle, so I left them alone.', '(dev stand-in) Savings stays at its target on payday.'],
+          searched: !!(q as { city?: string }).city,
+        };
       }
       let short = p.bufferGoal - p.left;
       if (short <= 0) return { verdict: '(dev stand-in) Looks good: the buffer is covered.', changes: [] };

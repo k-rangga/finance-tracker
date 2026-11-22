@@ -7,7 +7,7 @@ import { builtInCategory, CATEGORIES, categoryByName, type Category } from '../d
 import type { Bill } from '../data/transactions';
 import type { Budget } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { checkPlan, cycleKey, type CyclePlan, type PlanCheck, type PlannedCost } from '../lib/cyclePlans';
+import { checkPlan, cycleKey, spendingProfile, type CyclePlan, type PlanCheck, type PlannedCost } from '../lib/cyclePlans';
 import { Logo } from '../components/Logo';
 import { ThinkingArcs, thinkingLabel } from '../components/Chat';
 import { dayLabel, dayMonth, sum, tidyName, toISO } from '../lib/format';
@@ -113,10 +113,19 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
 
       <PurrCheck
         payload={() => ({
+          // The whole plan, so Maxie checks all of it, not just everyday categories.
+          city: settings.city || undefined,
+          currency: settings.currency,
+          nextCycle: { start: toISO(next.start), end: toISO(next.end), days: next.cycleDays },
+          today: { cycleDay: cycle.dayN, cycleDays: cycle.cycleDays },
           income,
+          savingsTargetPct: settings.savingsPct,
           bufferGoal: amountOf(bufferPct),
+          bufferPct,
           left,
           promised: { fixedBills: fixedTotal, installments, oneOffs, savings },
+          installments: known.installments.map(b => ({ title: tidyName(b.title), amount: Math.round(b.amount), date: toISO(b.date) })),
+          subscriptions: known.subscriptions.map(b => ({ title: tidyName(b.title), amount: Math.round(b.amount), date: toISO(b.date) })),
           oneOffs: costs.map(c => ({ name: c.name, amount: c.amount, date: c.date, category: c.category })),
           categories: [...everyday, ...fixed].map(c => {
             const now = budget.cats.find(x => x.name === c.name);
@@ -127,6 +136,7 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
               usual: Math.round(amountOf(regularPct(c))),
               thisCycle: now ? Math.round((now.spent / Math.max(1, cycle.dayN)) * cycle.cycleDays) : 0,
               lastCycle: now ? Math.round(sum(now.prev)) : 0,
+              spending: spendingProfile(cycle, budget, c.name),
             };
           }),
         })}
@@ -205,7 +215,8 @@ function PurrCheck({
   amountOfCategory: (name: string) => number;
   onApply: (name: string, amount: number) => void;
 }) {
-  const { short } = useSettings();
+  const { short, settings } = useSettings();
+  const city = settings.city?.trim();
   const [state, setState] = useState<'' | 'working' | 'done'>('');
   const [mode, setMode] = useState<'build' | 'check'>('build');
   const [waited, setWaited] = useState(0);
@@ -243,18 +254,38 @@ function PurrCheck({
       </div>
       {state === 'working' ? (
         <span className={s.thinking} role="status" aria-live="polite">
-          <span className={s.thinkLabel}>{mode === 'build' ? (waited < 3 ? 'Reading this cycle…' : 'Setting your amounts…') : thinkingLabel(waited)}</span>
+          <span className={s.thinkLabel}>
+            {waited < 3
+              ? 'Reading your whole plan…'
+              : waited < 8
+                ? 'Looking at where your money goes…'
+                : city && waited < 20
+                  ? `Checking prices in ${city}…`
+                  : mode === 'build'
+                    ? 'Setting your amounts…'
+                    : thinkingLabel(waited)}
+          </span>
           <ThinkingArcs />
         </span>
       ) : state === 'done' && result?.error ? (
         <span style={{ fontSize: 14, color: C.redInk }}>{result.error === 'no_key' ? "I can't plan yet: I need my Gemini API key." : "Sorry, I couldn't do that just now. Try again in a minute?"}</span>
       ) : state === 'done' && result?.verdict ? (
-        <p className={s.insightBody} style={{ fontSize: 17, lineHeight: '26px' }}>
-          {result.verdict}
-        </p>
+        <>
+          <p className={s.insightBody} style={{ fontSize: 17, lineHeight: '26px' }}>
+            {result.verdict}
+          </p>
+          {(result.notes ?? []).length > 0 && (
+            <ul className={s.maxieNotes}>
+              {result.notes!.map(n => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
+          {result.searched && city && <span style={{ fontSize: 12, color: C.textMuted }}>I compared with typical prices in {city}.</span>}
+        </>
       ) : (
         <p className={s.insightBody} style={{ fontSize: 17, lineHeight: '26px' }}>
-          Want me to plan next cycle from what you actually spend? I'll keep your buffer covered.
+          Want me to plan next cycle from what you actually spend? I'll look over the whole plan and keep your buffer covered.
         </p>
       )}
       {changes.map(c => {

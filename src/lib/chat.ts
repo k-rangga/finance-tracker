@@ -16,8 +16,9 @@ export type ChatMessage = { role: 'user' | 'model'; text: string; actions?: Chat
 
 export type ChatAnswer = { reply: string; actions: ChatAction[]; model?: string } | { error: 'no_key' | 'api' | 'blocked'; detail?: string };
 
-export const askGemini = (messages: ChatMessage[], context: object) =>
-  run<ChatAnswer>('askGemini', { messages: messages.map(m => ({ role: m.role, text: m.text })), context });
+/** `deep`: planning, so Maxie uses the stronger model and may look up local prices (see askGemini_). */
+export const askGemini = (messages: ChatMessage[], context: object, deep = false) =>
+  run<ChatAnswer>('askGemini', { messages: messages.map(m => ({ role: m.role, text: m.text })), context, ...(deep ? { deep: true } : {}) });
 
 /** Newest transactions sent along; enough for a cycle, small enough to keep each question quick. */
 const MAX_TXS = 120;
@@ -33,6 +34,7 @@ export function chatContext({ cycle, budget: b, settings, notes, withNotes }: { 
     today: toISO(cycle.today),
     cycle: { start: toISO(cycle.start), end: toISO(cycle.dateOf(cycle.cycleDays - 1)), day: cycle.dayN, days: cycle.cycleDays, daysLeft: cycle.daysLeft },
     currency: settings.currency,
+    ...(settings.city ? { city: settings.city } : {}),
     income: r(settings.income),
     savingsTargetPct: SAVINGS_TARGET_PCT,
     budget: r(b.budget),

@@ -5,6 +5,7 @@ import { IC, Icon } from '../components/Icon';
 import { Logo } from '../components/Logo';
 import { ActionCard, Problem, Rich, ThinkingArcs, thinkingLabel } from '../components/Chat';
 import { askGemini, chatContext, type ChatAction } from '../lib/chat';
+import { spendingProfile } from '../lib/cyclePlans';
 import { useData } from '../lib/data';
 import type { Budget, CatView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
@@ -154,7 +155,7 @@ export function ActionPlan({ cycle, budget: b, onShowTransactions }: { cycle: Cy
 
 /** What Maxie is asked for on the Plan tab. */
 const PLAN_REQUEST =
-  'Make me a plan for the rest of this pay cycle from my data. Start with one sentence on where I stand. ' +
+  'Make me a plan for the rest of this pay cycle from my data, looking at every category, my daily averages and where the money goes (spendingByCategory). Start with one sentence on where I stand. ' +
   'Then up to 3 numbered steps, most important first, each with a real amount and a day or date where it helps. ' +
   'Cover staying on budget until payday and my savings target. Suggest moving limits between categories as actions when it clearly helps.';
 
@@ -183,7 +184,12 @@ function MaxiePlan({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
     setWaited(0);
     setProblem(null);
     try {
-      const a = await askGemini([{ role: 'user', text: PLAN_REQUEST }], chatContext({ cycle, budget: b, settings, notes, withNotes: false }));
+      const a = await askGemini([{ role: 'user', text: PLAN_REQUEST }], {
+          ...chatContext({ cycle, budget: b, settings, notes, withNotes: false }),
+          spendingByCategory: Object.fromEntries(b.cats.filter(c => c.spent > 0).map(c => [c.name, spendingProfile(cycle, b, c.name)])),
+        },
+        true,
+      );
       if ('error' in a) setProblem({ kind: a.error, detail: a.detail });
       else {
         const p = { text: a.reply, actions: a.actions.filter(x => x.type === 'move_limit') };

@@ -6,6 +6,7 @@
  * Setup (once, in the Apps Script editor → Project Settings → Script properties):
  *   GEMINI_API_KEY  your key from Google AI Studio
  *   GEMINI_MODEL    optional; defaults to GEMINI_DEFAULT_MODEL
+ *   GEMINI_PLAN_MODEL optional; the model for planning on the Plan tab, defaults to GEMINI_PLAN_MODEL
  */
 
 // Flash-Lite: a budgeting answer in seconds. Set GEMINI_MODEL to 'gemini-3.8-flash' for deeper (slower) answers.
@@ -36,7 +37,7 @@ function askGemini_(p) {
   const props = PropertiesService.getScriptProperties();
   const key = props.getProperty('GEMINI_API_KEY');
   if (!key) return { error: 'no_key' };
-  const model = props.getProperty('GEMINI_MODEL') || GEMINI_DEFAULT_MODEL;
+  let model = props.getProperty('GEMINI_MODEL') || GEMINI_DEFAULT_MODEL;
   // The last 12 turns are plenty for a budgeting chat and keep each request small.
   const messages = (p.messages || []).slice(-12);
   const body = {
@@ -46,13 +47,26 @@ function askGemini_(p) {
     generationConfig: { responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 1200, thinkingConfig: { thinkingLevel: 'low' } },
   };
   const started = Date.now();
-  let res = geminiFetch_(model, key, body);
-  let data = geminiJson_(res);
-  // A model that doesn't take a thinking level: ask again without it.
-  if (res.getResponseCode() === 400 && /thinking/i.test(JSON.stringify(data || ''))) {
-    delete body.generationConfig.thinkingConfig;
+  let res, data;
+  if (p.deep) {
+    // Planning: the stronger model, a longer answer, and local prices when a city is known.
+    body.generationConfig.maxOutputTokens = 2400;
+    if (p.context && p.context.city)
+      body.systemInstruction.parts[0].text +=
+        '\n\nThe person lives in ' + p.context.city + '. Use Google Search to check typical local prices for their biggest everyday categories (a meal, coffee, groceries, rides) and compare with their own average purchase; mention the comparison where it matters.';
+    const g = geminiPlan_(key, body, !!(p.context && p.context.city));
+    res = g.res;
+    data = g.data;
+    model = g.model;
+  } else {
     res = geminiFetch_(model, key, body);
     data = geminiJson_(res);
+    // A model that doesn't take a thinking level: ask again without it.
+    if (res.getResponseCode() === 400 && /thinking/i.test(JSON.stringify(data || ''))) {
+      delete body.generationConfig.thinkingConfig;
+      res = geminiFetch_(model, key, body);
+      data = geminiJson_(res);
+    }
   }
   // Timing and token use land in the Apps Script Executions log, to see what makes a reply slow.
   console.log('askGemini ' + model + ' ' + res.getResponseCode() + ' in ' + (Date.now() - started) + 'ms · ' + JSON.stringify((data && data.usageMetadata) || {}));
@@ -67,13 +81,21 @@ function askGemini_(p) {
     return { error: 'blocked', detail: String(why) };
   }
   try {
-    // Some models wrap JSON in a code fence even when asked not to.
-    const out = JSON.parse(text.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, ''));
+    // Some models wrap JSON in a code fence (or, with search on, in a sentence) even when asked not to.
+    const out = JSON.parse(jsonPart_(text));
     return { reply: String(out.reply || ''), actions: Array.isArray(out.actions) ? out.actions.slice(0, 5) : [], model: model };
   } catch (e) {
     // Not the JSON we asked for: show it as a plain answer.
     return { reply: text, actions: [], model: model };
   }
+}
+
+/** The JSON object inside a reply: without a code fence, or cut out of a sentence around it. */
+function jsonPart_(text) {
+  const t = String(text || '').replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '');
+  const a = t.indexOf('{');
+  const b = t.lastIndexOf('}');
+  return a >= 0 && b > a ? t.slice(a, b + 1) : t;
 }
 
 function geminiFetch_(model, key, body) {
@@ -92,6 +114,54 @@ function geminiJson_(res) {
   } catch (e) {
     return null;
   }
+}
+
+// Planning (Plan tab) gets the stronger model and more thinking: it's asked rarely and has to weigh the whole plan.
+// Set GEMINI_PLAN_MODEL in Script properties to use another one.
+const GEMINI_PLAN_MODEL = 'gemini-3.8-flash';
+
+/**
+ * A planning request: the plan model with medium thinking and, when `search` is on, Google Search so Maxie can
+ * check local prices. Steps back on its own when something isn't supported: no search (then JSON mode), no
+ * thinking level, then the everyday model. Returns { res, data, model, searched }.
+ */
+function geminiPlan_(key, body, search) {
+  const props = PropertiesService.getScriptProperties();
+  const models = [props.getProperty('GEMINI_PLAN_MODEL') || GEMINI_PLAN_MODEL, props.getProperty('GEMINI_MODEL') || GEMINI_DEFAULT_MODEL];
+  const b = JSON.parse(JSON.stringify(body));
+  b.generationConfig.thinkingConfig = { thinkingLevel: 'medium' };
+  // Search grounding and JSON mode don't mix: with search, the JSON comes back as text (parsed the same way).
+  const withSearch = () => {
+    b.tools = [{ google_search: {} }];
+    delete b.generationConfig.responseMimeType;
+  };
+  const withoutSearch = () => {
+    delete b.tools;
+    b.generationConfig.responseMimeType = 'application/json';
+  };
+  if (search) withSearch();
+  let res, data, model;
+  for (let i = 0; i < models.length; i++) {
+    model = models[i];
+    const started = Date.now();
+    res = geminiFetch_(model, key, b);
+    data = geminiJson_(res);
+    const err = JSON.stringify((data && data.error) || '');
+    if (res.getResponseCode() === 400 && b.tools && /search|tool|grounding|mime/i.test(err)) {
+      withoutSearch();
+      res = geminiFetch_(model, key, b);
+      data = geminiJson_(res);
+    }
+    if (res.getResponseCode() === 400 && /thinking/i.test(JSON.stringify((data && data.error) || ''))) {
+      delete b.generationConfig.thinkingConfig;
+      res = geminiFetch_(model, key, b);
+      data = geminiJson_(res);
+    }
+    console.log('plan ' + model + (b.tools ? ' +search ' : ' ') + res.getResponseCode() + ' in ' + (Date.now() - started) + 'ms');
+    // Model not found or not allowed for this key: try the everyday model.
+    if (res.getResponseCode() === 200 || !(res.getResponseCode() === 404 || /model/i.test(err))) break;
+  }
+  return { res: res, data: data, model: model, searched: !!b.tools };
 }
 
 /**
@@ -140,7 +210,6 @@ function checkCyclePlan_(p) {
   const props = PropertiesService.getScriptProperties();
   const key = props.getProperty('GEMINI_API_KEY');
   if (!key) return { error: 'no_key' };
-  const model = props.getProperty('GEMINI_MODEL') || GEMINI_DEFAULT_MODEL;
   const cats = (p.categories || []).map(c => String(c.name));
   const body = {
     systemInstruction: {
@@ -166,33 +235,36 @@ function checkCyclePlan_(p) {
               ]
           )
             .concat([
+              'Check the whole plan, not just everyday categories: fixed bills, installments, subscriptions, one-off costs, the savings target and the buffer.',
+              'Each category has "spending": what really happens this cycle (perDay, purchases, averagePurchase, biggestPurchase, topMerchants, subCategories). Use it: one big purchase is not a habit; many small ones are.',
+              p.city
+                ? 'They live in ' + p.city + '. Use Google Search to check typical local prices for their everyday categories (a meal out, coffee, groceries for one, a ride), and compare with their averagePurchase. Put the comparison in "why" or "notes" where it matters, with the local figure.'
+                : 'No city is set, so do not guess local prices.',
+              'notes: up to 4 short findings about the rest of the plan (fixed bills, installments, one-offs, savings, buffer), each at most 20 words, in your voice. Empty when there is nothing worth saying.',
               'Voice: calm and friendly, no exclamation marks, no emoji, no filler. Reply in English.',
-              'Respond with JSON only: {"verdict": string, "changes": [{"category": string, "amount": number, "why": string}]}',
+              'Respond with JSON only: {"verdict": string, "changes": [{"category": string, "amount": number, "why": string}], "notes": string[]}',
             ])
             .join('\n'),
         },
       ],
     },
     contents: [{ role: 'user', parts: [{ text: JSON.stringify(p) }] }],
-    generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: p.mode === 'build' ? 1600 : 800, thinkingConfig: { thinkingLevel: 'low' } },
+    generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: p.mode === 'build' ? 3000 : 1800, thinkingConfig: { thinkingLevel: 'low' } },
   };
-  let res = geminiFetch_(model, key, body);
-  let data = geminiJson_(res);
-  if (res.getResponseCode() === 400 && /thinking/i.test(JSON.stringify(data || ''))) {
-    delete body.generationConfig.thinkingConfig;
-    res = geminiFetch_(model, key, body);
-    data = geminiJson_(res);
-  }
+  const g = geminiPlan_(key, body, !!p.city);
+  const res = g.res;
+  const data = g.data;
   if (res.getResponseCode() !== 200) return { error: 'api', detail: String((data && data.error && data.error.message) || 'HTTP ' + res.getResponseCode()).slice(0, 300) };
   const cand = data && data.candidates && data.candidates[0];
   const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(x => x.text || '').join('') : '';
   try {
-    const out = JSON.parse(text.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, ''));
+    const out = JSON.parse(jsonPart_(text));
     const changes = (Array.isArray(out.changes) ? out.changes : [])
       .map(c => ({ category: cats.filter(n => n.toLowerCase() === String(c.category || '').trim().toLowerCase())[0], amount: Math.max(0, Math.round(Number(c.amount))), why: String(c.why || '').slice(0, 120) }))
       .filter(c => c.category && isFinite(c.amount))
       .slice(0, p.mode === 'build' ? 20 : 3);
-    return { verdict: String(out.verdict || '').slice(0, 300), changes: changes };
+    const notes = (Array.isArray(out.notes) ? out.notes : []).map(n => String(n).slice(0, 200)).filter(Boolean).slice(0, 4);
+    return { verdict: String(out.verdict || '').slice(0, 400), changes: changes, notes: notes, model: g.model, searched: g.searched };
   } catch (e) {
     return { error: 'blocked' };
   }
