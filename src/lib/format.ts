@@ -5,7 +5,7 @@ const sign = (v: number, on: boolean) => (on ? (v > 0 ? '+ ' : v < 0 ? '− ' : 
 /** `Rp 30.000.000` / `$6,500`. Pass `signed` to prefix + / −. */
 export function fmtFull(v: number, cur: Currency, signed = false): string {
   const a = Math.abs(v);
-  const body = cur === 'USD' ? '$' + Math.round(a).toLocaleString('en-US') : 'Rp ' + (Math.round(a / 1000) * 1000).toLocaleString('id-ID');
+  const body = cur === 'USD' ? '$' + Math.round(a).toLocaleString('en-US') : 'Rp ' + Math.round(a).toLocaleString('id-ID');
   return sign(v, signed) + body;
 }
 
