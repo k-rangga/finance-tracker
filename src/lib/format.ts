@@ -9,12 +9,18 @@ export function fmtFull(v: number, cur: Currency, signed = false): string {
   return sign(v, signed) + body;
 }
 
-/** `Rp 1.2B`, `Rp 1.2M`, `Rp 450K`, `Rp 0`, `$1.2k`, `$450`. */
+/** One decimal with a decimal comma, and no ",0": 1.8 → "1,8", 2.0 → "2". */
+const oneDecimal = (v: number) => (Math.round(v * 10) / 10).toLocaleString('id-ID', { maximumFractionDigits: 1 });
+
+/** Amounts for lists, Indonesian style: `Rp 1,2 miliar`, `Rp 1,8 jt`, `Rp 450K`, `Rp 750`; `$1.2k`, `$450`. */
 export function fmtShort(v: number, cur: Currency, signed = false): string {
   const a = Math.abs(v);
   let body: string;
   if (cur === 'USD') body = '$' + (a >= 1000 ? (a / 1000).toFixed(1) + 'k' : Math.round(a));
-  else body = 'Rp ' + (a >= 1e9 ? (a / 1e9).toFixed(1) + 'B' : a >= 1e6 ? (a / 1e6).toFixed(1) + 'M' : a >= 500 ? Math.round(a / 1e3) + 'K' : '0');
+  else
+    body =
+      'Rp ' +
+      (a >= 1e9 ? oneDecimal(a / 1e9) + ' miliar' : a >= 999_500 ? oneDecimal(a / 1e6) + ' jt' : a >= 1000 ? Math.round(a / 1e3) + 'K' : Math.round(a).toLocaleString('id-ID'));
   return sign(v, signed) + body;
 }
 

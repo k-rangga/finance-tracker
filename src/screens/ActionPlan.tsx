@@ -88,7 +88,7 @@ export function ActionPlan({ cycle, budget: b, onShowTransactions }: { cycle: Cy
         : {
             key: 'save',
             title: `Move ${full(save - b.saved)} to savings`,
-            sub: b.saved > 0 ? `${full(b.saved)} moved so far · best done on payday, ${dayLabel(cycle.next)}` : `Best done on payday morning, ${dayLabel(cycle.next)}`,
+            sub: b.saved > 0 ? `${full(b.saved)} moved so far, best done on payday, ${dayLabel(cycle.next)}` : `Best done on payday morning, ${dayLabel(cycle.next)}`,
             action: { label: 'I moved it', run: () => onShowTransactions(TRANSFER_CATEGORY) },
           };
   const shown = [...steps.slice(0, MAX_STEPS - 1), saving];
@@ -99,7 +99,7 @@ export function ActionPlan({ cycle, budget: b, onShowTransactions }: { cycle: Cy
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
           <span style={{ marginRight: 'auto' }}>
-            Action plan · day {cycle.dayN} of {cycle.cycleDays}
+            Action plan, day {cycle.dayN} of {cycle.cycleDays}
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: status.ink, fontWeight: 500 }}>
             <span className={s.badgeDot} style={{ background: status.ink }} aria-hidden="true" />

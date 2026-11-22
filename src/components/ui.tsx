@@ -20,12 +20,12 @@ export function CardHead({ title, caption, small }: { title: ReactNode; caption?
   );
 }
 
-/** "12 Nov · in 15 days" as a small chip; amber when it's due within 3 days. */
+/** "12 Nov, in 15 days" as a small chip; amber when it's due within 3 days. */
 export function DueChip({ date, inDays }: { date: Date; inDays: number }) {
   const when = inDays <= 0 ? 'today' : inDays === 1 ? 'tomorrow' : `in ${inDays} days`;
   return (
     <span className={inDays <= 3 ? s.dueChipSoon : s.dueChip}>
-      {dayMonth(date)} · {when}
+      {dayMonth(date)}, {when}
     </span>
   );
 }

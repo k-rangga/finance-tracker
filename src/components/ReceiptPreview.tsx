@@ -12,7 +12,7 @@ const cache = new Map<string, ReceiptFile>();
 type Props = {
   txId: string;
   receipt: Receipt;
-  /** "Kopi Kenangan · 31 Oct". */
+  /** "Kopi Kenangan, 31 Oct". */
   title: string;
   onClose: () => void;
 };

@@ -139,7 +139,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
       if (to !== t.cat) onRecat(t.id, hasRule ? '' : t.category, to);
       setSub(prevSubPick, sub);
       const was = t.cat;
-      setToast({ text: `${t.title} → ${categoryLabel(to)}${sub ? ' · ' + sub : ''}, this one only`, action: 'Undo', run: () => onRecat(t.id, t.category, was) });
+      setToast({ text: `${t.title} → ${categoryLabel(to)}${sub ? ' › ' + sub : ''}, this one only`, action: 'Undo', run: () => onRecat(t.id, t.category, was) });
       return;
     }
     if (to !== t.cat) onRecat(t.id, t.category, to);
@@ -154,7 +154,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
     handSet.forEach(({ x }) => onRecat(x.id, x.category, to));
     setToast({
       text:
-        `${t.title} → ${categoryLabel(to)}${sub ? ' · ' + sub : ''}` +
+        `${t.title} → ${categoryLabel(to)}${sub ? ' › ' + sub : ''}` +
         (others.length ? ` for all ${others.length + 1} and future ones` : ' from now on'),
       action: 'Undo',
       run: () => {
@@ -362,11 +362,11 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
           <div className={s.txSummaryLine} aria-live="polite">
             <strong style={{ color: C.text, fontWeight: 600 }}>{full(out)} spent</strong>
             {/* Phones: the date chip already says the dates. */}
-            {phone ? '' : ` · ${rangeLabel}`} · {inRange.length} {inRange.length === 1 ? 'transaction' : 'transactions'}
-            {filter.hideTransfers && phone ? ' · transfers hidden' : ''}
+            {phone ? '' : `, ${rangeLabel}`}, {inRange.length} {inRange.length === 1 ? 'transaction' : 'transactions'}
+            {filter.hideTransfers && phone ? ', transfers hidden' : ''}
             {guesses.toSort.length > 0 && (
               <>
-                {' · '}
+                {', '}
                 <button type="button" className={s.sortLink} onClick={() => setSorting(guesses.toSort.map(t => t.id))}>
                   {guesses.toSort.length} to sort →
                 </button>
@@ -437,7 +437,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
                       <span style={{ fontSize: 14, fontWeight: 600, textDecoration: 'line-through' }}>{t.title}</span>
                       <span style={{ fontSize: 13 }}>
-                        {dayLabel(t.date)} · {t.cat} · {full(t.amount)}
+                        {dayLabel(t.date)}, {t.cat}, {full(t.amount)}
                       </span>
                     </div>
                     <button type="button" className={s.btnOutline} onClick={() => onRemove(t.id, false)} style={{ flex: 'none' }}>
@@ -469,7 +469,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
                   </span>
                   <span style={{ fontSize: 13, color: C.textMuted }}>
                     {b.category}
-                    {b.left != null ? (b.left > 0 ? ` · ${full(b.left)} left after this` : ' · last payment') : ''}
+                    {b.left != null ? (b.left > 0 ? `, ${full(b.left)} left after this` : ', last payment') : ''}
                   </span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>
@@ -587,7 +587,7 @@ function Recap({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <h3 className={s.sideTitle}>Recap</h3>
                 <span style={{ fontSize: 13, color: C.textMuted }}>
-                  {rangeLabel} · {count} {count === 1 ? 'transaction' : 'transactions'}
+                  {rangeLabel}, {count} {count === 1 ? 'transaction' : 'transactions'}
                 </span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -632,7 +632,7 @@ function Recap({
                       <span className={s.ellipsis}>{name}</span>
                     </span>
                     <span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
-                      {full(v)} <span style={{ color: C.textMuted, fontWeight: 400 }}>· {Math.round((v / total) * 100)}%</span>
+                      {full(v)} <span style={{ color: C.textMuted, fontWeight: 400 }}>({Math.round((v / total) * 100)}%)</span>
                     </span>
                   </span>
                   <span className={s.recapTrack}>
@@ -759,7 +759,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
       ? ([
           ['View receipt', viewReceipt],
           ['Replace receipt…', () => filePick.current?.click()],
-          ['Remove receipt', () => (removeReceipt(receiptTxId(t)), onNotice('Receipt removed · it stays in Drive\'s trash for 30 days'))],
+          ['Remove receipt', () => (removeReceipt(receiptTxId(t)), onNotice('Receipt removed. It stays in Drive\'s trash for 30 days'))],
         ] as Item[])
       : [['Attach receipt…', () => filePick.current?.click()] as Item]),
     // A monthly payment is part of its plan; it's removed by making the purchase one purchase again.
@@ -784,12 +784,12 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, fontSize: 13, color: C.textMuted }}>
           {t.isCcPayment ? (
             <span style={{ fontSize: 13, fontWeight: 600, color: C.text, background: C.divider, borderRadius: 999, padding: '4px 10px' }}>
-              Transfer · {t.account} → {t.toAccount ?? 'card'}
+              Transfer: {t.account} → {t.toAccount ?? 'card'}
             </span>
           ) : t.reimbursesId ? (
             <span className={s.paidChip}>
               <button type="button" className={s.paidChipLabel} aria-expanded={picking} onClick={() => setPicking(!picking)} title="Change the expense this pays back">
-                Paid back · {linked?.title ?? 'an earlier expense'}
+                Paid back: {linked?.title ?? 'an earlier expense'}
               </button>
               <button type="button" className={s.paidChipX} aria-label={`Unlink ${t.title}`} onClick={() => onLink(t.id, null)}>
                 <Icon d={IC.close} size={12} />
@@ -797,7 +797,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
             </span>
           ) : t.isInstallment ? (
             <button type="button" className={s.catPill} onClick={() => onPlan(t.id)} title="Edit the installment plan">
-              <span className={s.catPillText}>Installment · {installments[t.id]?.amounts.length} months</span>
+              <span className={s.catPillText}>Installment, {installments[t.id]?.amounts.length} months</span>
               <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
             </button>
           ) : (
@@ -805,7 +805,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
           )}
           {/* Your note takes the account's place (the account moves under the time), so the row stays two lines. */}
           {note ? (
-            <button type="button" className={s.txNote} onClick={() => setPopover('note')} title={`${note} · click to edit`}>
+            <button type="button" className={s.txNote} onClick={() => setPopover('note')} title={`${note} (click to edit)`}>
               {note}
             </button>
           ) : (
@@ -869,10 +869,10 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
             </button>
           ) : null}
           {viewing && receipt ? (
-            <ReceiptPreview txId={receiptTxId(t)} receipt={receipt} title={`${tidyName(t.title)} · ${dayMonth(t.date)}`} onClose={() => setViewing(false)} />
+            <ReceiptPreview txId={receiptTxId(t)} receipt={receipt} title={`${tidyName(t.title)}, ${dayMonth(t.date)}`} onClose={() => setViewing(false)} />
           ) : null}
           {t.time}
-          {note && where ? ` · ${where}` : ''}
+          {note && where ? `, ${where}` : ''}
         </span>
         <input
           ref={filePick}
@@ -952,10 +952,10 @@ function Picker({ income, expenses, onPick }: { income: TxView; expenses: TxView
         {list.map(e => (
           <button key={e.id} type="button" className={s.pickRow + (e.id === income.reimbursesId ? ' ' + s.pickRowOn : '')} onClick={() => onPick(e.id)}>
             <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, marginRight: 'auto' }}>
-              {e === suggested && <span className={s.pickSuggest}>Suggested · same amount</span>}
+              {e === suggested && <span className={s.pickSuggest}>Suggested: same amount</span>}
               <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{e.title}</span>
               <span style={{ fontSize: 13, color: C.textMuted }}>
-                {dayMonth(e.date)} · {e.cat}
+                {dayMonth(e.date)}, {e.cat}
               </span>
             </span>
             <span style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, whiteSpace: 'nowrap' }}>{full(e.amount)}</span>
@@ -1070,13 +1070,13 @@ function CategoryButton({ t, open, onToggle, plain }: { t: TxView; open: boolean
       aria-haspopup="listbox"
       aria-expanded={open}
       aria-label={`Category for ${t.title}: ${catFilter(t.cat, t.sub)}`}
-      title={t.edited ? `Changed from ${categoryLabel(t.category)} · click to change` : 'Change category'}
+      title={t.edited ? `Changed from ${categoryLabel(t.category)}. Click to change` : 'Change category'}
       onClick={onToggle}
     >
       <span aria-hidden="true" style={{ flex: 'none', width: 7, height: 7, borderRadius: '50%', background: c?.color ?? C.textFaint, marginRight: 6 }} />
       <span className={s.catPillText}>
         {t.cat}
-        {t.sub && <span style={{ color: C.textMuted }}> · {t.sub}</span>}
+        {t.sub && <span style={{ color: C.textMuted }}> › {t.sub}</span>}
       </span>
       {!plain && (
         <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: `translateY(-50%)${open ? ' rotate(180deg)' : ''}`, pointerEvents: 'none' }} />
@@ -1214,7 +1214,7 @@ function CategoryMenu({
                 onClick={() => onPick(o.category, o.sub ?? null, !!merchant && all)}
               >
                 {categoryLabel(o.category)}
-                {o.sub ? ' · ' + o.sub : ''}
+                {o.sub ? ' › ' + o.sub : ''}
               </button>
             ))}
           </div>

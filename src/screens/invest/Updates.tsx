@@ -45,7 +45,7 @@ export function UpdateTimeline({ t, updates, onOpen }: { t: Trade; updates: Trad
               </span>
               {isAdd(u) && (
                 <span style={{ fontSize: 14, fontWeight: 600 }}>
-                  {addLabel(t, u)} <span style={{ fontWeight: 500, color: C.textMuted }}>· new avg {nat(after.avg, t.mk)}</span>
+                  {addLabel(t, u)} <span style={{ fontWeight: 500, color: C.textMuted }}>(new avg {nat(after.avg, t.mk)})</span>
                 </span>
               )}
               {u.note && (
@@ -82,9 +82,9 @@ export function UpdateDetail({ t, updates, update, last, onEdit, onDelete, onClo
       <span style={{ fontWeight: 600, color: ink, textAlign: 'right' }}>{v}</span>
     </div>
   );
-  const pos = (p: PosState) => `${lotsLabel(t, p.q)} · avg ${nat(p.avg, t.mk)} · cost ${nat(p.cost, t.mk)}`;
+  const pos = (p: PosState) => `${lotsLabel(t, p.q)}, avg ${nat(p.avg, t.mk)}, cost ${nat(p.cost, t.mk)}`;
   return (
-    <Modal title={`${t.tk} · ${UPDATE_LABEL[u.kind]}`} onClose={onClose} width={520}>
+    <Modal title={`${t.tk}: ${UPDATE_LABEL[u.kind]}`} onClose={onClose} width={520}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <KindBadge kind={u.kind} />
         <span style={{ fontSize: 14, fontWeight: 600 }}>{fmtAt(u.at)}</span>
@@ -171,7 +171,7 @@ export function UpdateForm({ t, avg, last, editing, onClose, onSave }: {
   };
 
   return (
-    <Modal title={`${editing ? 'Edit update' : 'Add update'} · ${t.tk}`} onClose={onClose} width={520}>
+    <Modal title={`${editing ? 'Edit update' : 'Add update'} for ${t.tk}`} onClose={onClose} width={520}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span className={s.label}>Type</span>
         <Options

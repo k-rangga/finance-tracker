@@ -89,8 +89,8 @@ function Item({ t, hl, onSaveManual }: { t: AnyTrade; hl: Perps; onSaveManual: P
           </span>
           <span style={{ fontSize: 13, color: C.textMuted }}>
             {p
-              ? `${when(p.opened)} → ${p.closed ? when(p.closed) : '…'} · ${px(p.maxSize)} @ ${px(p.entry)} → ${p.exit != null ? px(p.exit) : '…'} · ${p.fills.length} fills`
-              : `${fmtD(m!.d)} → ${fmtD(m!.ex!.d)} · ${qtyLabel(m!)} @ ${nat(m!.px, m!.mk)} → ${nat(m!.ex!.px, m!.mk)}`}
+              ? `${when(p.opened)} → ${p.closed ? when(p.closed) : '…'}, ${px(p.maxSize)} @ ${px(p.entry)} → ${p.exit != null ? px(p.exit) : '…'}, ${p.fills.length} fills`
+              : `${fmtD(m!.d)} → ${fmtD(m!.ex!.d)}, ${qtyLabel(m!)} @ ${nat(m!.px, m!.mk)} → ${nat(m!.ex!.px, m!.mk)}`}
           </span>
         </span>
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>

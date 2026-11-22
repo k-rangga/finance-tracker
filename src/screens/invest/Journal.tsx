@@ -179,8 +179,8 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
           onClick={() => setOpenId(isOpen ? null : item.key)}
           dot={HL_COLOR}
           name={t.coin}
-          tag={t.side + (t.liquidated ? ' · liquidated' : '')}
-          line={(t.closed ? `${when(t.opened)} → ${when(t.closed)}` : 'Open since ' + when(t.opened)) + ` · ${px(t.maxSize)} @ ${px(t.entry)}`}
+          tag={t.side + (t.liquidated ? ', liquidated' : '')}
+          line={(t.closed ? `${when(t.opened)} → ${when(t.closed)}` : 'Open since ' + when(t.opened)) + `, ${px(t.maxSize)} @ ${px(t.entry)}`}
           pct={item.ret}
           money={t.closed ? usd(t.pnl, true) : 'Open'}
           review={<ReviewLine item={item} />}
@@ -206,7 +206,7 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
           const rr = t.tg && t.sl && (t.px - t.sl) * dirOf(t) > 0 ? (t.tg - t.px) / (t.px - t.sl) : null;
           const cdays = t.cd ? diffDays(today, parseISO(t.cd)) : null;
           const plan: { k: string; v: string; sub: string; ink?: string }[] = [
-            { k: t.q !== storedOf(t).q ? 'Avg entry' : 'Entry', v: nat(t.px, t.mk), sub: qtyLabel(t) + (t.q !== storedOf(t).q ? ` · ${1 + updates.filter(u => u.tradeId === t.id && isAdd(u)).length} buys` : '') },
+            { k: t.q !== storedOf(t).q ? 'Avg entry' : 'Entry', v: nat(t.px, t.mk), sub: qtyLabel(t) + (t.q !== storedOf(t).q ? `, ${1 + updates.filter(u => u.tradeId === t.id && isAdd(u)).length} buys` : '') },
             { k: 'Target', v: t.tg ? nat(t.tg, t.mk) : '—', sub: t.tg ? fmtPct(((t.tg - t.px) / t.px) * 100) : 'Not set' },
             { k: 'Stop', v: t.sl ? nat(t.sl, t.mk) : '—', sub: t.sl ? fmtPct(((t.sl - t.px) / t.px) * 100) : 'Not set' },
             { k: 'Reward : risk', v: rr ? rr.toFixed(1) + ' : 1' : '—', sub: rr ? (rr >= 2 ? 'Meets 2 : 1' : 'Below 2 : 1') : 'Needs target and stop', ink: rr && rr < 2 ? C.amberInk : undefined },
@@ -215,7 +215,7 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
           if (levOf(t) > 1) plan.splice(1, 0, { k: 'Leverage', v: levTag(t), sub: 'Liquidation ~' + nat(liqOf(t), t.mk), ink: C.amberInk });
           if (cl) plan.push({ k: 'Exit', v: nat(t.ex!.px, t.mk), sub: fmtD(t.ex!.d) }, { k: 'R multiple', v: r == null ? '—' : fmtR(r), sub: fmtPct(ret), ink: plInk(ret) });
           const catWhen = t.cd
-            ? fmtD(t.cd) + (cl ? '' : cdays! > 0 ? ` · in ${cdays} days` : cdays === 0 ? ' · today' : ' · passed')
+            ? fmtD(t.cd) + (cl ? '' : cdays! > 0 ? `, in ${cdays} days` : cdays === 0 ? ', today' : ', passed')
             : t.cat
               ? 'No date set'
               : 'Add one so the position has a reason to move';
@@ -230,11 +230,11 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
                 }}
                 dot={MK_COLOR[t.mk]}
                 name={t.tk}
-                tag={[t.nm || t.mk, t.st, levTag(t)].filter(Boolean).join(' · ')}
+                tag={[t.nm || t.mk, t.st, levTag(t)].filter(Boolean).join(', ')}
                 line={
                   (cl ? `${fmtD(t.d)} → ${fmtD(t.ex!.d)}` : 'Since ' + fmtD(t.d)) +
-                  ` · ${qtyLabel(t)} @ ${nat(t.px, t.mk)}` +
-                  (cl ? '' : P.hasPrice(t) ? ` · now ${nat(last, t.mk)}` : ' · no price yet')
+                  `, ${qtyLabel(t)} @ ${nat(t.px, t.mk)}` +
+                  (cl ? '' : P.hasPrice(t) ? `, now ${nat(last, t.mk)}` : ', no price yet')
                 }
                 pct={ret}
                 money={(cl ? '' : 'Open ') + dS(pl, true)}

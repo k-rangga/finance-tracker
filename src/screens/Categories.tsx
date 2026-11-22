@@ -5,7 +5,7 @@ import { Celebrate } from '../components/Delight';
 import { IC, Icon } from '../components/Icon';
 import { categoryStatus, changeBadge, iconChip, type Budget, type CatView, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { dayMonth, pc, sum, toISO } from '../lib/format';
+import { dayMonth, pc, sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
@@ -226,7 +226,7 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
               <>
                 <button type="button" className={s.catFold} aria-expanded={showUnused} onClick={() => setShowUnused(!showUnused)}>
                   <Icon d={IC.chevDown} size={14} style={{ transform: showUnused ? 'rotate(180deg)' : 'none' }} />
-                  Not used yet ({unused.length}) · {unused.map(r => r.c.name).join(', ')}
+                  Not used yet ({unused.length}), {unused.map(r => r.c.name).join(', ')}
                 </button>
                 {showUnused && unused.map(row)}
               </>
@@ -247,7 +247,7 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
                   fixed.every(isPaid) ? (
                     <span style={{ color: C.accent800, fontWeight: 600 }}>All paid ✓</span>
                   ) : (
-                    `${fixed.filter(isPaid).length} of ${fixed.length} paid`
+                    `${short(sum(fixed.filter(isPaid).map(r => r.cur || r.lim)))} of ${short(sum(fixed.map(r => Math.max(r.lim, r.cur))))} paid`
                   )
                 ) : undefined
               }
@@ -379,8 +379,8 @@ function CategoryRow({
 }) {
   const { full, short } = useSettings();
   const phone = useIsPhone();
-  // Phones: "1.0M / 300K", so the name keeps its room.
-  const fit = (v: number) => (phone ? short(v).replace(/^Rp\s?/, '') : full(v));
+  // Short amounts in the list ("1,8 jt / 2,1 jt" on phones, so the name keeps its room); exact ones when opened.
+  const fit = (v: number) => (phone ? short(v).replace(/^Rp\s?/, '') : short(v));
   const { c, cur, last, lim, scale, mine } = r;
   const toSort = c.name === UNSORTED ? mine.length : 0;
   const expected = lim * todayFrac;
@@ -462,9 +462,7 @@ function BillRow({
   marked: boolean;
   onMark: () => void;
 }) {
-  const { full, short } = useSettings();
-  const phone = useIsPhone();
-  const fit = phone ? short : full;
+  const { short } = useSettings();
   const { c, cur, lim } = r;
   const due = b.bills.filter(x => x.category === c.name).sort((x, y) => x.date.getTime() - y.date.getTime());
   const dueTotal = sum(due.map(x => x.amount));
@@ -473,16 +471,26 @@ function BillRow({
   // Swipe right on a phone to tick it off (or untick one you ticked); a payment ticks it by itself.
   const canMark = cur === 0 && !c.auto;
   const swipe = useSwipeRight(() => canMark && onMark());
+  // One fact per line: paid, what's left to pay, over plan, or when it's due.
+  const over = lim > 0 && cur > lim ? cur - lim : 0;
   const line =
     state === 'paid'
-      ? cur > 0
-        ? `Paid of ${fit(lim)}` + (due.length ? ` · ${fit(dueTotal)} still due` : '')
-        : 'Ticked off by you'
+      ? over
+        ? `${short(over)} over plan`
+        : due.length
+          ? `${short(dueTotal)} left to pay`
+          : cur > 0
+            ? lim > 0
+              ? 'Paid'
+              : 'Paid, no amount planned'
+            : 'Ticked off by you'
       : state === 'due'
-        ? `Due ${dayMonth(due[0].date)}, ${inDays <= 0 ? 'today' : inDays === 1 ? 'tomorrow' : `in ${inDays} days`}`
-        : phone && canMark
-          ? 'Not paid yet · swipe to tick off'
-          : 'Not paid yet';
+        ? inDays <= 0
+          ? 'Due today'
+          : inDays === 1
+            ? 'Due tomorrow'
+            : `Due ${dayMonth(due[0].date)}`
+        : 'Not paid yet';
   return (
     <div id={'cat-' + c.name} className={s.billWrap}>
       {swipe.swiping && (
@@ -503,10 +511,10 @@ function BillRow({
         </span>
         <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
           <span style={{ fontSize: 14, fontWeight: 500 }}>{c.name}</span>
-          <span style={{ fontSize: 13, whiteSpace: 'nowrap', color: state === 'paid' && cur > lim ? C.redInk : state === 'due' && inDays <= 3 ? C.amberInk : C.textMuted }}>{line}</span>
+          <span style={{ fontSize: 13, whiteSpace: 'nowrap', color: over ? C.redInk : state === 'due' && inDays <= 3 ? C.amberInk : C.textMuted }}>{line}</span>
         </span>
         <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', color: state === 'none' ? C.textMuted : C.text }}>
-          {state === 'paid' ? fit(cur || lim) : state === 'due' ? fit(dueTotal) : fit(lim)}
+          {state === 'paid' ? short(cur || lim) : state === 'due' ? short(dueTotal) : short(lim)}
         </span>
         <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ flex: 'none', transform: open ? 'rotate(180deg)' : 'none' }} />
       </button>
@@ -623,6 +631,8 @@ function CategoryDetail({
       )}
       {mine.length === 0 ? (
         <span style={{ fontSize: 13, color: C.textMuted }}>Nothing spent here {mode === 'cycle' ? 'this cycle' : 'this week'}.</span>
+      ) : c.auto ? (
+        <PlanPayments mine={mine} />
       ) : (
         <TopMerchants mine={mine} />
       )}
@@ -641,6 +651,37 @@ function CategoryDetail({
           {c.custom ? 'Edit category' : 'Adjust limit'}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Installments, opened: each payment this cycle on two lines (the plan, then which payment and when). */
+function PlanPayments({ mine }: { mine: TxView[] }) {
+  const { full } = useSettings();
+  const by = new Map<string, { title: string; month: number; months: number; date: Date; total: number }>();
+  for (const t of mine) {
+    if (!t.plan) continue;
+    const k = t.plan.of + '~' + t.plan.month;
+    const x = by.get(k) ?? { title: tidyName(t.title.replace(/ \(\d+\/\d+\)( interest)?$/, '')), month: t.plan.month, months: t.plan.months, date: t.date, total: 0 };
+    x.total += t.net;
+    by.set(k, x);
+  }
+  const list = [...by.values()].sort((a, b) => b.total - a.total);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {list.map(p => (
+        <div key={p.title + p.month} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
+            <span className={s.ellipsis} style={{ fontSize: 14 }}>
+              {p.title}
+            </span>
+            <span style={{ fontSize: 13, color: C.textMuted }}>
+              Payment {p.month} of {p.months}, {dayMonth(p.date)}
+            </span>
+          </span>
+          <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>{full(p.total)}</span>
+        </div>
+      ))}
     </div>
   );
 }

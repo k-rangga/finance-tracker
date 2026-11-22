@@ -52,25 +52,25 @@ export function SortQueue({ ids, allTxs, g, onPick, onClose }: Props) {
   const name = tidyName(t.title);
   const others = allTxs.filter(x => x.id !== t.id && !x.isCcPayment && merchantKey(x.title) === merchantKey(t.title)).length;
   const pick = (cat: string, sub?: string | null) => onPick(t, cat, sub ?? null, !!merchantKey(t.title) && all);
-  const label = (o: { category: string; sub?: string }) => categoryLabel(o.category) + (o.sub ? ' · ' + o.sub : '');
+  const label = (o: { category: string; sub?: string }) => categoryLabel(o.category) + (o.sub ? ' › ' + o.sub : '');
   const every = [
     ...CATEGORIES.filter(c => c.name !== 'Buffer').flatMap(c => [
       { value: c.name, label: c.name },
-      ...(settings.subcategories[c.name] ?? []).map(x => ({ value: catFilter(c.name, x), label: `${c.name} · ${x}` })),
+      ...(settings.subcategories[c.name] ?? []).map(x => ({ value: catFilter(c.name, x), label: `${c.name} › ${x}` })),
     ]),
     ...OTHER_CATEGORIES.map(o => ({ value: o, label: categoryLabel(o), group: 'Not spending' })),
   ];
 
   return (
-    <Modal title={`To sort · ${left.length} left`} onClose={onClose} width={480}>
+    <Modal title={`To sort: ${left.length} left`} onClose={onClose} width={480}>
       <div className={s.sortCard}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           <span style={{ fontSize: 19, fontWeight: 650, marginRight: 'auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
           <span style={{ fontSize: 19, fontWeight: 650, whiteSpace: 'nowrap' }}>{full(t.amount)}</span>
         </div>
         <span style={{ fontSize: 13, color: C.textMuted }}>
-          {dayLabel(t.date)} · {t.time} · {t.account}
-          {t.title !== name ? ` · ${t.title}` : ''}
+          {dayLabel(t.date)}, {t.time}, {t.account}
+          {t.title !== name ? ` (${t.title})` : ''}
         </span>
       </div>
 

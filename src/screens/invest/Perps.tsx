@@ -96,14 +96,14 @@ export function ConnectWallet({ hl }: { hl: Perps }) {
   );
 }
 
-/** "Hyperliquid · 0x12…ab · synced 14 Nov 09:03 [Sync now]". */
+/** "Hyperliquid, 0x12…ab, synced 14 Nov 09:03 [Sync now]". */
 export function SyncLine({ hl }: { hl: Perps }) {
   if (!hl.state?.address) return null;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
       <span style={{ marginRight: 'auto' }}>
-        Hyperliquid · {shortAddr(hl.state.address)}
-        {hl.state.syncedAt ? ` · synced ${new Date(hl.state.syncedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
+        Hyperliquid, {shortAddr(hl.state.address)}
+        {hl.state.syncedAt ? `, synced ${new Date(hl.state.syncedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
       </span>
       {hl.error && <span style={{ color: C.redInk }}>{hl.error}</span>}
       <button type="button" className={s.btnOutlineSm} onClick={() => hl.sync()} disabled={hl.syncing}>
@@ -126,7 +126,7 @@ export function HyperliquidCard({ hl }: { hl: Perps }) {
         <h2 className={s.h2}>Hyperliquid</h2>
         <span className={s.caption}>
           {hl.state.equity != null ? `Account ${usd(hl.state.equity)}` : 'Account value unavailable'}
-          {positions.length ? ` · open ${usd(unrealized, true)}` : ' · nothing open'}
+          {positions.length ? `, open ${usd(unrealized, true)}` : ', nothing open'}
         </span>
       </div>
       {positions.map(p => (
@@ -173,7 +173,7 @@ export function PerpDetail({ t, note, onSave }: { t: PerpTrade; note?: PerpNote;
           {t.fills.map(f => (
             <div key={f.tid} style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', padding: '5px 0', borderBottom: `1px dashed ${C.divider}` }}>
               <span style={{ color: C.textMuted, whiteSpace: 'nowrap' }}>{when(new Date(f.time))}</span>
-              <span style={{ marginRight: 'auto', whiteSpace: 'nowrap' }}>{f.dir.replace('Market Order Liquidation: ', 'Liquidation · ')}</span>
+              <span style={{ marginRight: 'auto', whiteSpace: 'nowrap' }}>{f.dir.replace('Market Order Liquidation: ', 'Liquidation: ')}</span>
               <span style={{ whiteSpace: 'nowrap' }}>
                 {px(f.sz)} @ {px(f.px)}
               </span>

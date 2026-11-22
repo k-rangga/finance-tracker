@@ -23,9 +23,9 @@ const resultText = (r: SyncResult) =>
   r.busy
     ? 'An import is already running in the background. Check back in a few minutes.'
     : `Read ${r.scanned} ${r.scanned === 1 ? 'email' : 'emails'}, imported ${r.imported} new ${r.imported === 1 ? 'receipt' : 'receipts'}` +
-  (r.duplicates ? ` · ${r.duplicates} ${r.duplicates === 1 ? 'duplicate' : 'duplicates'} merged` : '') +
-  (r.reversed ? ` · ${r.reversed} cancelled ${r.reversed === 1 ? 'charge' : 'charges'} removed` : '') +
-  (r.skipped ? ` · ${r.skipped} not imported (no amount, duplicates or reversals)` : '') +
+  (r.duplicates ? `, ${r.duplicates} ${r.duplicates === 1 ? 'duplicate' : 'duplicates'} merged` : '') +
+  (r.reversed ? `, ${r.reversed} cancelled ${r.reversed === 1 ? 'charge' : 'charges'} removed` : '') +
+  (r.skipped ? `, ${r.skipped} not imported (no amount, duplicates or reversals)` : '') +
   '.' +
   (r.more
     ? ` ${r.remaining != null ? r.remaining + ' more' : 'More'} to read${r.paused ? ' (Gmail asked to slow down)' : ''}: ${onVercel ? 'press Sync now again, or it continues at the next hourly sync.' : 'it continues on its own in about 2 minutes, until done.'}`
@@ -110,8 +110,8 @@ export function GmailDialog({ onClose, notice }: { onClose: () => void; notice?:
         <span>
           {gmail.label_name ? (
             <>
-              Label <strong>“{gmail.label_name}”</strong> · last synced {syncedAgo(gmail.last_synced_at)}
-              {gmail.last_sync_count != null && !lastError ? ` · ${gmail.last_sync_count} emails read` : ''}
+              Label <strong>“{gmail.label_name}”</strong>, last synced {syncedAgo(gmail.last_synced_at)}
+              {gmail.last_sync_count != null && !lastError ? `, ${gmail.last_sync_count} emails read` : ''}
             </>
           ) : (
             'No label chosen yet.'

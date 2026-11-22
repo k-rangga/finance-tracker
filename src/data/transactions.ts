@@ -76,7 +76,7 @@ export function installmentPayments(purchases: Transaction[], plans: Record<stri
       const interest = Math.round((amount - price) * 100) / 100;
       // Less than one rupiah (or cent) above the share is rounding, not interest.
       const base = { date: addMonths(first, i), time: t.time, source: 'Installment', account: t.account, type: 'expense' as const };
-      const label = `${t.title} · ${i + 1}/${months}`;
+      const label = `${t.title} (${i + 1}/${months})`;
       const of = cat(t);
       const rows: Transaction[] = [
         { ...base, id: `${t.id}~${i + 1}`, title: label, category: INSTALLMENTS_CATEGORY, amount: price, plan: { of: t.id, month: i + 1, months, part: 'price', for: of } },
@@ -118,7 +118,7 @@ export function installmentsAhead(payments: Transaction[], cycles: { start: Date
       const last = list.reduce((a, t) => (t.date > a ? t.date : a), list[0].date);
       return {
         of,
-        title: list[0].title.replace(/ · \d+\/\d+( interest)?$/, ''),
+        title: list[0].title.replace(/ \(\d+\/\d+\)( interest)?$/, ''),
         account: list[0].account,
         perCycle: cycles.map(c => list.filter(t => t.date >= c.start && t.date <= c.end).reduce((a, t) => a + t.amount, 0)),
         last,

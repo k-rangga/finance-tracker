@@ -313,10 +313,10 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
             </label>
           </div>
           <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>
-            Of your {full(settings.income)} income · adds to your spending budget
+            Of your {full(settings.income)} income, adds to your spending budget
             {builtIn && Math.abs(limitPct - startPctOf(builtIn.name)) > 1e-9 && (
               <>
-                {' · '}
+                {', '}
                 <button type="button" className={s.textBtnSm} onClick={() => resetTo(startPctOf(builtIn.name))} style={{ padding: 0 }}>
                   Reset to {startPctOf(builtIn.name)}%
                 </button>

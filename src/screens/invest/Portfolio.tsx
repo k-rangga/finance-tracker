@@ -7,7 +7,7 @@ import { C } from '../../lib/tokens';
 import { buyFee, levOf, MARKETS, MK_COLOR, MK_NAME, type Market, type Portfolio as PortfolioModel, type Prices } from './model';
 import { useInvestFmt } from './Invest';
 
-/** "Prices updated 4 days ago · Google Finance checked 09:28", and whether the weekly update is overdue. */
+/** "Prices updated 4 days ago, Google Finance checked 09:28", and whether the weekly update is overdue. */
 export function priceNote(prices: Prices, today: Date) {
   const age = diffDays(parseISO(prices.at), today);
   const stale = age > 7;
@@ -15,10 +15,10 @@ export function priceNote(prices: Prices, today: Date) {
     'Prices updated ' +
     (age <= 0 ? 'today' : age === 1 ? 'yesterday' : age + ' days ago') +
     (prices.quotedAt
-      ? ' · Google Finance checked ' + new Date(prices.quotedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+      ? ', Google Finance checked ' + new Date(prices.quotedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
       : stale
-        ? ' · weekly update overdue'
-        : ' · next update ' + dayMonth(addDays(parseISO(prices.at), 7)));
+        ? ', weekly update overdue'
+        : ', next update ' + dayMonth(addDays(parseISO(prices.at), 7)));
   return { text, stale };
 }
 
@@ -52,7 +52,7 @@ export function Portfolio({ cycle, P }: { cycle: Cycle; P: PortfolioModel }) {
   return (
     <div className={s.stack}>
       <Card style={{ gap: 24 }}>
-        <CardHead title="Allocation" caption={`${dS(P.tot)} in ${P.pos.length} open ${P.pos.length === 1 ? 'position' : 'positions'} · USD at Rp ${settings.fxRate.toLocaleString('id-ID')}`} />
+        <CardHead title="Allocation" caption={`${dS(P.tot)} in ${P.pos.length} open ${P.pos.length === 1 ? 'position' : 'positions'}, USD at Rp ${settings.fxRate.toLocaleString('id-ID')}`} />
         {capWarn && (
           <div role="status" style={{ background: C.amberTint, color: C.amberInk, borderRadius: 12, padding: '12px 16px', fontSize: 14, lineHeight: 1.5 }}>
             <strong>Over cap.</strong> {capWarn}
@@ -70,7 +70,7 @@ export function Portfolio({ cycle, P }: { cycle: Cycle; P: PortfolioModel }) {
                 <Dot color={MK_COLOR[a.m]} />
                 {MK_NAME[a.m]} <strong>{Math.round(a.share)}%</strong>
                 <span style={{ color: C.textMuted }}>{dS(a.v)}</span>
-                <span style={{ color: a.over ? C.amberInk : C.textMuted, fontWeight: a.over ? 700 : 500 }}>· cap {caps[a.m]}%</span>
+                <span style={{ color: a.over ? C.amberInk : C.textMuted, fontWeight: a.over ? 700 : 500 }}>(cap {caps[a.m]}%)</span>
               </span>
             ))}
           </div>
@@ -100,7 +100,7 @@ export function Portfolio({ cycle, P }: { cycle: Cycle; P: PortfolioModel }) {
           {hist.map((p, i) => (
             <div key={i} style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center' }}>
               <div
-                title={`${labels[i]}: ${p.toFixed(1)}% · ${full(ofIncome(p))}`}
+                title={`${labels[i]}: ${p.toFixed(1)}%, ${full(ofIncome(p))}`}
                 style={{ width: '100%', maxWidth: 64, borderRadius: 12, height: pc((p / cmax) * 100), background: i === 5 ? C.accent700 : C.mint[5] }}
               />
             </div>

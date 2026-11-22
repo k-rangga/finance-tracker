@@ -162,7 +162,7 @@ export function MonthlyPlan({ budget: b, onOpenInvest }: { budget: Budget; onOpe
     <Card style={{ gap: 14 }}>
       <div className={s.cardHead}>
         <h2 className={s.h2}>Monthly plan</h2>
-        <span className={s.caption}>{full(b.income)} income · vs last compares this cycle with last cycle by the same day</span>
+        <span className={s.caption}>{full(b.income)} income, vs last compares this cycle with last cycle by the same day</span>
       </div>
 
       <div style={{ display: 'flex', height: 14, borderRadius: 999, overflow: 'hidden', gap: 3 }} aria-hidden="true">
@@ -258,7 +258,7 @@ export function MonthlyPlan({ budget: b, onOpenInvest }: { budget: Budget; onOpe
           <div className={s.mpLeftover} style={notPlanned < 0 ? { background: C.redTint, color: C.redInk } : undefined}>
             <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
               <strong style={{ fontWeight: 600 }}>
-                {notPlanned > 0 ? `Not planned · ${full(ofIncome(notPlanned))} (${pct(notPlanned)}%)` : `Planned beyond income · ${full(ofIncome(-notPlanned))} (${pct(-notPlanned)}%)`}
+                {notPlanned > 0 ? `Not planned, ${full(ofIncome(notPlanned))} (${pct(notPlanned)}%)` : `Planned beyond income, ${full(ofIncome(-notPlanned))} (${pct(-notPlanned)}%)`}
               </strong>
               <span style={{ fontSize: 13, color: notPlanned > 0 ? C.textMuted : 'inherit' }}>
                 {notPlanned > 0 ? 'Income with no job yet. Give it one:' : 'Your limits and savings add up to more than you earn. Lower a limit, or savings:'}
@@ -356,7 +356,7 @@ function Row({
         {level < 2 && !total && (has(last) || has(now)) && (
           <span className={s.mpSub} style={{ paddingLeft: level * 18 + 20 }}>
             {has(last) && `Last cycle ${last}`}
-            {has(last) && has(now) && ' · '}
+            {has(last) && has(now) && ', '}
             {has(now) && (
               <>
                 this cycle <span style={{ color: nowInk }}>{now}</span>

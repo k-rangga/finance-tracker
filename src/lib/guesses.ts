@@ -58,7 +58,7 @@ export function patternGuess(t: TxView, byMerchant: Map<string, TxView[]>): Gues
   const name = tidyName(t.title);
   const top = tally(same)[0];
   if (top.n / same.length >= 0.75)
-    return { category: top.category, sub: top.sub, by: 'pattern', confidence: top.n >= 3 ? 'high' : 'medium', why: `Your last ${same.length} ${name} were ${top.category}${top.sub ? ' · ' + top.sub : ''}.` };
+    return { category: top.category, sub: top.sub, by: 'pattern', confidence: top.n >= 3 ? 'high' : 'medium', why: `Your last ${same.length} ${name} were ${top.category}${top.sub ? ' › ' + top.sub : ''}.` };
   // Split merchant: look at the five closest in amount.
   const near = [...same].sort((a, b) => Math.abs(a.amount - t.amount) - Math.abs(b.amount - t.amount)).slice(0, 5);
   const best = tally(near)[0];

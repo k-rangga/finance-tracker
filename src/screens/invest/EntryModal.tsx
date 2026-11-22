@@ -77,7 +77,7 @@ export function EntryModal({ todayISO, portfolioValue, editing, onClose, onSave 
     }
   }
   if (lev > 1 && px > 0) parts.push('Liquidation ≈ ' + nat(px * (1 - dr / lev), D.mk));
-  const preview = parts.length ? parts.join(' · ') : 'Add price and quantity to see the cost, then a target and stop for reward : risk and max loss.';
+  const preview = parts.length ? parts.join(', ') : 'Add price and quantity to see the cost, then a target and stop for reward : risk and max loss.';
 
   const save = () => {
     const tk = D.tk.trim().toUpperCase();

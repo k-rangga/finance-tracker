@@ -95,7 +95,7 @@ export function Invest({ cycle }: { cycle: Cycle }) {
         savePrices({ map, auto, at: n ? todayISO : prices.at, quotedAt: new Date().toISOString() });
         const manual = items.filter(i => !got[i.tk]).map(i => i.tk);
         setQuoteMsg(
-          `${n} of ${items.length} updated from Google Finance (can be up to 20 min delayed)` + (manual.length ? ` · kept your price for ${manual.join(', ')}` : ''),
+          `${n} of ${items.length} updated from Google Finance (can be up to 20 min delayed)` + (manual.length ? `, kept your price for ${manual.join(', ')}` : ''),
         );
       } catch (e) {
         if (!quiet) setQuoteMsg("Couldn't get prices from Google Finance: " + (e instanceof Error ? e.message : String(e)));

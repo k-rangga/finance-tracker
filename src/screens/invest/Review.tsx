@@ -44,18 +44,18 @@ export function Review({ today, items, from, dS }: { today: Date; items: AnyTrad
   return (
     <div className={s.stack}>
       <Card style={{ gap: 24 }}>
-        <CardHead title="How you trade" caption={`${n(st.count)} closed · monthly review on the 1st, next ${fullDate(nextReview)}`} />
+        <CardHead title="How you trade" caption={`${n(st.count)} closed, monthly review on the 1st, next ${fullDate(nextReview)}`} />
         <div className={s.stats} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))' }}>
           <Stat label="Net P/L" value={st.count ? dS(st.pnl, true) : '—'} ink={plInk(st.pnl)} sub={`after fees${st.funding ? ' and funding' : ''}`} />
-          <Stat label="Win rate" value={st.winRate == null ? '—' : Math.round(st.winRate) + '%'} sub={st.count ? `avg win ${dS(st.avgWin)} · avg loss ${dS(st.avgLoss)}` : 'No closed trades'} />
+          <Stat label="Win rate" value={st.winRate == null ? '—' : Math.round(st.winRate) + '%'} sub={st.count ? `avg win ${dS(st.avgWin)}, avg loss ${dS(st.avgLoss)}` : 'No closed trades'} />
           <Stat
             label="Won per 1 lost"
             value={st.perLost == null ? '—' : st.perLost.toFixed(2)}
             ink={st.perLost == null ? undefined : st.perLost >= 1 ? C.accent800 : C.redInk}
             sub={
               (st.perLost == null ? 'No losses yet' : st.perLost >= 1 ? 'Above 1: making money' : 'Below 1: losing money') +
-              (st.followedPct != null ? ` · plan followed ${Math.round(st.followedPct)}%` : '') +
-              (st.avgR != null ? ` · avg ${fmtR(st.avgR)}` : '')
+              (st.followedPct != null ? `, plan followed ${Math.round(st.followedPct)}%` : '') +
+              (st.avgR != null ? `, avg ${fmtR(st.avgR)}` : '')
             }
           />
         </div>
@@ -114,7 +114,7 @@ function Breakdown({ rows, fmt }: { rows: Group[]; fmt: (v: number) => string })
             {r.key}
           </span>
           <span style={{ fontSize: 12, color: C.textMuted, whiteSpace: 'nowrap' }}>
-            {r.trades} · {Math.round((r.wins / r.trades) * 100)}% wins
+            {r.trades}, {Math.round((r.wins / r.trades) * 100)}% wins
           </span>
           <span style={{ fontWeight: 600, color: plInk(r.pnl), minWidth: 96, textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{fmt(r.pnl)}</span>
         </div>

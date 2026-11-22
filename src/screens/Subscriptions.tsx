@@ -61,7 +61,7 @@ export function Subscriptions({ budget: b, states, txs, catOf }: Props) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <h2 className={s.h2}>Subscriptions</h2>
           <span className={s.caption}>
-            {live.length ? `${full(monthly)} a month · ${full(monthly * 12)} a year · ${live.length} active` : 'What you pay for on repeat, and when each bills'}
+            {live.length ? `${full(monthly)} a month, ${full(monthly * 12)} a year, ${live.length} active` : 'What you pay for on repeat, and when each bills'}
           </span>
         </div>
         <button type="button" className={s.btnOutlineSm} style={{ flex: 'none' }} onClick={() => setEditing({ id: newId() })}>
@@ -89,7 +89,7 @@ export function Subscriptions({ budget: b, states, txs, catOf }: Props) {
                   {x.name}
                 </span>
                 <span style={{ fontSize: 13, color: C.textMuted }}>
-                  {full(x.amount)} {per(x.every)} · {x.count} charge{x.count === 1 ? '' : 's'} · next {dayMonth(new Date(x.next + 'T00:00'))}
+                  {full(x.amount)} {per(x.every)}, {x.count} charge{x.count === 1 ? '' : 's'}, next {dayMonth(new Date(x.next + 'T00:00'))}
                 </span>
               </span>
               <button type="button" className={s.btnGhost} style={{ fontSize: 13, padding: '6px 10px', minHeight: 32, whiteSpace: 'nowrap', flex: 'none' }} onClick={() => notOne([x.key])}>
@@ -124,7 +124,7 @@ export function Subscriptions({ budget: b, states, txs, catOf }: Props) {
           )}
           {cancelled.length > 0 && (
             <button type="button" className={s.textBtnSm} style={{ color: C.textMuted }} aria-expanded={showCancelled} onClick={() => setShowCancelled(!showCancelled)}>
-              {showCancelled ? 'Hide' : 'Show'} cancelled ({cancelled.length}) · saving {full(saving)} a month
+              {showCancelled ? 'Hide' : 'Show'} cancelled ({cancelled.length}), saving {full(saving)} a month
             </button>
           )}
         </div>
@@ -176,8 +176,8 @@ function SubRow({ sub: x, st, catOf, onOpen, onSave }: { sub: Subscription; st?:
           </span>
           <span className={s.ellipsis} style={{ fontSize: 13, color: C.textMuted }}>
             {full(x.amount)} {per(x.every)}
-            {x.every !== 'month' ? ` · ${full(perMonth(x))} a month` : ''}
-            {x.account ? ` · ${x.account}` : ''}
+            {x.every !== 'month' ? `, ${full(perMonth(x))} a month` : ''}
+            {x.account ? `, ${x.account}` : ''}
           </span>
         </span>
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>

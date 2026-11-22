@@ -15,11 +15,11 @@ import { tidyName } from '../lib/format';
 /** Stop waiting after this long; Apps Script would still finish, but the answer is dropped. */
 const TIMEOUT_MS = 75_000;
 
-/** "Answered in 4s · Flash-Lite" under a reply. */
+/** "Answered in 4s, Flash-Lite" under a reply. */
 function answeredIn(m: ChatMessage) {
   const secs = m.secs! < 10 ? Math.max(0.1, m.secs!).toFixed(1).replace(/\.0$/, '') : String(Math.round(m.secs!));
   const model = m.model?.replace(/^gemini-[\d.]+-/, '').replace(/(^|-)(\w)/g, (_, d, c) => (d ? ' ' : '') + c.toUpperCase()).replace(' Lite', '-Lite');
-  return `Answered in ${secs}s${model ? ' · ' + model : ''}`;
+  return `Answered in ${secs}s${model ? ', ' + model : ''}`;
 }
 
 const STARTERS = ['Why am I over budget?', 'How do I finish this cycle on budget?', 'Which merchants should I cut back on?', 'Sort my Buffer transactions'];
@@ -194,7 +194,7 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
           </div>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.textMuted }}>
             <input type="checkbox" checked={withNotes} onChange={e => setWithNotes(e.target.checked)} />
-            Include my notes · Sends this cycle's spending summary to Google Gemini
+            Include my notes. Sends this cycle's spending summary to Google Gemini
           </label>
         </form>
       </section>
@@ -280,7 +280,7 @@ function ActionCard({ action: a, allTxs }: { action: ChatAction; allTxs: TxView[
       const sub = subOf(cat, a.sub);
       title = (
         <>
-          Always put <strong>{a.merchant}</strong> in <strong>{categoryLabel(cat)}{sub ? ' · ' + sub : ''}</strong>
+          Always put <strong>{a.merchant}</strong> in <strong>{categoryLabel(cat)}{sub ? ' › ' + sub : ''}</strong>
         </>
       );
       apply = () => {
@@ -297,7 +297,7 @@ function ActionCard({ action: a, allTxs }: { action: ChatAction; allTxs: TxView[
       const sub = subOf(cat, a.sub);
       title = (
         <>
-          Move {txs.length === 1 ? <strong>{tidyName(txs[0].title)}</strong> : <strong>{txs.length} transactions</strong>} to <strong>{categoryLabel(cat)}{sub ? ' · ' + sub : ''}</strong>
+          Move {txs.length === 1 ? <strong>{tidyName(txs[0].title)}</strong> : <strong>{txs.length} transactions</strong>} to <strong>{categoryLabel(cat)}{sub ? ' › ' + sub : ''}</strong>
         </>
       );
       apply = () => {

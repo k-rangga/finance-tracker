@@ -94,15 +94,15 @@ export function JournalFeed({ account, items, dS, onReview }: Props) {
   /** The month as plain text: numbers, note, then every entry. */
   const asText = () =>
     [
-      `${SOURCE_NAME[account]} journal · ${monthName(month)}`,
-      `${st.count} trades · ${st.winRate == null ? '—' : Math.round(st.winRate) + '% wins'} · ${dS(st.pnl, true)}${st.followedPct != null ? ` · plan followed ${Math.round(st.followedPct)}%` : ''}`,
+      `${SOURCE_NAME[account]} journal, ${monthName(month)}`,
+      `${st.count} trades, ${st.winRate == null ? '—' : Math.round(st.winRate) + '% wins'}, ${dS(st.pnl, true)}${st.followedPct != null ? `, plan followed ${Math.round(st.followedPct)}%` : ''}`,
       ...(topMistake ? [`Most repeated mistake: ${topMistake.key} (${topMistake.trades}×, ${dS(topMistake.pnl, true)})`] : []),
       ...(note.trim() ? ['', note.trim()] : []),
       '',
       ...entries.map(
         t =>
-          `${dayName(t.closed!)} · ${t.name} ${t.side} · ${dS(t.pnl, true)}` +
-          [t.followed && `plan: ${t.followed}`, t.setup, ...t.mistakes].filter(Boolean).map(x => ` · ${x}`).join('') +
+          `${dayName(t.closed!)}, ${t.name} ${t.side}, ${dS(t.pnl, true)}` +
+          [t.followed && `plan: ${t.followed}`, t.setup, ...t.mistakes].filter(Boolean).map(x => `, ${x}`).join('') +
           (t.lesson ? `\n  "${t.lesson}"` : ''),
       ),
     ].join('\n');
@@ -149,9 +149,9 @@ export function JournalFeed({ account, items, dS, onReview }: Props) {
         <span style={{ fontSize: 15 }}>
           {st.count ? (
             <>
-              {st.count} trades · {Math.round(st.winRate ?? 0)}% wins ·{' '}
+              {st.count} trades, {Math.round(st.winRate ?? 0)}% wins,{' '}
               <strong style={{ color: plInk(st.pnl), fontWeight: 600 }}>{dS(st.pnl, true)}</strong>
-              {st.followedPct != null && ` · plan followed ${Math.round(st.followedPct)}%`}
+              {st.followedPct != null && `, plan followed ${Math.round(st.followedPct)}%`}
             </>
           ) : (
             <span style={{ color: C.textMuted }}>No closed trades this month yet.</span>

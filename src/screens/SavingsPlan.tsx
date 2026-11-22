@@ -38,8 +38,8 @@ function Paydays({ cycle }: { cycle: Cycle }) {
         <span style={{ marginRight: 'auto', minWidth: 0 }}>
           Next payday <strong style={{ fontWeight: 600 }}>{dayLabel(next)}</strong>, in {diffDays(cycle.today, next)} days
           <span style={{ color: C.textMuted }}>
-            {' '}
-            · this cycle is {cycle.cycleDays} days, {dayMonth(cycle.start)} – {dayMonth(cycle.end)}
+            {', '}
+            this cycle is {cycle.cycleDays} days, {dayMonth(cycle.start)} – {dayMonth(cycle.end)}
           </span>
         </span>
         <button type="button" className={s.textBtnSm} aria-expanded={all} onClick={() => setAll(!all)}>
@@ -62,7 +62,7 @@ function Paydays({ cycle }: { cycle: Cycle }) {
                   </span>
                   {adj && (
                     <span className={s.badge} style={{ padding: '3px 10px', background: C.amberTint, color: C.amberInk }}>
-                      25th is {new Date(p.getFullYear(), p.getMonth(), 25).toLocaleDateString('en-GB', { weekday: 'short' })} · moved
+                      25th is {new Date(p.getFullYear(), p.getMonth(), 25).toLocaleDateString('en-GB', { weekday: 'short' })}, moved
                     </span>
                   )}
                   <span style={{ minWidth: 64, textAlign: 'right', color: C.textMuted }}>{diffDays(p, n)} days</span>

@@ -139,7 +139,7 @@ export default function App() {
     try {
       const r = await syncNow();
       await refreshImports();
-      setSyncNote(r.busy ? 'A sync is already running' : r.imported ? `Synced · ${r.imported} new` : 'Synced · nothing new');
+      setSyncNote(r.busy ? 'A sync is already running' : r.imported ? `Synced, ${r.imported} new` : 'Synced, nothing new');
     } catch {
       setSyncNote("Couldn't sync. Try again from the Synced button.");
     }
@@ -271,7 +271,7 @@ export default function App() {
                 <h1 className={s.h1}>{current.label}</h1>
                 <span className={s.label}>
                   <span className={s.desktopOnly}>
-                    Cycle {dayMonth(cycle.start)} – {dayMonth(cycle.end)} ·&nbsp;
+                    Cycle {dayMonth(cycle.start)} – {dayMonth(cycle.end)},&nbsp;
                   </span>
                   Day {cycle.dayN} of {cycle.cycleDays}
                 </span>

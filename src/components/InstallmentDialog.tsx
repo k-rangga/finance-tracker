@@ -66,7 +66,7 @@ export function InstallmentDialog({ tx, plan, onSave, onUndo, onClose }: Props) 
   return (
     <Modal title="Pay in installments" onClose={onClose} width={560}>
       <span style={{ fontSize: 14, color: C.textSoft }}>
-        <strong style={{ fontWeight: 600, color: C.text }}>{tidyName(tx.title)}</strong> · {full(price)} on {tx.account} · {fullDate(tx.date)}
+        <strong style={{ fontWeight: 600, color: C.text }}>{tidyName(tx.title)}</strong>, {full(price)} on {tx.account}, {fullDate(tx.date)}
       </span>
       <span style={{ fontSize: 13, color: C.textMuted }}>
         The purchase stops counting at once. Each payment, interest included, is a fixed bill under Installments in the pay cycle it's billed, so your plan covers it.
@@ -103,16 +103,16 @@ export function InstallmentDialog({ tx, plan, onSave, onUndo, onClose }: Props) 
               const c = getCycle(first);
               return `Counts in the ${dayMonth(c.start)} – ${dayMonth(c.end)} pay cycle`;
             })()}
-            {card && card.due >= 1 ? ` · paid with the card bill due ${dayMonth(billDue(first, card.due))}` : ''}
+            {card && card.due >= 1 ? `, paid with the card bill due ${dayMonth(billDue(first, card.due))}` : ''}
             {card && start !== toISO(suggested) && (
               <>
-                {' · '}
+                {', '}
                 <button type="button" className={s.textBtnSm} style={{ padding: 0 }} onClick={() => setStart(toISO(suggested))}>
                   Use the {dayMonth(suggested)} statement
                 </button>
               </>
             )}
-            {!card && isCardAccount && <> · set {tx.account}'s statement day in Settings to date this exactly</>}
+            {!card && isCardAccount && <>, set {tx.account}'s statement day in Settings to date this exactly</>}
           </span>
         )}
       </label>
@@ -151,12 +151,12 @@ export function InstallmentDialog({ tx, plan, onSave, onUndo, onClose }: Props) 
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <span className={s.label}>Each month · change any to match your statement</span>
+        <span className={s.label}>Each month (change any to match your statement)</span>
         <div className={s.planList}>
           {amounts.map((a, i) => (
             <label key={i} className={s.planRow}>
               <span style={{ fontSize: 13, color: C.textMuted, minWidth: 0 }}>
-                {i + 1}/{months} · {dayMonth(addMonths(first, i))}
+                {i + 1}/{months}, {dayMonth(addMonths(first, i))}
               </span>
               <input
                 className={s.input}
@@ -177,7 +177,7 @@ export function InstallmentDialog({ tx, plan, onSave, onUndo, onClose }: Props) 
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', fontSize: 14, padding: '10px 0', borderTop: `1px solid ${C.divider}` }}>
         <span style={{ color: C.textSoft }}>
-          Total {exact(paid)} · price {exact(price)}
+          Total {exact(paid)}, price {exact(price)}
         </span>
         <span style={{ fontWeight: 600, color: interest <= -tiny ? C.redInk : interest >= tiny ? C.amberInk : C.accent800 }}>
           {interest <= -tiny ? `${exact(-interest)} less than the price` : interest >= tiny ? `${exact(interest)} interest` : 'No interest'}

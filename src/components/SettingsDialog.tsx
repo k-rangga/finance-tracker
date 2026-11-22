@@ -81,10 +81,10 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
   return (
     <Modal title="Settings" onClose={onClose} width={560}>
       <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-        {email ? `Signed in as ${email}` : 'Local preview'} · {onVercel ? 'saved to your account' : 'saved to your Google Drive spreadsheet'}
+        {email ? `Signed in as ${email}` : 'Local preview'}, {onVercel ? 'saved to your account' : 'saved to your Google Drive spreadsheet'}
         {onVercel && (
           <>
-            {' · '}
+            {', '}
             <button type="button" className={s.textBtnSm} style={{ padding: 0 }} onClick={signOut}>
               Sign out
             </button>
@@ -92,7 +92,7 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
         )}
       </span>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <span className={s.label}>Appearance · on this device</span>
+        <span className={s.label}>Appearance (this device)</span>
         <Options
           label="Appearance"
           items={['Auto', 'Light', 'Dark'] as const}
@@ -126,7 +126,7 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
         return (
           <span style={{ fontSize: 13, fontWeight: total > 100 ? 700 : 500, color: total > 100 ? 'var(--amber-ink)' : 'var(--text-muted)' }}>
             Category limits {budgetPct}% + savings {savePct}% = {total}% of income
-            {total > 100 ? ' · over 100%: lower the savings target or a category limit.' : total < 100 ? ` · ${100 - total}% unplanned` : ' ✓'}
+            {total > 100 ? ', over 100%: lower the savings target or a category limit.' : total < 100 ? `, ${100 - total}% unplanned` : ' ✓'}
           </span>
         );
       })()}
@@ -199,7 +199,7 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
                     <span style={{ fontSize: 14, fontWeight: 600 }}>{c.name}</span>
                     <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                      {c.type === 'fixed' ? 'Fixed bill' : 'Variable'} · {c.limitPct}% of income ({full((c.limitPct / 100) * settings.income)})
+                      {c.type === 'fixed' ? 'Fixed bill' : 'Variable'}, {c.limitPct}% of income ({full((c.limitPct / 100) * settings.income)})
                     </span>
                   </span>
                   <button type="button" className={s.linkBtn} onClick={() => onEditCategory(c.name)}>

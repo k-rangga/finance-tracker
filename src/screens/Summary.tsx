@@ -88,7 +88,7 @@ export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismi
             <button type="button" className={s.rowBtn} aria-expanded={more} onClick={() => setMore(!more)} style={{ padding: '14px 16px', minHeight: 48 }}>
               <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto' }}>
                 <span style={{ fontSize: 15, fontWeight: 600 }}>More</span>
-                <span style={{ fontSize: 13, color: C.textMuted }}>Compared with last cycle · spending pace</span>
+                <span style={{ fontSize: 13, color: C.textMuted }}>Compared with last cycle, spending pace</span>
               </span>
               <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ transform: more ? 'rotate(180deg)' : 'none' }} />
             </button>
@@ -144,7 +144,7 @@ export function cycleStatus(cycle: Cycle, b: Budget, full: (v: number) => string
   if (b.budget - b.spent - b.fixedDue <= 0) return { ink: C.redInk, text: 'Nothing left for spending before payday' };
   if (usual == null) return { ink: C.textMuted, text: 'Stay at or under this each day to finish on budget' };
   if (usual > b.safeDay * 1.05) return { ink: C.amberInk, text: `Your usual day lately is ${short(usual)}, ${short(usual - b.safeDay)} more than this` };
-  return { ink: C.accent800, text: `On track · your usual day lately is ${short(usual)}` };
+  return { ink: C.accent800, text: `On track, your usual day lately is ${short(usual)}` };
 }
 
 /** Days in a row, back from today, where variable spending stayed within its even daily share. */
@@ -231,10 +231,10 @@ function ThisCycle({
       key: t.id,
       title: tidyName(t.title),
       sub:
-        `${t.time} · ${t.cat}` +
-        (notes[t.id] ? ` · “${notes[t.id]}”` : '') +
-        (t.reimbursed ? ` · ${full(t.reimbursed)} reimbursed` : '') +
-        (t.share != null ? ` · your share of ${full(t.amount)}` : ''),
+        `${t.time}, ${t.cat}` +
+        (notes[t.id] ? `, “${notes[t.id]}”` : '') +
+        (t.reimbursed ? `, ${full(t.reimbursed)} reimbursed` : '') +
+        (t.share != null ? `, your share of ${full(t.amount)}` : ''),
       value: (t.isIncome ? '+ ' : '- ') + full(t.isIncome ? t.amount : t.net),
       // The section already says it's spending: only incomes get a colour.
       ink: t.isIncome ? C.accent800 : C.text,
@@ -274,14 +274,14 @@ function ThisCycle({
         label="Moved to savings this cycle"
         sub={
           `Plan ${full(savings)} (${SAVINGS_TARGET_PCT}% of income)` +
-          (b.saved >= savings ? ' · plan reached' : ` · ${full(savings - b.saved)} to go`) +
-          (b.saved ? '' : ' · set a transfer\'s category to Transfer (savings) to count it')
+          (b.saved >= savings ? ', plan reached' : `, ${full(savings - b.saved)} to go`) +
+          (b.saved ? '' : ', set a transfer\'s category to Transfer (savings) to count it')
         }
         value={full(b.saved)}
       />
       <BreakdownLine
         label="Invested this cycle"
-        sub={`Plan ${full(investPlan)} (${settings.investPct}% of income)` + (aboveInvestPlan > 0 ? ` · ${full(aboveInvestPlan)} above plan` : '')}
+        sub={`Plan ${full(investPlan)} (${settings.investPct}% of income)` + (aboveInvestPlan > 0 ? `, ${full(aboveInvestPlan)} above plan` : '')}
         value={full(b.invested)}
         ink={aboveInvestPlan > 0 ? C.amberInk : C.text}
       />
@@ -367,7 +367,7 @@ function ThisCycle({
           <span style={{ fontSize: 16, color: C.textSoft }}>a day</span>
         </span>
         <span style={{ fontSize: 14, color: C.textSoft }}>
-          until payday, <span style={{ whiteSpace: 'nowrap' }}>{dayLabel(cycle.next)}</span> ·{' '}
+          until payday, <span style={{ whiteSpace: 'nowrap' }}>{dayLabel(cycle.next)}</span>,{' '}
           <span style={{ whiteSpace: 'nowrap' }}>
             {full(left)} left after bills ÷ {cycle.daysLeft} {cycle.daysLeft === 1 ? 'day' : 'days'}
           </span>
@@ -418,7 +418,7 @@ function ThisCycle({
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px 12px', flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
           <span style={{ marginRight: 'auto' }}>
-            {SAVINGS_TARGET_PCT}% of income · invest {fit(investPlan)} of it ({fit(b.invested)} so far)
+            {SAVINGS_TARGET_PCT}% of income, invest {fit(investPlan)} of it ({fit(b.invested)} so far)
           </span>
           {b.saved < saveTarget && (
             <button type="button" className={s.linkBtn} onClick={onMarkSavings} style={{ fontSize: 13 }}>
@@ -551,7 +551,7 @@ function TodayCard({ cycle, budget: b, compact, onSeeAll }: { cycle: Cycle; budg
               <SideRow
                 mark={<Dot color={categoryByName(t.cat)?.color ?? C.accent500} />}
                 title={tidyName(t.title)}
-                sub={`${t.cat} · ${t.time}` + (notes[t.id] ? ` · “${notes[t.id]}”` : '')}
+                sub={`${t.cat}, ${t.time}` + (notes[t.id] ? `, “${notes[t.id]}”` : '')}
                 value={t.isIncome ? '+ ' + full(t.amount) : full(t.net)}
                 ink={t.isIncome ? C.accent800 : C.text}
               />
@@ -561,7 +561,7 @@ function TodayCard({ cycle, budget: b, compact, onSeeAll }: { cycle: Cycle; budg
       )}
       {(today.length > 5 || transfers > 0) && (
         <span style={{ fontSize: 13, color: C.textMuted }}>
-          {[today.length > 5 && `+${today.length - 5} more`, transfers > 0 && `${transfers} ${transfers === 1 ? 'transfer' : 'transfers'} between your accounts`].filter(Boolean).join(' · ')}
+          {[today.length > 5 && `+${today.length - 5} more`, transfers > 0 && `${transfers} ${transfers === 1 ? 'transfer' : 'transfers'} between your accounts`].filter(Boolean).join(', ')}
         </span>
       )}
     </section>
@@ -654,10 +654,10 @@ function CycleWrapUp({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
       <IconChip d={IC.calendar} bg={C.accentTint} ink={C.accent800} size={34} iconSize={16} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
         <span style={{ fontSize: 15, fontWeight: 600 }}>
-          Cycle closes {when} · payday {dayLabel(cycle.next)}
+          Cycle closes {when}, payday {dayLabel(cycle.next)}
         </span>
         <span style={{ fontSize: 13, color: C.textSoft, lineHeight: 1.5 }}>
-          Spent {usedPct}% of your budget · saved {b.savedPct.toFixed(1)}% ({full(b.saved)}) vs your {SAVINGS_TARGET_PCT}% target{onTarget ? ' ✓' : ''} ·{' '}
+          Spent {usedPct}% of your budget, saved {b.savedPct.toFixed(1)}% ({full(b.saved)}) vs your {SAVINGS_TARGET_PCT}% target{onTarget ? ' ✓' : ''},{' '}
           {over ? (
             <>
               biggest overspend: <strong style={{ color: C.redInk, whiteSpace: 'nowrap' }}>{over.name} +{full(over.spent - over.limit)}</strong>
@@ -749,7 +749,7 @@ function ByCategory({ items }: { items: Item[] }) {
             {isOpen && (
               <div className="fade-in" style={{ paddingLeft: 46, paddingBottom: 6 }}>
                 {/* The group already says the category. */}
-                <ByDay items={g.list.map(i => ({ ...i, sub: i.sub.replace(` · ${g.cat} · `, ' · ') }))} />
+                <ByDay items={g.list.map(i => ({ ...i, sub: i.sub.replace(`, ${g.cat}`, '') }))} />
               </div>
             )}
           </div>
@@ -809,9 +809,7 @@ function CreditCards({ budget: b }: { budget: Budget }) {
                 <span style={{ fontSize: 15, fontWeight: 600 }}>{c.account.replace(/^CC /, '')} card</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13, color: C.textMuted }}>
                   <span>Spent this cycle {full(c.spent)}</span>
-                  <span aria-hidden="true">·</span>
                   <span>Last bill {full(c.lastBill)}</span>
-                  <span aria-hidden="true">·</span>
                   <span>
                     Paid {full(c.paid)}
                     {c.paidOn ? ' on ' + dayMonth(c.paidOn) : ''}
@@ -970,7 +968,7 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <h2 className={s.h2}>Where it went</h2>
           <span className={s.caption}>
-            Spent {full(b.spent)} · day {cycle.dayN} of {cycle.cycleDays}
+            Spent {full(b.spent)}, day {cycle.dayN} of {cycle.cycleDays}
           </span>
         </div>
       </div>
@@ -1028,7 +1026,7 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
           >
             <strong style={{ fontSize: 14 }}>{hovered.name}</strong>
             <span>
-              {full(hovered.spent)} · {((hovered.spent / b.spent) * 100).toFixed(1)}% of spending
+              {full(hovered.spent)}, {((hovered.spent / b.spent) * 100).toFixed(1)}% of spending
             </span>
             <span style={{ color: C.textMuted }}>
               {Math.round(hovered.used)}% of its {full(hovered.limit)} limit
@@ -1045,7 +1043,7 @@ function WhereItWent({ cycle, budget: b, onOpenCategory }: Props) {
             </span>
           ))}
         </span>
-        {!phone && <span style={{ color: C.textMuted }}>Tile size = share of spending · hover for details · click to open</span>}
+        {!phone && <span style={{ color: C.textMuted }}>Tile size = share of spending, hover for details, click to open</span>}
       </div>
       {/* Only what needs a look; the full list lives on Categories. */}
       <div className={s.bleed} style={{ marginTop: 4 }}>
@@ -1136,7 +1134,7 @@ function SpendingPace({ cycle, budget: b, onAsk }: { cycle: Cycle; budget: Budge
         <span style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em' }}>{full(end)}</span>
         <span style={{ fontSize: 14, fontWeight: 600, color: over > 0 ? C.redInk : C.accent800 }}>
           {over > 0 ? `${short(over)} over budget` : `${short(-over)} under budget`}
-          <span style={{ fontWeight: 400, color: C.textMuted }}> · budget {short(b.budget)}</span>
+          <span style={{ fontWeight: 400, color: C.textMuted }}>, budget {short(b.budget)}</span>
         </span>
         <button
           type="button"
@@ -1158,7 +1156,7 @@ function SpendingPace({ cycle, budget: b, onAsk }: { cycle: Cycle; budget: Budge
         {/* What the pointer is on (today when it isn't on the chart). */}
         <span style={{ fontSize: 13, color: C.textMuted, minHeight: 18 }} aria-live="polite">
           <strong style={{ color: C.text, fontWeight: 600 }}>{dayLabel(cycle.dateOf(h))}</strong>
-          {h === today ? ' (today)' : ''} · {full(points[h])} {h > today ? 'at this pace' : 'spent so far'}
+          {h === today ? ' (today)' : ''}, {full(points[h])} {h > today ? 'at this pace' : 'spent so far'}
         </span>
         <div
           ref={box}

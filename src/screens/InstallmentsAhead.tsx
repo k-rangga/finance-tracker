@@ -27,7 +27,7 @@ export function InstallmentsAhead({ payments, cycle }: { payments: Transaction[]
       <div className={s.cardHead}>
         <h2 className={s.h2}>Installments ahead</h2>
         <span className={s.caption}>
-          {full(left)} left · {plans.length} {plans.length === 1 ? 'plan' : 'plans'}
+          {full(left)} left, {plans.length} {plans.length === 1 ? 'plan' : 'plans'}
         </span>
       </div>
 
@@ -41,8 +41,8 @@ export function InstallmentsAhead({ payments, cycle }: { payments: Transaction[]
                 <span style={{ fontWeight: i === 0 ? 600 : 500 }}>
                   {i === 0 ? 'This cycle' : `Payday ${dayMonth(c.start)}`}
                   <span style={{ color: C.textMuted, fontWeight: 400 }}>
-                    {' '}
-                    · {dayMonth(c.start)} – {dayMonth(c.end)}
+                    {', '}
+                    {dayMonth(c.start)} – {dayMonth(c.end)}
                   </span>
                 </span>
                 {ending.length > 0 && drop > 0 && (
@@ -68,7 +68,7 @@ export function InstallmentsAhead({ payments, cycle }: { payments: Transaction[]
                   {tidyName(p.title)}
                 </span>
                 <span style={{ fontSize: 13, color: C.textMuted }}>
-                  {p.account} · last payment {monthYear(p.last)}
+                  {p.account}, last payment {monthYear(p.last)}
                 </span>
               </span>
               <span style={{ whiteSpace: 'nowrap', color: C.textSoft }}>{p.left ? `${full(p.left)} left` : 'Paid off'}</span>
