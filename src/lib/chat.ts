@@ -14,7 +14,7 @@ export type ChatAction =
 /** A reply also carries the model that wrote it, and your thumbs up or down once you've rated it. */
 export type ChatMessage = { role: 'user' | 'model'; text: string; actions?: ChatAction[]; model?: string; rating?: 'up' | 'down' };
 
-export type ChatAnswer = { reply: string; actions: ChatAction[]; model?: string } | { error: 'no_key' | 'api' | 'blocked'; detail?: string };
+export type ChatAnswer = { reply: string; actions: ChatAction[]; model?: string } | { error: 'no_key' | 'api' | 'blocked' | 'quota'; detail?: string };
 
 /** `deep`: planning, so Maxie uses the stronger model and may look up local prices (see askGemini_). */
 export const askGemini = (messages: ChatMessage[], context: object, deep = false) =>

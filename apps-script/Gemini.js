@@ -72,7 +72,7 @@ function askGemini_(p) {
   console.log('askGemini ' + model + ' ' + res.getResponseCode() + ' in ' + (Date.now() - started) + 'ms · ' + JSON.stringify((data && data.usageMetadata) || {}));
   if (res.getResponseCode() !== 200) {
     const msg = data && data.error && data.error.message ? data.error.message : 'HTTP ' + res.getResponseCode();
-    return { error: 'api', detail: String(msg).slice(0, 300) };
+    return { error: res.getResponseCode() === 429 ? 'quota' : 'api', detail: String(msg).slice(0, 300) };
   }
   const cand = data && data.candidates && data.candidates[0];
   const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(x => x.text || '').join('') : '';
@@ -140,26 +140,32 @@ function geminiPlan_(key, body, search) {
     b.generationConfig.responseMimeType = 'application/json';
   };
   if (search) withSearch();
+  const errText = d => JSON.stringify((d && d.error) || '');
+  // Worth stepping down from: over quota or rate-limited (429), not allowed (403), not found (404), busy (5xx).
+  const stepDown = code => code === 429 || code === 403 || code === 404 || code >= 500;
   let res, data, model;
   for (let i = 0; i < models.length; i++) {
     model = models[i];
     const started = Date.now();
     res = geminiFetch_(model, key, b);
     data = geminiJson_(res);
-    const err = JSON.stringify((data && data.error) || '');
-    if (res.getResponseCode() === 400 && b.tools && /search|tool|grounding|mime/i.test(err)) {
+    // Search isn't supported, or its quota is used up: plan without it.
+    if (b.tools && (stepDown(res.getResponseCode()) || (res.getResponseCode() === 400 && /search|tool|grounding|mime/i.test(errText(data))))) {
+      console.log('plan ' + model + ' +search ' + res.getResponseCode() + ': ' + errText(data).slice(0, 200));
       withoutSearch();
       res = geminiFetch_(model, key, b);
       data = geminiJson_(res);
     }
-    if (res.getResponseCode() === 400 && /thinking/i.test(JSON.stringify((data && data.error) || ''))) {
+    if (res.getResponseCode() === 400 && /thinking/i.test(errText(data))) {
       delete b.generationConfig.thinkingConfig;
       res = geminiFetch_(model, key, b);
       data = geminiJson_(res);
     }
-    console.log('plan ' + model + (b.tools ? ' +search ' : ' ') + res.getResponseCode() + ' in ' + (Date.now() - started) + 'ms');
-    // Model not found or not allowed for this key: try the everyday model.
-    if (res.getResponseCode() === 200 || !(res.getResponseCode() === 404 || /model/i.test(err))) break;
+    const code = res.getResponseCode();
+    console.log('plan ' + model + (b.tools ? ' +search ' : ' ') + code + ' in ' + (Date.now() - started) + 'ms' + (code === 200 ? '' : ': ' + errText(data).slice(0, 200)));
+    if (code === 200 || !(stepDown(code) || /model/i.test(errText(data)))) break;
+    // The next (everyday) model: low thinking, as it's used for chat.
+    if (b.generationConfig.thinkingConfig) b.generationConfig.thinkingConfig = { thinkingLevel: 'low' };
   }
   return { res: res, data: data, model: model, searched: !!b.tools };
 }
@@ -195,6 +201,7 @@ function draftJournalMonth_(p) {
     res = geminiFetch_(model, key, body);
     data = geminiJson_(res);
   }
+  if (res.getResponseCode() === 429) return { error: 'quota', detail: String((data && data.error && data.error.message) || '').slice(0, 300) };
   if (res.getResponseCode() !== 200) return { error: 'api', detail: String((data && data.error && data.error.message) || 'HTTP ' + res.getResponseCode()).slice(0, 300) };
   const cand = data && data.candidates && data.candidates[0];
   const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(x => x.text || '').join('').trim() : '';
@@ -254,6 +261,7 @@ function checkCyclePlan_(p) {
   const g = geminiPlan_(key, body, !!p.city);
   const res = g.res;
   const data = g.data;
+  if (res.getResponseCode() === 429) return { error: 'quota', detail: String((data && data.error && data.error.message) || '').slice(0, 300) };
   if (res.getResponseCode() !== 200) return { error: 'api', detail: String((data && data.error && data.error.message) || 'HTTP ' + res.getResponseCode()).slice(0, 300) };
   const cand = data && data.candidates && data.candidates[0];
   const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(x => x.text || '').join('') : '';
@@ -320,6 +328,7 @@ function guessCategories_(p) {
     res = geminiFetch_(model, key, body);
     data = geminiJson_(res);
   }
+  if (res.getResponseCode() === 429) return { error: 'quota', detail: String((data && data.error && data.error.message) || '').slice(0, 300) };
   if (res.getResponseCode() !== 200) return { error: 'api', detail: String((data && data.error && data.error.message) || 'HTTP ' + res.getResponseCode()).slice(0, 300) };
   const cand = data && data.candidates && data.candidates[0];
   const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(x => x.text || '').join('') : '';

@@ -55,7 +55,7 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<{ kind: 'no_key' | 'api' | 'blocked' | 'network' | 'slow'; detail?: string } | null>(null);
+  const [problem, setProblem] = useState<{ kind: 'no_key' | 'api' | 'blocked' | 'quota' | 'network' | 'slow'; detail?: string } | null>(null);
   /** Seconds waited for the current answer, shown while thinking. */
   const [waited, setWaited] = useState(0);
   /** The question being answered; an answer for an older one (after a timeout or New chat) is dropped. */
@@ -273,6 +273,16 @@ export function Problem({ p, onRetry }: { p: { kind: string; detail?: string }; 
           Create an API key in Google AI Studio, then in the Apps Script editor open <strong>Project Settings → Script properties</strong> and add{' '}
           <code>GEMINI_API_KEY</code> with your key. Then ask again.
         </span>
+      </div>
+    );
+  if (p.kind === 'quota')
+    return (
+      <div className={s.chatNote}>
+        <strong>I've hit my Gemini limit for now.</strong>
+        <span>The free Gemini key allows only so many questions a minute and a day. Try again in a minute, or tomorrow if it keeps happening.</span>
+        <button type="button" className={s.textBtnSm} onClick={onRetry} style={{ alignSelf: 'flex-start', padding: 0 }}>
+          Try again
+        </button>
       </div>
     );
   if (p.kind === 'slow')

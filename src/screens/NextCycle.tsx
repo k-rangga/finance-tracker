@@ -268,7 +268,14 @@ function PurrCheck({
           <ThinkingArcs />
         </span>
       ) : state === 'done' && result?.error ? (
-        <span style={{ fontSize: 14, color: C.redInk }}>{result.error === 'no_key' ? "I can't plan yet: I need my Gemini API key." : "Sorry, I couldn't do that just now. Try again in a minute?"}</span>
+        <span style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 14, color: C.redInk }}>
+          {result.error === 'no_key'
+            ? "I can't plan yet: I need my Gemini API key."
+            : result.error === 'quota'
+              ? "I've hit my Gemini limit for now. Try again in a minute, or tomorrow if it keeps happening."
+              : "Sorry, I couldn't do that just now. Try again in a minute?"}
+          {result.detail && result.error !== 'quota' && <span style={{ fontSize: 12, color: C.textMuted, wordBreak: 'break-word' }}>{result.detail}</span>}
+        </span>
       ) : state === 'done' && result?.verdict ? (
         <>
           <p className={s.insightBody} style={{ fontSize: 17, lineHeight: '26px' }}>
