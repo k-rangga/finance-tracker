@@ -161,7 +161,11 @@ await ok('Supabase store: per-user rows, paging past 1000, upsert and delete', a
     const sheetCtx: RunContext = { store: sheet, email: 'c@example.com' };
     runAction(sheetCtx, 'saveSettings', { settings: { name: 'C' } });
     runAction(sheetCtx, 'setNote', { txId: 'n1', note: 'lunch' });
-    sheet.appendNew('transactions', 'id', [{ id: 't9', occurred_at: '2026-08-30T01:00:00Z', title: 'Kopi', category: 'Cafe', amount: 25000, currency: 'IDR' }]);
+    // The same id twice in the Sheet (put in directly; the store itself never makes repeats): copied once, the first.
+    sheet.db.set('transactions', [
+      { id: 't9', occurred_at: '2026-08-30T01:00:00Z', title: 'Kopi', category: 'Cafe', amount: 25000, currency: 'IDR' },
+      { id: 't9', occurred_at: '2026-08-31T01:00:00Z', title: 'Kopi again', category: 'Cafe', amount: 99, currency: 'IDR' },
+    ]);
     sheet.setProp('SUPABASE_URL', url);
     sheet.setProp('SUPABASE_SERVICE_ROLE_KEY', 'k');
     sheet.setProp('SUPABASE_USER_ID', 'u3');
@@ -178,6 +182,7 @@ await ok('Supabase store: per-user rows, paging past 1000, upsert and delete', a
     const c = runAction({ store: copied, email: 'c@example.com' }, 'getState', {});
     assert.equal(c.settings.name, 'C');
     assert.equal(c.notes.n1, 'lunch');
+    assert.equal(c.txRows.length, 1);
     assert.equal(c.txRows[0].amount, 25000);
     assert.equal(copied.getProp('SUPABASE_SERVICE_ROLE_KEY'), null);
     assert.equal(copied.getProp('GEMINI_KEY_LIKE'), 'kept');

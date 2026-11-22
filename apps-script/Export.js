@@ -31,11 +31,22 @@ function copyToSupabase() {
   };
 
   const counts = {};
+  const repeats = {};
   Object.keys(TABLES).forEach(name => {
     const cols = TABLES[name];
     const nums = NUMERIC[name] || [];
+    // A key can appear on more than one row of the Sheet; the first one is the row the app updates, so it's kept.
+    const seen = {};
     const rows = readTable_(name)
       .filter(r => r[cols[0]] != null && r[cols[0]] !== '')
+      .filter(r => {
+        const k = String(r[cols[0]]);
+        if (seen[k]) {
+          repeats[name] = (repeats[name] || 0) + 1;
+          return false;
+        }
+        return (seen[k] = true);
+      })
       .map(r => {
         const o = { user_id: user };
         cols.forEach(c => {
@@ -56,5 +67,6 @@ function copyToSupabase() {
   counts.props = settings.length;
 
   Logger.log('Copied to Supabase: ' + JSON.stringify(counts));
+  if (Object.keys(repeats).length) Logger.log('Repeated rows in the Sheet, copied once: ' + JSON.stringify(repeats));
   return counts;
 }
