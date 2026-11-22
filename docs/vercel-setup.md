@@ -18,6 +18,22 @@ Cloud, Vercel or Apps Script settings, never into the code or a chat.
 5. **Project Settings → API Keys**: note the **Project URL**, the **publishable key** (public) and the **secret key**
    (keep it secret).
 
+### Sign-in emails
+
+The default Supabase emails are plain. `supabase/email-templates/` has branded ones (button, 6-digit code, who
+it's for). In Supabase → **Authentication → Emails → Templates**:
+
+| Template | Subject | Body |
+|---|---|---|
+| **Magic link** | `Your sign-in link for Personal Spending Tracker` | `magic-link.html` |
+| **Confirm signup** | `Confirm your email for Personal Spending Tracker` | `confirm-signup.html` |
+
+Paste the whole file into the body (Source view) and save.
+
+To send from your own name and address instead of Supabase's (and beyond its few emails an hour), set up
+**Authentication → Emails → SMTP Settings** with a mail provider (for example Resend, or Gmail with an app
+password): sender name `Personal Spending Tracker`, your own email address.
+
 ## 2. Google Cloud (Gmail and Drive)
 
 1. At console.cloud.google.com, create a project, e.g. "Spending tracker".

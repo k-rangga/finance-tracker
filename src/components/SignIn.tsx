@@ -21,6 +21,18 @@ function SignIn() {
   const [email, setEmail] = useState('');
   const [state, setState] = useState<'' | 'sending' | 'sent'>('');
   const [err, setErr] = useState('');
+  const [code, setCode] = useState('');
+  const [checking, setChecking] = useState(false);
+  /** The 6-digit code from the same email: for when the email opens on another device. */
+  const verify = async () => {
+    const token = code.replace(/\D/g, '');
+    if (token.length < 6) return setErr('Enter the 6-digit code from the email.');
+    setChecking(true);
+    setErr('');
+    const { error } = await supabase!.auth.verifyOtp({ email: email.trim(), token, type: 'email' });
+    setChecking(false);
+    if (error) setErr(error.message.includes('expired') || error.message.includes('invalid') ? 'That code is wrong or has expired. Send a new link.' : error.message);
+  };
   const send = async () => {
     const e = email.trim();
     if (!/^\S+@\S+\.\S+$/.test(e)) return setErr('Enter your email address.');
@@ -40,9 +52,39 @@ function SignIn() {
         {state === 'sent' ? (
           <>
             <span style={{ fontSize: 15, color: 'var(--text-soft)' }}>
-              Check <strong>{email.trim()}</strong> for a sign-in link. Open it on this device.
+              Check <strong>{email.trim()}</strong> for a sign-in link. Open it on this device, or type the 6-digit code from the email.
             </span>
-            <button type="button" className={s.textBtnSm} onClick={() => setState('')}>
+            <form
+              style={{ display: 'flex', gap: 8, width: '100%' }}
+              onSubmit={e => {
+                e.preventDefault();
+                verify();
+              }}
+            >
+              <input
+                className={s.input}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="6-digit code"
+                value={code}
+                onChange={e => setCode(e.target.value)}
+                aria-label="Code from the email"
+                style={{ letterSpacing: 2, textAlign: 'center' }}
+              />
+              <button type="submit" className={s.btnPrimary} disabled={checking} style={{ flex: 'none' }}>
+                {checking ? 'Checking…' : 'Sign in'}
+              </button>
+            </form>
+            {err && <span className={s.error}>{err}</span>}
+            <button
+              type="button"
+              className={s.textBtnSm}
+              onClick={() => {
+                setState('');
+                setCode('');
+                setErr('');
+              }}
+            >
               Use another email
             </button>
           </>
