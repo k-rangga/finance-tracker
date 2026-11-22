@@ -218,7 +218,7 @@ export default function App() {
       <aside className={s.sideFull} aria-label="Main navigation">
         <div className={s.brandRow}>
           <Logo size={32} />
-          <span className={s.brandText}>Personal Spending Tracker</span>
+          <span className={s.brandText}>Maxie</span>
           <button type="button" className={s.miniBtn} onClick={() => setNav(true)} title="Minimize sidebar" aria-label="Minimize sidebar">
             <Icon d={IC.chevLeft} size={16} strokeWidth={2.5} />
           </button>

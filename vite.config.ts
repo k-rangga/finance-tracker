@@ -7,8 +7,6 @@ export default defineConfig({
   plugins: [
     react(),
     viteSingleFile(),
-    // Tab icon for `npm run dev` only; the deployed app gets it from setFaviconUrl in apps-script/Code.js.
-    { name: 'dev-favicon', apply: 'serve', transformIndexHtml: () => [{ tag: 'link', attrs: { rel: 'icon', type: 'image/png', href: '/assets/favicon.png' }, injectTo: 'head' }] },
   ],
   base: './',
 });

@@ -9,7 +9,7 @@ import type { Currency } from '../lib/format';
 import { applyTheme, getTheme, type Theme } from '../lib/theme';
 import { useData } from '../lib/data';
 import { onVercel } from '../lib/supabase';
-import { signOut } from './SignIn';
+import { PIN_LENGTH, setPin, signOut } from './SignIn';
 
 type NumKey = 'income' | 'savingsPct' | 'investPct' | 'idxCap' | 'usCap' | 'cryptoCap' | 'fxRate';
 
@@ -26,6 +26,17 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
     fxRate: String(settings.fxRate),
   }));
   const [err, setErr] = useState('');
+  /** Sign-in PIN (Vercel only): saved on its own, straight away, not with Save settings. */
+  const [pinDraft, setPinDraft] = useState('');
+  const [pinMsg, setPinMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pinBusy, setPinBusy] = useState(false);
+  const savePin = async () => {
+    setPinBusy(true);
+    const problem = await setPin(pinDraft);
+    setPinBusy(false);
+    setPinMsg(problem ? { ok: false, text: problem } : { ok: true, text: 'PIN saved. Next time, choose Email + PIN to sign in.' });
+    if (!problem) setPinDraft('');
+  };
   /** Credit cards seen in your transactions, for their statement and due days. */
   const { txRows } = useData();
   const cardNames = [...new Set([...txRows.map(r => r.account ?? ''), ...Object.keys(settings.cards ?? {})])].filter(a => a.startsWith('CC ')).sort();
@@ -247,6 +258,34 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
             </button>
           )}
         </div>
+        {onVercel && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span className={s.setRowLabel}>Sign-in PIN</span>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                className={s.input}
+                type="password"
+                inputMode="numeric"
+                autoComplete="new-password"
+                placeholder={`New ${PIN_LENGTH}-digit PIN`}
+                maxLength={PIN_LENGTH}
+                value={pinDraft}
+                onChange={e => {
+                  setPinDraft(e.target.value.replace(/\D/g, ''));
+                  setPinMsg(null);
+                }}
+                aria-label="New PIN"
+                style={{ width: 200, letterSpacing: 4 }}
+              />
+              <button type="button" className={s.btnOutlineSm} onClick={savePin} disabled={pinBusy || pinDraft.length !== PIN_LENGTH}>
+                {pinBusy ? 'Saving…' : 'Set PIN'}
+              </button>
+            </div>
+            <span className={s.setHint} style={pinMsg ? { color: pinMsg.ok ? 'var(--good)' : 'var(--red-ink)' } : undefined}>
+              {pinMsg?.text ?? 'Lets you sign in with your email and a PIN instead of waiting for a link. Setting it again changes it.'}
+            </span>
+          </div>
+        )}
       </Section>
 
       <div className={s.setFoot}>
