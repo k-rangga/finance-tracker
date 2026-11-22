@@ -3,7 +3,7 @@ import s from '../../styles/ui.module.css';
 import { Card } from '../../components/ui';
 import { IC, Icon } from '../../components/Icon';
 import { C } from '../../lib/tokens';
-import { getPerps, mergeFills, setPerpNote, skipPerpNotes, syncPerps, usd, type PerpNote, type PerpState, type PerpTrade } from '../../lib/perps';
+import { getPerps, mergeFills, setPerpAddress, setPerpNote, skipPerpNotes, syncPerps, usd, type PerpNote, type PerpState, type PerpTrade } from '../../lib/perps';
 import { ReviewFields, SavedLabel, useAutosave } from './ReviewFields';
 import { perpDraft, perpNoteOf } from './trades';
 
@@ -61,22 +61,36 @@ const shortAddr = (a: string) => a.slice(0, 6) + '…' + a.slice(-4);
 
 /** Where the address goes, until it's there. */
 export function ConnectWallet({ hl }: { hl: Perps }) {
+  const [address, setAddress] = useState('');
+  const [err, setErr] = useState('');
+  const save = async () => {
+    setErr('');
+    try {
+      await setPerpAddress(address.trim());
+      await hl.sync();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  };
   return (
     <Card style={{ gap: 12 }}>
       <h2 className={s.h2}>Connect your Hyperliquid wallet</h2>
-      <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 14, lineHeight: 1.5 }}>
-        <li>
-          Open your data Sheet and go to the <strong>config</strong> tab.
-        </li>
-        <li>
-          In the <strong>hyperliquid_address</strong> row, replace <code>0xPASTE_YOUR_WALLET_ADDRESS_HERE</code> with your wallet address (starts with 0x, 42
-          characters).
-        </li>
-        <li>Come back and press Check.</li>
-      </ol>
+      <label className={s.field}>
+        <span>Wallet address</span>
+        <input
+          className={s.input}
+          value={address}
+          onChange={e => setAddress(e.target.value)}
+          placeholder="0x… (42 characters)"
+          spellCheck={false}
+          autoComplete="off"
+          onKeyDown={e => e.key === 'Enter' && save()}
+        />
+      </label>
       <span style={{ fontSize: 13, color: C.textMuted }}>It's read-only: with an address, the app can see your trades but can never place or move anything.</span>
-      <button type="button" className={s.btnPrimary} style={{ alignSelf: 'flex-start' }} onClick={() => hl.sync()} disabled={hl.syncing}>
-        {hl.syncing ? 'Checking…' : 'Check'}
+      {(err || hl.error) && <span className={s.error}>{err || hl.error}</span>}
+      <button type="button" className={s.btnPrimary} style={{ alignSelf: 'flex-start' }} onClick={save} disabled={hl.syncing || !address.trim()}>
+        {hl.syncing ? 'Checking…' : 'Save and sync'}
       </button>
     </Card>
   );

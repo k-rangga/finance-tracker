@@ -150,6 +150,8 @@ const ACTIONS = {
     return perpState_();
   },
   setPerpNote: p => setPerpNote_(p),
+  /** p: { address } — the Hyperliquid wallet to journal ('' clears it). */
+  setPerpAddress: p => setPerpAddress_(p.address),
   skipPerpNotes: p => skipPerpNotes_(p),
   getJournalMonths: () => {
     const out = {};

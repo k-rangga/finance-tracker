@@ -7,6 +7,8 @@ import { DEFAULT_INCOME, useSettings, type Settings } from '../lib/settings';
 import type { Currency } from '../lib/format';
 import { applyTheme, getTheme, type Theme } from '../lib/theme';
 import { useData } from '../lib/data';
+import { onVercel } from '../lib/supabase';
+import { signOut } from './SignIn';
 
 type NumKey = 'income' | 'savingsPct' | 'investPct' | 'idxCap' | 'usCap' | 'cryptoCap' | 'fxRate';
 
@@ -79,7 +81,15 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
   return (
     <Modal title="Settings" onClose={onClose} width={560}>
       <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-        {email ? `Signed in as ${email}` : 'Local preview'} · saved to your Google Drive spreadsheet
+        {email ? `Signed in as ${email}` : 'Local preview'} · {onVercel ? 'saved to your account' : 'saved to your Google Drive spreadsheet'}
+        {onVercel && (
+          <>
+            {' · '}
+            <button type="button" className={s.textBtnSm} style={{ padding: 0 }} onClick={signOut}>
+              Sign out
+            </button>
+          </>
+        )}
       </span>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span className={s.label}>Appearance · on this device</span>

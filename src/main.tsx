@@ -8,6 +8,8 @@ import { DataProvider } from './lib/data';
 import { backend } from './lib/backend';
 import { Logo } from './components/Logo';
 import { applyTheme, getTheme } from './lib/theme';
+import { onVercel } from './lib/supabase';
+import { AuthGate } from './components/SignIn';
 
 // Before the first paint, so the page never flashes the other theme.
 applyTheme(getTheme());
@@ -27,7 +29,11 @@ function Centered({ children }: { children: ReactNode }) {
 function LoadingSkeleton() {
   const block = (w: string | number, h: number) => <div className={s.skeleton} style={{ width: w, height: h }} />;
   return (
-    <div role="status" aria-label="Loading your data" style={{ maxWidth: 1240, margin: '0 auto', padding: '40px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div
+      role="status"
+      aria-label="Loading your data"
+      style={{ maxWidth: 1240, margin: '0 auto', padding: '40px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <Logo size={36} />
         {block(220, 28)}
@@ -42,25 +48,24 @@ function LoadingSkeleton() {
   );
 }
 
-// Google signs you in before Apps Script serves the page, so there is no login screen.
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <DataProvider
-      backend={backend}
-      loading={<LoadingSkeleton />}
-      failed={(msg, retry) => (
-        <Centered>
-          <h1 style={{ fontSize: 22 }}>Couldn't load your data</h1>
-          <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>{msg}</span>
-          <button type="button" className={s.btnPrimary} onClick={retry}>
-            Try again
-          </button>
-        </Centered>
-      )}
-    >
-      <SettingsProvider>
-        <App />
-      </SettingsProvider>
-    </DataProvider>
-  </StrictMode>,
+// Apps Script: Google signs you in before it serves the page. Vercel: sign in by email link first.
+const app = (
+  <DataProvider
+    backend={backend}
+    loading={<LoadingSkeleton />}
+    failed={(msg, retry) => (
+      <Centered>
+        <h1 style={{ fontSize: 22 }}>Couldn't load your data</h1>
+        <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>{msg}</span>
+        <button type="button" className={s.btnPrimary} onClick={retry}>
+          Try again
+        </button>
+      </Centered>
+    )}
+  >
+    <SettingsProvider>
+      <App />
+    </SettingsProvider>
+  </DataProvider>
 );
+createRoot(document.getElementById('root')!).render(<StrictMode>{onVercel ? <AuthGate loading={<LoadingSkeleton />}>{app}</AuthGate> : app}</StrictMode>);

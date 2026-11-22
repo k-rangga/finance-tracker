@@ -3,7 +3,8 @@ import s from '../styles/ui.module.css';
 import { Modal } from './ui';
 import { Select } from './Select';
 import { useData } from '../lib/data';
-import { chooseLabel, disconnectGmail, listLabels, reimportGmail, syncNow, syncRange, type SyncResult } from '../lib/gmail';
+import { chooseLabel, disconnectGmail, googleConnectUrl, googleDisconnect, listLabels, reimportGmail, syncNow, syncRange, type SyncResult } from '../lib/gmail';
+import { onVercel } from '../lib/supabase';
 import { C } from '../lib/tokens';
 import { needsAuthorization, SCRIPT_EDITOR_URL } from '../lib/gas';
 
@@ -27,10 +28,18 @@ const resultText = (r: SyncResult) =>
   (r.skipped ? ` · ${r.skipped} not imported (no amount, duplicates or reversals)` : '') +
   '.' +
   (r.more
-    ? ` ${r.remaining != null ? r.remaining + ' more' : 'More'} to read${r.paused ? ' (Gmail asked to slow down)' : ''}: it continues on its own in about 2 minutes, until done.`
+    ? ` ${r.remaining != null ? r.remaining + ' more' : 'More'} to read${r.paused ? ' (Gmail asked to slow down)' : ''}: ${onVercel ? 'press Sync now again, or it continues at the next hourly sync.' : 'it continues on its own in about 2 minutes, until done.'}`
     : '');
 
-export function GmailDialog({ onClose }: { onClose: () => void }) {
+/** What Google's return to the app (?google=…) means. */
+const GOOGLE_NOTICE: Record<string, string> = {
+  connected: 'Google connected. Choose your receipts label below.',
+  cancelled: 'Google connection cancelled.',
+  expired: 'That took too long. Connect Google again.',
+  error: "Couldn't connect Google. Try again.",
+};
+
+export function GmailDialog({ onClose, notice }: { onClose: () => void; notice?: string }) {
   const { gmail, refreshImports } = useData();
   const [labels, setLabels] = useState<string[] | null>(null);
   const [pick, setPick] = useState(gmail.label_name ?? '');
@@ -38,11 +47,40 @@ export function GmailDialog({ onClose }: { onClose: () => void }) {
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
 
+  // Vercel: Gmail is read through your own Google connection, made once.
+  const [needsGoogle, setNeedsGoogle] = useState(onVercel && gmail.google_connected === false && notice !== 'connected');
   useEffect(() => {
+    if (needsGoogle) return;
     listLabels()
       .then(setLabels)
-      .catch(e => setErr(e instanceof Error ? e.message : String(e)));
-  }, []);
+      .catch(e => {
+        const m = e instanceof Error ? e.message : String(e);
+        if (/google_not_connected/.test(m)) setNeedsGoogle(true);
+        else setErr(m);
+      });
+  }, [needsGoogle]);
+  const connectGoogle = () =>
+    run('google', async () => {
+      location.href = (await googleConnectUrl()).url;
+      return '';
+    });
+
+  if (needsGoogle)
+    return (
+      <Modal title="Gmail sync" onClose={onClose}>
+        {notice && notice !== 'connected' && <span style={{ fontSize: 14, fontWeight: 600, color: C.amberInk }}>{GOOGLE_NOTICE[notice] ?? notice}</span>}
+        <p style={{ fontSize: 14, lineHeight: 1.5, color: C.textSoft }}>
+          Connect your Google account once. The app then reads (never changes) the Gmail label with your receipts, and saves receipt photos to your Drive folder.
+        </p>
+        <p style={{ fontSize: 13, lineHeight: 1.5, color: C.textMuted }}>
+          Google may say it hasn't verified this app: it's your own app, so choose <strong>Advanced → Continue</strong>.
+        </p>
+        {err && <span className={s.error}>{err}</span>}
+        <button type="button" className={s.btnPrimary} style={{ alignSelf: 'flex-start' }} disabled={!!busy} onClick={connectGoogle}>
+          {busy === 'google' ? 'Opening Google…' : 'Connect Google'}
+        </button>
+      </Modal>
+    );
 
   const run = async (what: string, fn: () => Promise<string>) => {
     setBusy(what);
@@ -175,6 +213,25 @@ export function GmailDialog({ onClose }: { onClose: () => void }) {
             }
           >
             Stop syncing
+          </button>
+        )}
+        {onVercel && (
+          <button
+            type="button"
+            className={s.btnGhost}
+            disabled={!!busy}
+            title="Remove the app's access to your Gmail and Drive. Imported transactions are kept."
+            onClick={() =>
+              run('unlink', async () => {
+                await disconnectGmail();
+                await googleDisconnect();
+                await refreshImports();
+                setNeedsGoogle(true);
+                return '';
+              })
+            }
+          >
+            Disconnect Google
           </button>
         )}
       </div>

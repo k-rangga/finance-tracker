@@ -13,3 +13,6 @@ export const syncRange = () => run<SyncResult>('syncRange');
 /** Clears imported transactions and reads the label again with the current rules (category fixes are kept). */
 export const reimportGmail = () => run<SyncResult>('reimportGmail');
 export const disconnectGmail = () => run<true>('disconnectGmail');
+/** Vercel only: Google's consent screen, to connect Gmail (receipts) and Drive (receipt files). */
+export const googleConnectUrl = () => run<{ url: string }>('googleConnectUrl');
+export const googleDisconnect = () => run<true>('googleDisconnect');

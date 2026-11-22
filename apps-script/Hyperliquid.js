@@ -25,6 +25,14 @@ function ensurePerpConfig_() {
   setProps_('perpConfigV1', true);
 }
 
+/** Set the wallet address from the app (the config tab, where it can also be typed by hand). '' clears it. */
+function setPerpAddress_(address) {
+  const v = String(address || '').trim();
+  if (v && !/^0x[0-9a-fA-F]{40}$/.test(v)) throw new Error('That isn\'t a wallet address: it starts with 0x and has 42 characters.');
+  upsertRow_('config', 'key', { key: HL_ADDRESS_KEY, value: v || HL_PLACEHOLDER, note: 'Your Hyperliquid wallet address (0x…, 42 characters). Read-only: it can only see your trades.' });
+  return true;
+}
+
 /** The address from the config tab, or '' while it's still the placeholder (or not an address). */
 function perpAddress_() {
   const row = readTable_('config').filter(r => r.key === HL_ADDRESS_KEY)[0];

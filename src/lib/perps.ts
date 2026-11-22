@@ -25,6 +25,8 @@ export type PerpState = {
 
 export const getPerps = () => run<PerpState>('getPerps');
 export const syncPerps = () => run<PerpState>('syncPerps');
+/** The wallet to journal (it can also be typed in the Sheet's config tab). '' clears it. */
+export const setPerpAddress = (address: string) => run<true>('setPerpAddress', { address });
 export const setPerpNote = (tradeId: string, note: PerpNote | null) => run('setPerpNote', { tradeId, note });
 export const skipPerpNotes = (ids: string[]) => run<number>('skipPerpNotes', { ids });
 

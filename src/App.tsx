@@ -53,7 +53,12 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Create (no name) or edit one of your categories; opened from Settings or a Categories row. */
   const [catDialog, setCatDialog] = useState<{ editing?: string } | null>(null);
-  const [gmailOpen, setGmailOpen] = useState(false);
+  // Back from Google's consent screen (Vercel): open Gmail sync with what happened.
+  const [googleNotice] = useState(() => new URLSearchParams(location.search).get('google') ?? undefined);
+  const [gmailOpen, setGmailOpen] = useState(!!googleNotice);
+  useEffect(() => {
+    if (googleNotice) history.replaceState(null, '', location.pathname);
+  }, [googleNotice]);
   /** Ask Gemini panel; `ask` is a question to send as it opens. */
   const [chat, setChat] = useState<{ ask?: string } | null>(null);
   const { settings, update } = useSettings();
@@ -355,7 +360,7 @@ export default function App() {
         </div>
       </main>
 
-      {gmailOpen && <GmailDialog onClose={() => setGmailOpen(false)} />}
+      {gmailOpen && <GmailDialog notice={googleNotice} onClose={() => setGmailOpen(false)} />}
       {billUndo && (
         <div className={s.toast} role="status">
           <span style={{ marginRight: 'auto', minWidth: 0 }}>{billUndo.text}</span>

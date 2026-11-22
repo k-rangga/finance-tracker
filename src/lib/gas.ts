@@ -3,6 +3,8 @@
  * Outside Apps Script (plain `npm run dev`) a small browser-storage stand-in answers instead, so the UI can be worked on locally.
  */
 
+import { onVercel, rpc } from './supabase';
+
 type ScriptRun = {
   withSuccessHandler(fn: (r: unknown) => void): ScriptRun;
   withFailureHandler(fn: (e: Error) => void): ScriptRun;
@@ -24,6 +26,8 @@ export const SCRIPT_EDITOR_URL = 'https://script.google.com/d/1cc9XbesHR8YwZagOg
 export const needsAuthorization = (msg: string) => /do not have permission to call|authorization is required|required permissions/i.test(msg);
 
 export function run<T>(action: string, payload: unknown = {}): Promise<T> {
+  // The Vercel version: the same actions, answered by /api/rpc.
+  if (onVercel) return rpc<T>(action, payload);
   const gs = window.google?.script?.run;
   if (!gs) return devApi(action, payload) as Promise<T>;
   return new Promise((resolve, reject) => {
@@ -116,6 +120,10 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       else delete notes[q.txId as string];
       return save();
     }
+    case 'setPerpAddress':
+      if (q.address && !/^0x[0-9a-fA-F]{40}$/.test(String(q.address))) throw new Error("That isn't a wallet address: it starts with 0x and has 42 characters.");
+      d.perpAddress = String(q.address || '');
+      return save();
     case 'getPerps':
     case 'syncPerps':
       await new Promise(r => setTimeout(r, action === 'syncPerps' ? 600 : 0));

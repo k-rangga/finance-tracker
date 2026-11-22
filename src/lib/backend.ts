@@ -11,6 +11,8 @@ export type GmailConnection = {
   last_synced_at: string | null;
   last_sync_status: string | null;
   last_sync_count: number | null;
+  /** Vercel only: whether this account has connected Google (Gmail and Drive). */
+  google_connected?: boolean;
 };
 
 /** Everything the app stores (in the Apps Script's spreadsheet and script properties). */
