@@ -76,7 +76,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   /** "New category" dialog, opened from a row's category menu; the new category is applied to that row. */
   const [creating, setCreating] = useState<{ name: string; tx: TxView } | null>(null);
   const [calOpen, setCalOpen] = useState(false);
-  const { installments, setInstallment, notes, rules, ruleSubs, setRules, setSub, receipts } = useData();
+  const { installments, setInstallment, notes, rules, ruleSubs, setRules, setSub, receipts, recat } = useData();
   /** The purchase whose installment plan is open in the dialog. */
   const [planFor, setPlanFor] = useState<string | null>(null);
   const planTx = planFor ? allTxs.find(x => x.id === planFor) : undefined;
@@ -112,26 +112,51 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
     onRemove(t.id, true);
     setToast({ text: `Removed ${t.title}`, action: 'Undo', run: () => onRemove(t.id, false) });
   };
+  /** How many other transactions share each merchant, for the category menu's "All from …" choice. */
+  const merchantCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const x of allTxs) if (!x.isCcPayment) m.set(merchantKey(x.title), (m.get(merchantKey(x.title)) ?? 0) + 1);
+    return m;
+  }, [allTxs]);
   /**
-   * Re-categorise a row (and pick its sub-category) and remember both for the merchant: its other and future
-   * transactions follow. An installment payment's sub-category is set on its purchase, so every month follows.
+   * Re-categorise a row (and pick its sub-category). `all`: remember it for the merchant, so every transaction
+   * from it, past and future, takes this category, including ones you'd fixed by hand before. Otherwise only
+   * this row changes and the merchant's rule (if any) stays as it was.
+   * An installment payment's sub-category is set on its purchase, so every month follows.
    */
-  const recategorise = (t: TxView, to: string, sub: string | null = null) => {
+  const recategorise = (t: TxView, to: string, sub: string | null = null, all = true) => {
     const key = merchantKey(t.title);
+    const prevSubPick = t.plan?.of ?? t.id;
+    if (!all || !key) {
+      // Keep this row's choice even when it's the category the email gave it, so a merchant rule can't move it.
+      const hasRule = !!key && Object.keys(rules).some(m => merchantKey(m) === key);
+      if (to !== t.cat) onRecat(t.id, hasRule ? '' : t.category, to);
+      setSub(prevSubPick, sub);
+      const was = t.cat;
+      setToast({ text: `${t.title} → ${categoryLabel(to)}${sub ? ' · ' + sub : ''}, this one only`, action: 'Undo', run: () => onRecat(t.id, t.category, was) });
+      return;
+    }
     if (to !== t.cat) onRecat(t.id, t.category, to);
-    setSub(t.plan?.of ?? t.id, sub);
-    if (!key) return;
+    setSub(prevSubPick, sub);
     // The rule it replaces, however it's written in the sheet.
     const prev = Object.entries(rules).find(([m]) => merchantKey(m) === key);
     const prevSub = Object.entries(ruleSubs).find(([m]) => merchantKey(m) === key)?.[1] ?? null;
     setRules({ [key]: to }, { [key]: sub });
-    const others = allTxs.filter(x => x.id !== t.id && !x.isCcPayment && merchantKey(x.title) === key).length;
+    const others = allTxs.filter(x => x.id !== t.id && !x.isCcPayment && merchantKey(x.title) === key);
+    // Rows of this merchant you'd set by hand follow too, so the merchant reads the same everywhere.
+    const handSet = others.filter(x => x.id in recat && recat[x.id] !== to).map(x => ({ x, was: recat[x.id] }));
+    handSet.forEach(({ x }) => onRecat(x.id, x.category, to));
     setToast({
       text:
         `${t.title} → ${categoryLabel(to)}${sub ? ' · ' + sub : ''}` +
-        (others ? ` for ${others} other ${others === 1 ? 'transaction' : 'transactions'} too, and future ones` : ' from now on'),
-      action: 'Just this one',
-      run: () => (prev ? setRules({ [prev[0]]: prev[1] }, { [prev[0]]: prevSub }) : setRules({ [key]: null })),
+        (others.length ? ` for all ${others.length + 1} and future ones` : ' from now on'),
+      action: 'Undo',
+      run: () => {
+        if (prev) setRules({ [prev[0]]: prev[1] }, { [prev[0]]: prevSub });
+        else setRules({ [key]: null });
+        handSet.forEach(({ x, was }) => onRecat(x.id, '', was));
+        if (to !== t.cat) onRecat(t.id, t.category, t.cat);
+      },
     });
   };
   const expenses = budget.txs.filter(t => !t.isIncome && !t.isTransfer);
@@ -361,6 +386,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
                 <TxRow
                   key={t.id}
                   t={t}
+                  sameMerchant={(merchantCount.get(merchantKey(t.title)) ?? 1) - 1}
                   onRecat={recategorise}
                   onLink={onLink}
                   onShare={onShare}
@@ -604,7 +630,9 @@ function Recap({
 
 type RowProps = {
   t: TxView;
-  onRecat: (t: TxView, cat: string, sub?: string | null) => void;
+  onRecat: (t: TxView, cat: string, sub?: string | null, all?: boolean) => void;
+  /** Other transactions from the same merchant (for "All from …"). */
+  sameMerchant: number;
   onLink: Props['onLink'];
   onShare: Props['onShare'];
   onRemove: () => void;
@@ -625,7 +653,7 @@ type RowProps = {
   onNotice: (text: string) => void;
 };
 
-function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewCategory, expenses, popover, setPopover, compact, usualAccount, onNotice }: RowProps) {
+function TxRow({ t, sameMerchant, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewCategory, expenses, popover, setPopover, compact, usualAccount, onNotice }: RowProps) {
   const { installments, notes, setNote, receipts, attachReceipt, removeReceipt } = useData();
   const receipt = receipts[receiptTxId(t)];
   const filePick = useRef<HTMLInputElement>(null);
@@ -784,8 +812,10 @@ function TxRow({ t, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewC
           <CategoryMenu
             current={t.cat}
             currentSub={t.sub}
-            onPick={(cat, sub) => {
-              if (cat !== t.cat || (sub ?? undefined) !== t.sub) onRecat(t, cat, sub);
+            merchant={merchantKey(t.title) ? tidyName(t.title) : undefined}
+            others={sameMerchant}
+            onPick={(cat, sub, all) => {
+              if (cat !== t.cat || (sub ?? undefined) !== t.sub) onRecat(t, cat, sub, all);
               setPopover(null);
             }}
             onNew={onNewCategory}
@@ -1040,13 +1070,35 @@ function CategoryMenu({
   currentSub,
   onPick,
   onNew,
+  merchant,
+  others = 0,
 }: {
   current: string;
   currentSub?: string;
-  onPick: (cat: string, sub: string | null) => void;
+  onPick: (cat: string, sub: string | null, all: boolean) => void;
   onNew: (name: string) => void;
+  /** The row's merchant; without one, only this row can change. */
+  merchant?: string;
+  /** Other transactions from it. */
+  others?: number;
 }) {
   const { settings } = useSettings();
+  /** Apply to this row only, or to every transaction from the merchant (and future ones). Remembered between picks. */
+  const [all, setAll] = useState(() => {
+    try {
+      return localStorage.getItem('moneyTracker.recatAll') !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const pickScope = (v: boolean) => {
+    setAll(v);
+    try {
+      localStorage.setItem('moneyTracker.recatAll', v ? '1' : '0');
+    } catch {
+      /* fine without */
+    }
+  };
   const [q, setQ] = useState('');
   /** The highlighted row; until you move, the current category (or sub-category), so Enter right away keeps it. */
   const [active, setActive] = useState(-1);
@@ -1075,7 +1127,7 @@ function CategoryMenu({
   const isCurrent = (i: MenuItem) => i.value === current && (i.sub ?? undefined) === (currentSub ?? undefined);
   const at = active >= 0 ? Math.min(active, items.length - 1) : Math.max(0, items.findIndex(isCurrent));
 
-  const choose = (i: MenuItem) => (i.group === 'new' ? onNew(exact ? '' : q.trim()) : i.value && onPick(i.value, i.sub ?? null));
+  const choose = (i: MenuItem) => (i.group === 'new' ? onNew(exact ? '' : q.trim()) : i.value && onPick(i.value, i.sub ?? null, !!merchant && all));
   // Open on the current one, wherever it is in the list.
   useEffect(() => {
     // Scroll the list only (scrollIntoView would move the page too).
@@ -1116,6 +1168,20 @@ function CategoryMenu({
           aria-activedescendant={'cat-opt-' + at}
         />
       </label>
+      {merchant && (
+        <div className={s.recatScope}>
+          <span>Apply to</span>
+          <div className={s.segment} role="group" aria-label="Apply to">
+            <button type="button" aria-pressed={!all} onMouseDown={e => e.preventDefault()} onClick={() => pickScope(false)}>
+              This one
+            </button>
+            <button type="button" aria-pressed={all} onMouseDown={e => e.preventDefault()} onClick={() => pickScope(true)} title={`Every ${merchant} transaction, and future ones`}>
+              All {merchant}
+              {others > 0 ? ` (${others + 1})` : ''}
+            </button>
+          </div>
+        </div>
+      )}
       <div ref={listRef} id="cat-menu" role="listbox" aria-label="Categories" className={s.pickList} style={{ maxHeight: 320 }}>
         {items.map((i, n) => (
           <div key={i.key}>

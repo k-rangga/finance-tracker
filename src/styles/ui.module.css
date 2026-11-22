@@ -2756,3 +2756,25 @@ textarea.input {
     border-left: none;
   }
 }
+
+/* Category menu: apply to this row, or to the whole merchant. */
+.recatScope {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--divider);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.recatScope .segment {
+  display: flex;
+}
+.recatScope .segment button {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
