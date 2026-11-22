@@ -18,6 +18,9 @@ import { ReceiptPreview } from '../components/ReceiptPreview';
 import { C } from '../lib/tokens';
 import { CATEGORIES, catFilter, categoryByName, categoryLabel, CC_PAYMENT_CATEGORY, OTHER_CATEGORIES, parseCatFilter } from '../data/categories';
 import { canDismissBill, isCard, merchantKey, type Bill } from '../data/transactions';
+import { useApplyAll } from './applyScope';
+import { useGuesses, type Guess } from '../lib/guesses';
+import { SortQueue } from './SortQueue';
 
 export type Range = 'today' | 'week' | 'last' | 'cycle' | 'custom';
 /** `from` / `to` (YYYY-MM-DD, inclusive) are the dates picked for the `custom` range. */
@@ -112,6 +115,9 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
     onRemove(t.id, true);
     setToast({ text: `Removed ${t.title}`, action: 'Undo', run: () => onRemove(t.id, false) });
   };
+  /** Category guesses for what's still in Buffer (your patterns, then Gemini), and the To sort queue. */
+  const guesses = useGuesses(allTxs, settings.subcategories);
+  const [sorting, setSorting] = useState<string[] | null>(null);
   /** How many other transactions share each merchant, for the category menu's "All from …" choice. */
   const merchantCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -358,6 +364,14 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
             {/* Phones: the date chip already says the dates. */}
             {phone ? '' : ` · ${rangeLabel}`} · {inRange.length} {inRange.length === 1 ? 'transaction' : 'transactions'}
             {filter.hideTransfers && phone ? ' · transfers hidden' : ''}
+            {guesses.toSort.length > 0 && (
+              <>
+                {' · '}
+                <button type="button" className={s.sortLink} onClick={() => setSorting(guesses.toSort.map(t => t.id))}>
+                  {guesses.toSort.length} to sort →
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -387,6 +401,8 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
                   key={t.id}
                   t={t}
                   sameMerchant={(merchantCount.get(merchantKey(t.title)) ?? 1) - 1}
+                  suggested={guesses.suggest(t).filter(o => o.category !== t.cat || (o.sub ?? undefined) !== t.sub).slice(0, 3)}
+                  guess={t.cat === 'Buffer' ? guesses.guesses[t.id] : undefined}
                   onRecat={recategorise}
                   onLink={onLink}
                   onShare={onShare}
@@ -451,7 +467,10 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
                   <span className={s.ellipsis} style={{ fontSize: 15, fontWeight: 600 }}>
                     {tidyName(b.title)}
                   </span>
-                  <span style={{ fontSize: 13, color: C.textMuted }}>{b.category}</span>
+                  <span style={{ fontSize: 13, color: C.textMuted }}>
+                    {b.category}
+                    {b.left != null ? (b.left > 0 ? ` · ${full(b.left)} left after this` : ' · last payment') : ''}
+                  </span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>
                   <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>- {full(b.amount)}</span>
@@ -518,6 +537,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
           }
         />
       )}
+      {sorting && <SortQueue ids={sorting} allTxs={allTxs} g={guesses} onPick={recategorise} onClose={() => setSorting(null)} />}
       {creating && (
         <CategoryDialog
           initialName={creating.name}
@@ -633,6 +653,10 @@ type RowProps = {
   onRecat: (t: TxView, cat: string, sub?: string | null, all?: boolean) => void;
   /** Other transactions from the same merchant (for "All from …"). */
   sameMerchant: number;
+  /** Categories to offer first in the menu. */
+  suggested: { category: string; sub?: string }[];
+  /** Why the first suggestion, when it's a guess for a transaction still to sort. */
+  guess?: Guess;
   onLink: Props['onLink'];
   onShare: Props['onShare'];
   onRemove: () => void;
@@ -653,7 +677,7 @@ type RowProps = {
   onNotice: (text: string) => void;
 };
 
-function TxRow({ t, sameMerchant, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewCategory, expenses, popover, setPopover, compact, usualAccount, onNotice }: RowProps) {
+function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewCategory, expenses, popover, setPopover, compact, usualAccount, onNotice }: RowProps) {
   const { installments, notes, setNote, receipts, attachReceipt, removeReceipt } = useData();
   const receipt = receipts[receiptTxId(t)];
   const filePick = useRef<HTMLInputElement>(null);
@@ -814,6 +838,8 @@ function TxRow({ t, sameMerchant, onRecat, onLink, onShare, onRemove, onPlan, on
             currentSub={t.sub}
             merchant={merchantKey(t.title) ? tidyName(t.title) : undefined}
             others={sameMerchant}
+            suggested={suggested}
+            guess={guess}
             onPick={(cat, sub, all) => {
               if (cat !== t.cat || (sub ?? undefined) !== t.sub) onRecat(t, cat, sub, all);
               setPopover(null);
@@ -1072,6 +1098,8 @@ function CategoryMenu({
   onNew,
   merchant,
   others = 0,
+  suggested = [],
+  guess,
 }: {
   current: string;
   currentSub?: string;
@@ -1081,24 +1109,13 @@ function CategoryMenu({
   merchant?: string;
   /** Other transactions from it. */
   others?: number;
+  /** Shown first, as one-tap chips. */
+  suggested?: { category: string; sub?: string }[];
+  guess?: Guess;
 }) {
   const { settings } = useSettings();
   /** Apply to this row only, or to every transaction from the merchant (and future ones). Remembered between picks. */
-  const [all, setAll] = useState(() => {
-    try {
-      return localStorage.getItem('moneyTracker.recatAll') !== '0';
-    } catch {
-      return true;
-    }
-  });
-  const pickScope = (v: boolean) => {
-    setAll(v);
-    try {
-      localStorage.setItem('moneyTracker.recatAll', v ? '1' : '0');
-    } catch {
-      /* fine without */
-    }
-  };
+  const [all, pickScope] = useApplyAll();
   const [q, setQ] = useState('');
   /** The highlighted row; until you move, the current category (or sub-category), so Enter right away keeps it. */
   const [active, setActive] = useState(-1);
@@ -1180,6 +1197,28 @@ function CategoryMenu({
               {others > 0 ? ` (${others + 1})` : ''}
             </button>
           </div>
+        </div>
+      )}
+      {suggested.length > 0 && !needle && (
+        <div className={s.menuSuggest}>
+          <span>
+            <Icon d={IC.sparkle} size={12} /> Suggested
+          </span>
+          <div className={s.tplGrid}>
+            {suggested.map(o => (
+              <button
+                key={o.category + (o.sub ?? '')}
+                type="button"
+                className={s.tplOpt}
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => onPick(o.category, o.sub ?? null, !!merchant && all)}
+              >
+                {categoryLabel(o.category)}
+                {o.sub ? ' · ' + o.sub : ''}
+              </button>
+            ))}
+          </div>
+          {guess && <span className={s.menuSuggestWhy}>{guess.why}</span>}
         </div>
       )}
       <div ref={listRef} id="cat-menu" role="listbox" aria-label="Categories" className={s.pickList} style={{ maxHeight: 320 }}>

@@ -164,6 +164,10 @@ const ACTIONS = {
     return true;
   },
   draftJournalMonth: p => draftJournalMonth_(p),
+  /** Saved category guesses: { txId: { category, sub, why, confidence } }. */
+  getGuesses: () => categoryGuesses_(),
+  /** Ask Gemini to guess categories for transactions still to sort (see guessCategories_), save and return them. */
+  guessCategories: p => guessCategories_(p),
   removeReceipt: p => removeReceipt_(p),
 
   listLabels: () => listLabels_(),

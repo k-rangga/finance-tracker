@@ -238,10 +238,13 @@ export function computeBudget(args: {
     const prevMine = prevTransactions.filter(t => (recat[t.id] ?? t.category) === c.name);
     const prev = [0, 1, 2, 3].map(w => sum(prevMine.filter(t => weekOf(prevCycle.offsetOf(t.date)) === w).map(netOf)));
     const spent = sum(cur);
-    const limit = ofIncome(c.limitPct);
+    // Installments: the plan is what's billed this cycle (paid so far plus still due), so it's always covered.
+    const limit = c.auto ? spent + sum(bills.filter(b => b.category === c.name).map(b => b.amount)) : ofIncome(c.limitPct);
     const used = limit ? (spent / limit) * 100 : 0;
     const lastSameDays = sum(prev.slice(0, cycle.weekIdx)) + prev[cycle.weekIdx] * weekFrac;
-    return { ...c, limit, cur, prev, spent, lastSameDays, remaining: limit - spent, used, status: categoryStatus(used, c, warnAt) };
+    // An auto plan reads as its share of income too, so the plan's percentages add up.
+    const limitPct = c.auto ? (income ? (limit / income) * 100 : 0) : c.limitPct;
+    return { ...c, limitPct, limit, cur, prev, spent, lastSameDays, remaining: limit - spent, used, status: categoryStatus(used, c, warnAt) };
   });
 
   const fixedSpent = sum(cats.filter(c => c.type === 'fixed').map(c => c.spent));

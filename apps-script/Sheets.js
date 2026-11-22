@@ -60,6 +60,8 @@ const TABLES = {
   perp_notes: ['trade_id', 'setup', 'mistakes', 'rating', 'note', 'updated_at', 'followed', 'skipped'],
   /** Your note on a month of trading, per account (`key` = "manual|2026-11" or "perp|2026-11"). */
   journal_months: ['key', 'note', 'updated_at'],
+  /** Gemini's guess for a transaction that still needs a category: shown as a suggestion until you pick. */
+  cat_guesses: ['tx_id', 'category', 'sub', 'why', 'confidence', 'updated_at'],
   /** Gmail messages already read that weren't receipts, so they aren't downloaded again. */
   skipped: ['id', 'subject', 'seen_at', 'reason'],
 };

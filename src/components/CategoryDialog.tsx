@@ -7,6 +7,7 @@ import {
   builtInCategory,
   CATEGORIES,
   CATEGORY_ICONS,
+  CATEGORY_TEMPLATES,
   categoryByName,
   categoryLabel,
   HUES,
@@ -14,10 +15,12 @@ import {
   nextHue,
   OTHER_CATEGORIES,
   toCategory,
+  type CategoryTemplate,
   type CategoryType,
   type CustomCategory,
 } from '../data/categories';
 import { useData } from '../lib/data';
+import { merchantKey } from '../data/transactions';
 import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
 
@@ -93,8 +96,35 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
     return all;
   };
 
-  const draft: CustomCategory = { name: name.trim() || 'New category', type, limitPct, icon, color };
-  const preview = { ...toCategory(draft), ...(builtIn ? { icon: builtIn.icon } : {}) };
+  /** The template this new category started from, and whether its merchants should sort themselves here. */
+  const [tpl, setTpl] = useState<CategoryTemplate | null>(null);
+  const [tplMerchants, setTplMerchants] = useState(true);
+  const creating = !existing && !builtIn;
+  const templates = creating ? CATEGORY_TEMPLATES.filter(t => !isReservedName(t.name)) : [];
+  const useTemplate = (t: CategoryTemplate) => {
+    setTpl(t);
+    setName(t.name);
+    setType(t.type);
+    setIcon(t.icon);
+    setColor(nextHue(CATEGORIES).color);
+    resetTo(t.limitPct);
+    setSubs(t.subs);
+    setErr('');
+  };
+  /** Template merchants that no rule of yours already covers. */
+  const tplNew = tpl ? tpl.merchants.filter(m => !Object.keys(rules).some(r => merchantKey(r) === merchantKey(m))) : [];
+
+  const draft: CustomCategory = {
+    name: name.trim() || 'New category',
+    type,
+    limitPct,
+    icon,
+    color,
+  };
+  const preview = {
+    ...toCategory(draft),
+    ...(builtIn ? { icon: builtIn.icon } : {}),
+  };
   const used = new Set(CATEGORIES.filter(c => c.name !== editing).map(c => c.color));
 
   /** Transactions you moved into this category (by id). Gmail never assigns your own categories, so these are all of them. */
@@ -115,7 +145,11 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
       const colors = { ...settings.colorOverrides, [builtIn.name]: color };
       if (Math.abs(limitPct - builtIn.limitPct) < 1e-9) delete limits[builtIn.name];
       if (color === builtIn.color) delete colors[builtIn.name];
-      update({ limitOverrides: limits, colorOverrides: colors, subcategories: withSubs(builtIn.name) });
+      update({
+        limitOverrides: limits,
+        colorOverrides: colors,
+        subcategories: withSubs(builtIn.name),
+      });
       onSaved?.(builtIn.name);
       return onClose();
     }
@@ -125,13 +159,20 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
     if (!(limitPct >= 0 && limitPct <= 100)) return setErr('The limit must be between 0 and 100% of income.');
     const next = { ...draft, name: n };
     if (existing) {
-      update({ customCategories: settings.customCategories.map(c => (c.name === existing.name ? next : c)), subcategories: withSubs(n) });
+      update({
+        customCategories: settings.customCategories.map(c => (c.name === existing.name ? next : c)),
+        subcategories: withSubs(n),
+      });
       if (n !== existing.name) {
         move(n);
         moveRules(n);
       }
     } else {
-      update({ customCategories: [...settings.customCategories, next], subcategories: withSubs(n) });
+      update({
+        customCategories: [...settings.customCategories, next],
+        subcategories: withSubs(n),
+      });
+      if (tpl && tplMerchants && tplNew.length) setRules(Object.fromEntries(tplNew.map(m => [m, n])));
     }
     onSaved?.(n);
     onClose();
@@ -147,7 +188,10 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
         onDelete={to => {
           move(to);
           moveRules(to);
-          update({ customCategories: settings.customCategories.filter(c => c.name !== existing.name), subcategories: withSubs(null) });
+          update({
+            customCategories: settings.customCategories.filter(c => c.name !== existing.name),
+            subcategories: withSubs(null),
+          });
           onClose();
         }}
       />
@@ -155,9 +199,40 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
 
   return (
     <Modal title={existing || builtIn ? 'Edit category' : 'New category'} onClose={onClose} width={520}>
+      {templates.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span className={s.label}>Start from a template</span>
+          <div className={s.tplGrid}>
+            {templates.map(t => (
+              <button key={t.name} type="button" className={s.tplOpt} aria-pressed={tpl?.name === t.name} onClick={() => useTemplate(t)}>
+                <Icon d={IC[t.icon]} size={15} />
+                {t.name}
+              </button>
+            ))}
+          </div>
+          {tpl && tpl.merchants.length > 0 && (
+            <label className={s.tplMerchants}>
+              <input type="checkbox" checked={tplMerchants} onChange={e => setTplMerchants(e.target.checked)} />
+              <span>
+                Sort these merchants here automatically:{' '}
+                <span style={{ color: C.textMuted }}>{tpl.merchants.map(m => m.replace(/\b\w/g, c => c.toUpperCase())).join(', ')}</span>
+                {tplNew.length < tpl.merchants.length && <span style={{ color: C.textMuted }}> (ones you already have a rule for stay as they are)</span>}
+              </span>
+            </label>
+          )}
+          <span style={{ fontSize: 13, color: C.textMuted }}>Or name your own below.</span>
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <IconChip d={preview.icon} bg={preview.tint} ink={preview.ink} size={44} iconSize={20} />
-        <span className={s.catPill} style={{ background: preview.tint, color: preview.ink, borderColor: preview.color }}>
+        <span
+          className={s.catPill}
+          style={{
+            background: preview.tint,
+            color: preview.ink,
+            borderColor: preview.color,
+          }}
+        >
           ● {draft.name}
         </span>
       </div>
@@ -197,30 +272,56 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
           />
         )}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <span className={s.label}>Monthly limit</span>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
-          <label className={s.field}>
-            <span style={{ fontWeight: 500 }}>% of income</span>
-            <input className={s.input} autoFocus={!!builtIn} inputMode="decimal" value={pctText} onChange={e => setFromPct(e.target.value)} aria-label="Monthly limit as % of income" />
-          </label>
-          <label className={s.field}>
-            <span style={{ fontWeight: 500 }}>Amount a month ({settings.currency})</span>
-            <input className={s.input} inputMode="decimal" value={amtText} onChange={e => setFromAmount(e.target.value)} aria-label={`Monthly limit in ${settings.currency}`} />
-          </label>
+      {builtIn?.auto ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span className={s.label}>Monthly limit</span>
+          <span style={{ fontSize: 14, color: C.textSoft }}>Follows your installment plans: each cycle it's exactly the payments billed in it.</span>
         </div>
-        <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>
-          Of your {full(settings.income)} income · adds to your spending budget
-          {builtIn && Math.abs(limitPct - builtIn.limitPct) > 1e-9 && (
-            <>
-              {' · '}
-              <button type="button" className={s.textBtnSm} onClick={() => resetTo(builtIn.limitPct)} style={{ padding: 0 }}>
-                Reset to {builtIn.limitPct}%
-              </button>
-            </>
-          )}
-        </span>
-      </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span className={s.label}>Monthly limit</span>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+              gap: 10,
+            }}
+          >
+            <label className={s.field}>
+              <span style={{ fontWeight: 500 }}>% of income</span>
+              <input
+                className={s.input}
+                autoFocus={!!builtIn}
+                inputMode="decimal"
+                value={pctText}
+                onChange={e => setFromPct(e.target.value)}
+                aria-label="Monthly limit as % of income"
+              />
+            </label>
+            <label className={s.field}>
+              <span style={{ fontWeight: 500 }}>Amount a month ({settings.currency})</span>
+              <input
+                className={s.input}
+                inputMode="decimal"
+                value={amtText}
+                onChange={e => setFromAmount(e.target.value)}
+                aria-label={`Monthly limit in ${settings.currency}`}
+              />
+            </label>
+          </div>
+          <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>
+            Of your {full(settings.income)} income · adds to your spending budget
+            {builtIn && Math.abs(limitPct - builtIn.limitPct) > 1e-9 && (
+              <>
+                {' · '}
+                <button type="button" className={s.textBtnSm} onClick={() => resetTo(builtIn.limitPct)} style={{ padding: 0 }}>
+                  Reset to {builtIn.limitPct}%
+                </button>
+              </>
+            )}
+          </span>
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span className={s.label}>Sub-categories</span>
         {subs.length > 0 && (
@@ -253,7 +354,9 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
             Add
           </button>
         </div>
-        <span style={{ fontSize: 13, color: C.textMuted }}>Labels inside this category: they share its limit. Pick one from a transaction's category menu.</span>
+        <span style={{ fontSize: 13, color: C.textMuted }}>
+          Labels inside this category: they share its limit. Pick one from a transaction's category menu.
+        </span>
       </div>
       {!builtIn && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -269,7 +372,15 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
                 title={k}
                 className={s.iconOpt}
                 onClick={() => setIcon(k)}
-                style={icon === k ? { background: preview.tint, color: preview.ink, borderColor: preview.color } : undefined}
+                style={
+                  icon === k
+                    ? {
+                        background: preview.tint,
+                        color: preview.ink,
+                        borderColor: preview.color,
+                      }
+                    : undefined
+                }
               >
                 <Icon d={IC[k]} size={18} />
               </button>
@@ -303,7 +414,14 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
         <span style={{ fontSize: 13, color: C.textMuted }}>Faded colours are already used. Pick an unused one to keep categories easy to tell apart.</span>
       </div>
       {err && <span className={s.error}>{err}</span>}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
+      >
         <button type="button" className={s.btnPrimary} onClick={save}>
           {existing || builtIn ? 'Save changes' : 'Create category'}
         </button>
@@ -346,7 +464,15 @@ function DeleteCategory({
           </span>
           <label className={s.field}>
             <span>Move {count === 1 ? 'it' : 'them'} to</span>
-            <Select value={to} onChange={setTo} ariaLabel="Move to" options={targets.map(t => ({ value: t, label: categoryLabel(t) }))} />
+            <Select
+              value={to}
+              onChange={setTo}
+              ariaLabel="Move to"
+              options={targets.map(t => ({
+                value: t,
+                label: categoryLabel(t),
+              }))}
+            />
           </label>
         </>
       ) : (

@@ -33,7 +33,11 @@ export type Settings = {
   subcategories: Record<string, string[]>;
   /** Predicted bills you said aren't due this cycle, by `billKey`. Older cycles' keys are dropped. */
   dismissedBills: string[];
+  /** Per credit card (account name, e.g. "CC BCA"): the day its statement closes and the day the bill is due. */
+  cards: Record<string, CardDates>;
 };
+
+export type CardDates = { statement: number; due: number };
 
 export const DEFAULT_INCOME: Record<Currency, number> = { IDR: 30_000_000, USD: 6_500 };
 
@@ -55,6 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
   subcategories: DEFAULT_SUBCATEGORIES,
   receiptsFolder: '',
   notSubscriptions: [],
+  cards: {},
 };
 
 type Ctx = {

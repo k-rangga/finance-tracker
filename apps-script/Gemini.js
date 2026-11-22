@@ -126,3 +126,80 @@ function draftJournalMonth_(p) {
   const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(x => x.text || '').join('').trim() : '';
   return text ? { text: text } : { error: 'blocked' };
 }
+
+/** Saved guesses, { txId: { category, sub, why, confidence } }. */
+function categoryGuesses_() {
+  const out = {};
+  readTable_('cat_guesses').forEach(r => {
+    if (r.tx_id && r.category) out[r.tx_id] = { category: r.category, sub: r.sub || '', why: r.why || '', confidence: r.confidence || 'medium' };
+  });
+  return out;
+}
+
+/**
+ * Guess a category for each transaction still to sort, from how you sorted the rest.
+ * p: { items: [{ id, merchant, amount, time, weekday, account }], examples: [{ merchant, amount, time, weekday, account, category, sub }],
+ *      categories: [{ name, subs }] }. Saves each guess in cat_guesses and returns { guesses: { txId: guess } } or { error }.
+ */
+function guessCategories_(p) {
+  const props = PropertiesService.getScriptProperties();
+  const key = props.getProperty('GEMINI_API_KEY');
+  if (!key) return { error: 'no_key' };
+  const model = props.getProperty('GEMINI_MODEL') || GEMINI_DEFAULT_MODEL;
+  const items = (p.items || []).slice(0, 40);
+  if (!items.length) return { guesses: {} };
+  const categories = p.categories || [];
+  const names = categories.map(c => String(c.name));
+  const body = {
+    systemInstruction: {
+      parts: [
+        {
+          text: [
+            'You sort the spending of one person in Indonesia into their own budget categories.',
+            '"examples" are transactions they already sorted: learn their patterns from merchant names, amounts, time of day, weekday and account',
+            '(e.g. the same ride app can be a ride for small morning amounts and food at lunch for bigger ones).',
+            'For each item in "items", pick the most likely category from "categories" (and a sub-category from its "subs", or null).',
+            'Use general knowledge of Indonesian merchants when the examples say nothing about one.',
+            'confidence: "high" when the examples show a clear pattern for this merchant, "medium" for a reasonable guess, "low" when unsure.',
+            'why: one short sentence a person would understand, naming the pattern (e.g. "Your Grab orders over Rp 30k around lunch are Take out").',
+            'Respond with JSON only: {"guesses":[{"id":string,"category":string,"sub":string|null,"confidence":"high"|"medium"|"low","why":string}]}',
+          ].join('\n'),
+        },
+      ],
+    },
+    contents: [{ role: 'user', parts: [{ text: JSON.stringify({ categories: categories, examples: (p.examples || []).slice(0, 300), items: items }) }] }],
+    generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 4000, thinkingConfig: { thinkingLevel: 'low' } },
+  };
+  let res = geminiFetch_(model, key, body);
+  let data = geminiJson_(res);
+  if (res.getResponseCode() === 400 && /thinking/i.test(JSON.stringify(data || ''))) {
+    delete body.generationConfig.thinkingConfig;
+    res = geminiFetch_(model, key, body);
+    data = geminiJson_(res);
+  }
+  if (res.getResponseCode() !== 200) return { error: 'api', detail: String((data && data.error && data.error.message) || 'HTTP ' + res.getResponseCode()).slice(0, 300) };
+  const cand = data && data.candidates && data.candidates[0];
+  const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(x => x.text || '').join('') : '';
+  let list = [];
+  try {
+    list = JSON.parse(text.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '')).guesses || [];
+  } catch (e) {
+    return { error: 'blocked' };
+  }
+  const asked = {};
+  items.forEach(i => (asked[String(i.id)] = true));
+  const now = new Date().toISOString();
+  const out = {};
+  list.forEach(g => {
+    const id = String(g.id || '');
+    const cat = names.filter(n => n.toLowerCase() === String(g.category || '').trim().toLowerCase())[0];
+    if (!asked[id] || !cat) return;
+    const subs = (categories.filter(c => c.name === cat)[0] || {}).subs || [];
+    const sub = subs.filter(x => x.toLowerCase() === String(g.sub || '').trim().toLowerCase())[0] || '';
+    const confidence = /^(high|medium|low)$/.test(g.confidence) ? g.confidence : 'medium';
+    out[id] = { category: cat, sub: sub, why: String(g.why || '').slice(0, 200), confidence: confidence };
+    upsertRow_('cat_guesses', 'tx_id', { tx_id: id, category: cat, sub: sub, why: out[id].why, confidence: confidence, updated_at: now });
+  });
+  console.log('guessCategories ' + model + ': ' + Object.keys(out).length + ' of ' + items.length);
+  return { guesses: out };
+}

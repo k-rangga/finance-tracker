@@ -18,6 +18,8 @@ export type Category = {
   custom?: boolean;
   /** Built-in only: the limit before any change you made in settings. */
   defaultLimitPct?: number;
+  /** The limit follows a schedule instead of a % of income (Installments: what's due this cycle). */
+  auto?: boolean;
 };
 
 /** A category you created, as saved in settings. `icon` is a key of `IC`. */
@@ -36,7 +38,9 @@ export const INVESTMENT_CATEGORY = 'Investment';
 export const SAVINGS_CATEGORY = 'Savings';
 /** A card purchase paid in installments: the purchase itself isn't spending, its monthly payments are. */
 export const INSTALLMENT_CATEGORY = 'Installment';
-/** Where each installment payment's interest goes. */
+/** A fixed bill whose plan is exactly the installment payments due each cycle (price and interest). */
+export const INSTALLMENTS_CATEGORY = 'Installments';
+/** Where card fees go (and installment interest, before installments had their own category). */
 export const INTEREST_CATEGORY = 'Interest & fees';
 /** Categories a transaction can be moved to besides the budget ones. */
 export const OTHER_CATEGORIES = [TRANSFER_CATEGORY, SAVINGS_CATEGORY, INVESTMENT_CATEGORY, INCOME_CATEGORY];
@@ -73,7 +77,7 @@ export const nextHue = (cats: Hue[]): Hue => HUES.find(h => !cats.some(c => c.co
 /** Icons you can pick for a new category (keys of `IC`). */
 export const CATEGORY_ICONS = [
   'home', 'zap', 'shield', 'repeat', 'basket', 'utensils', 'coffee', 'takeout', 'nav', 'car', 'plane', 'bag', 'shirt', 'gift', 'heart', 'pill',
-  'dumbbell', 'book', 'graduation', 'film', 'music', 'gamepad', 'phone', 'wrench', 'card', 'coins', 'wallet', 'piggy', 'calendar',
+  'dumbbell', 'book', 'graduation', 'film', 'music', 'gamepad', 'phone', 'wrench', 'card', 'coins', 'wallet', 'piggy', 'calendar', 'sparkle',
 ] as const;
 
 const BUILT_IN: Category[] = [
@@ -81,6 +85,8 @@ const BUILT_IN: Category[] = [
   { name: 'Utilities', type: 'fixed', limitPct: 3, ...HUES[1], icon: IC.zap },
   { name: 'Insurance', type: 'fixed', limitPct: 2, ...HUES[2], icon: IC.shield },
   { name: 'Subscriptions', type: 'fixed', limitPct: 1, ...HUES[3], icon: IC.repeat },
+  // Monthly payments of purchases you split into installments; the plan is whatever's due this cycle.
+  { name: 'Installments', type: 'fixed', limitPct: 0, ...HUES[9], icon: IC.calendar, auto: true },
   { name: 'Groceries', type: 'variable', limitPct: 7, ...HUES[4], icon: IC.basket },
   { name: 'Dining', type: 'variable', limitPct: 2, ...HUES[5], icon: IC.utensils },
   { name: 'Cafe', type: 'variable', limitPct: 1, ...HUES[11], icon: IC.coffee },
@@ -156,3 +162,28 @@ export function applyCategorySettings(custom: CustomCategory[] = [], { limitOver
 export const isReservedName = (n: string) => [...CATEGORIES.map(c => c.name), ...OTHER_CATEGORIES, CC_PAYMENT_CATEGORY, INSTALLMENT_CATEGORY].some(x => x.toLowerCase() === n.trim().toLowerCase());
 
 export const categoryByName = (n: string) => CATEGORIES.find(c => c.name === n);
+
+/**
+ * Ready-made categories for "New category": name, icon, a starting limit, sub-categories and merchants that
+ * usually belong there. Creating one also adds a merchant rule for each, so their transactions sort themselves.
+ * Rules match whole words inside a merchant's name (letters only: digits and dots are dropped, so "tiket.com" is "tiket com") ("kimia farma" catches "KIMIA FARMA APOTEK 123").
+ */
+export type CategoryTemplate = { name: string; icon: (typeof CATEGORY_ICONS)[number]; type: CategoryType; limitPct: number; subs: string[]; merchants: string[] };
+
+export const CATEGORY_TEMPLATES: CategoryTemplate[] = [
+  { name: 'Health', icon: 'pill', type: 'variable', limitPct: 2, subs: ['Doctor', 'Pharmacy', 'Lab & checkup'], merchants: ['kimia farma', 'guardian', 'century', 'watsons', 'halodoc', 'alodokter', 'apotek', 'klinik', 'rumah sakit', 'siloam', 'mitra keluarga', 'hermina', 'prodia'] },
+  { name: 'Fitness', icon: 'dumbbell', type: 'fixed', limitPct: 1, subs: ['Gym', 'Classes', 'Gear'], merchants: ['fitness first', 'celebrity fitness', 'anytime fitness', 'gold gym', 'ftl gym', 'decathlon', 'sports station'] },
+  { name: 'Personal care', icon: 'sparkle', type: 'variable', limitPct: 1, subs: ['Haircut', 'Skincare', 'Spa'], merchants: ['barbershop', 'barber', 'salon', 'sociolla', 'the body shop', 'innisfree', 'erha', 'zap clinic'] },
+  { name: 'Entertainment', icon: 'film', type: 'variable', limitPct: 1.5, subs: ['Movies', 'Games', 'Events'], merchants: ['cgv', 'cinema xxi', 'xxi', 'cinepolis', 'steam', 'playstation', 'nintendo', 'loket', 'timezone', 'karaoke'] },
+  { name: 'Travel', icon: 'plane', type: 'variable', limitPct: 3, subs: ['Flights', 'Hotels', 'Activities'], merchants: ['traveloka', 'tiket com', 'airasia', 'garuda', 'citilink', 'lion air', 'batik air', 'agoda', 'booking com', 'airbnb', 'pegipegi'] },
+  { name: 'Education', icon: 'graduation', type: 'variable', limitPct: 1, subs: ['Courses', 'Books', 'School fees'], merchants: ['gramedia', 'periplus', 'udemy', 'coursera', 'ruangguru', 'zenius', 'kindle'] },
+  { name: 'Family', icon: 'heart', type: 'fixed', limitPct: 5, subs: ['Parents', 'Kids', 'Household help'], merchants: [] },
+  { name: 'Kids', icon: 'gamepad', type: 'variable', limitPct: 2, subs: ['School', 'Toys', 'Baby needs'], merchants: ['mothercare', 'toys kingdom', 'kiddy cuts', 'babyshop'] },
+  { name: 'Gifts & giving', icon: 'gift', type: 'variable', limitPct: 1, subs: ['Gifts', 'Zakat & sedekah', 'Donations'], merchants: ['kitabisa', 'baznas', 'dompet dhuafa', 'rumah zakat'] },
+  { name: 'Pets', icon: 'heart', type: 'variable', limitPct: 0.5, subs: ['Food', 'Vet', 'Grooming'], merchants: ['pet shop', 'petshop', 'pet kingdom', 'drh'] },
+  { name: 'Phone & internet', icon: 'phone', type: 'fixed', limitPct: 1, subs: ['Mobile', 'Home internet'], merchants: ['telkomsel', 'indihome', 'xl axiata', 'xlsmart', 'indosat', 'smartfren', 'first media', 'biznet', 'myrepublic'] },
+  { name: 'Hobbies', icon: 'music', type: 'variable', limitPct: 1, subs: ['Music', 'Photography', 'Crafts'], merchants: [] },
+  { name: 'Home & living', icon: 'home', type: 'variable', limitPct: 1.5, subs: ['Furniture', 'Cleaning', 'Laundry'], merchants: ['laundry', 'laundromat', 'ikea', 'informa', 'jysk', 'courts'] },
+  { name: 'Car', icon: 'car', type: 'fixed', limitPct: 2, subs: ['Loan', 'Tax & insurance', 'Wash'], merchants: ['cuci mobil', 'car wash', 'samsat'] },
+  { name: 'Work', icon: 'book', type: 'variable', limitPct: 1, subs: ['Tools', 'Coworking', 'Travel'], merchants: ['wework', 'cohive', 'go work'] },
+];

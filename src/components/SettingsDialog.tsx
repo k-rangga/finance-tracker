@@ -6,6 +6,7 @@ import { sum } from '../lib/format';
 import { DEFAULT_INCOME, useSettings, type Settings } from '../lib/settings';
 import type { Currency } from '../lib/format';
 import { applyTheme, getTheme, type Theme } from '../lib/theme';
+import { useData } from '../lib/data';
 
 type NumKey = 'income' | 'savingsPct' | 'investPct' | 'idxCap' | 'usCap' | 'cryptoCap' | 'fxRate';
 
@@ -22,6 +23,19 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
     fxRate: String(settings.fxRate),
   }));
   const [err, setErr] = useState('');
+  /** Credit cards seen in your transactions, for their statement and due days. */
+  const { txRows } = useData();
+  const cardNames = [...new Set([...txRows.map(r => r.account ?? ''), ...Object.keys(settings.cards ?? {})])].filter(a => a.startsWith('CC ')).sort();
+  const setCard = (name: string, key: 'statement' | 'due', text: string) => {
+    const v = Math.max(0, Math.min(31, Math.round(Number(text.replace(/\D/g, '')) || 0)));
+    setD(p => {
+      const cards = { ...(p.cards ?? {}) };
+      const cur = { ...(cards[name] ?? { statement: 0, due: 0 }), [key]: v };
+      if (cur.statement || cur.due) cards[name] = cur;
+      else delete cards[name];
+      return { ...p, cards };
+    });
+  };
   // Appearance is per device and applies at once (not part of Save).
   const [theme, setTheme] = useState<Theme>(getTheme);
   const THEMES: Record<string, Theme> = { Auto: 'auto', Light: 'light', Dark: 'dark' };
@@ -142,6 +156,25 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
         />
         <span style={{ fontWeight: 500 }}>Receipts you attach are saved here as 20261031_id_Merchant.jpg.</span>
       </label>
+      {cardNames.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span className={s.label}>Credit card dates</span>
+          {cardNames.map(name => (
+            <div key={name} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 110px 110px', gap: 10, alignItems: 'end' }}>
+              <span style={{ fontSize: 14, fontWeight: 600, paddingBottom: 12 }}>{name}</span>
+              <label className={s.field}>
+                <span style={{ fontWeight: 500 }}>Statement day</span>
+                <input className={s.input} inputMode="numeric" placeholder="e.g. 18" value={d.cards?.[name]?.statement || ''} onChange={e => setCard(name, 'statement', e.target.value)} />
+              </label>
+              <label className={s.field}>
+                <span style={{ fontWeight: 500 }}>Due day</span>
+                <input className={s.input} inputMode="numeric" placeholder="e.g. 3" value={d.cards?.[name]?.due || ''} onChange={e => setCard(name, 'due', e.target.value)} />
+              </label>
+            </div>
+          ))}
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>From your card statement. Installment payments land on the statement day, so they count in the right pay cycle.</span>
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span className={s.label}>Your categories</span>
         {settings.customCategories.length === 0 ? (

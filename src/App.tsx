@@ -13,6 +13,7 @@ import { useSettings } from './lib/settings';
 import { useData } from './lib/data';
 import { billKey, merchantKey, expectedBills, inCycle, installmentBills, installmentPayments, resolveSubs, toTransaction, withMerchantRules, type Bill } from './data/transactions';
 import { INSTALLMENT_CATEGORY } from './data/categories';
+import { InstallmentsAhead } from './screens/InstallmentsAhead';
 import { Summary } from './screens/Summary';
 import { Categories } from './screens/Categories';
 import { Activity, type ActivityFilter } from './screens/Activity';
@@ -345,6 +346,7 @@ export default function App() {
             {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} onDismissBill={dismissBill} />}
             {tab === 'plan' && (
               <SavingsPlan cycle={cycle} budget={budget} onOpenInvest={() => setTab('invest')} onShowTransactions={showTransactions}>
+                <InstallmentsAhead payments={payments} cycle={cycle} />
                 <Subscriptions budget={budget} states={subStates} txs={all} catOf={catOf} />
               </SavingsPlan>
             )}

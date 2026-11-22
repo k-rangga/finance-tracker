@@ -1,6 +1,6 @@
 import type { Cycle } from '../lib/cycle';
 import { parseISO, type Currency } from '../lib/format';
-import { AUTO_SUBS, CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INTEREST_CATEGORY, INVESTMENT_CATEGORY, OTHER_CATEGORIES, SAVINGS_CATEGORY, TRANSFER_CATEGORY } from './categories';
+import { AUTO_SUBS, CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INSTALLMENTS_CATEGORY, INVESTMENT_CATEGORY, OTHER_CATEGORIES, SAVINGS_CATEGORY, TRANSFER_CATEGORY } from './categories';
 
 export type Transaction = {
   id: string;
@@ -18,7 +18,7 @@ export type Transaction = {
   /** Transfers only, e.g. 'CC BCA' for a card bill payment. */
   toAccount?: string;
   /** Installment payments only: the purchase it pays for, which month (1-based) of how many, and which part. */
-  plan?: { of: string; month: number; months: number; part: 'price' | 'interest' };
+  plan?: { of: string; month: number; months: number; part: 'price' | 'interest'; for?: string };
 };
 
 /** A card purchase paid in monthly installments: first payment date (YYYY-MM-DD) and each month's amount, interest included. */
@@ -42,9 +42,27 @@ export function priceParts(price: number, months: number): number[] {
 }
 
 /**
- * The monthly payments of each installment plan, as transactions on their due dates (on the same card), so each
- * counts as spending in the cycle it's billed. A payment above its share of the price is split: the share stays
- * in the purchase's category, the rest goes to Interest & fees. `cat` is the purchase's category after your fixes.
+ * The first statement a purchase lands on: this month's if it's before the card's statement day, else next month's
+ * (a day past the month's end means its last day).
+ */
+export function firstStatement(purchase: Date, statementDay: number): Date {
+  const on = (y: number, m: number) => new Date(y, m, Math.min(statementDay, new Date(y, m + 1, 0).getDate()));
+  const here = on(purchase.getFullYear(), purchase.getMonth());
+  return purchase < here ? here : on(purchase.getFullYear(), purchase.getMonth() + 1);
+}
+
+/** When the bill for a statement is due: the card's due day after the statement date. */
+export function billDue(statement: Date, dueDay: number): Date {
+  const on = (m: number) => new Date(statement.getFullYear(), m, Math.min(dueDay, new Date(statement.getFullYear(), m + 1, 0).getDate()));
+  const same = on(statement.getMonth());
+  return same > statement ? same : on(statement.getMonth() + 1);
+}
+
+/**
+ * The monthly payments of each installment plan, as transactions on their statement dates (on the same card), so
+ * each counts in the cycle it's billed, under Installments: a fixed bill whose plan is what's due. A payment
+ * above its share of the price is split into price and interest rows, both Installments; `plan.for` keeps the
+ * purchase's category (after your fixes, from `cat`) as a label.
  */
 export function installmentPayments(purchases: Transaction[], plans: Record<string, InstallmentPlan>, cat: (t: Transaction) => string): Transaction[] {
   return purchases.flatMap(t => {
@@ -59,11 +77,12 @@ export function installmentPayments(purchases: Transaction[], plans: Record<stri
       // Less than one rupiah (or cent) above the share is rounding, not interest.
       const base = { date: addMonths(first, i), time: t.time, source: 'Installment', account: t.account, type: 'expense' as const };
       const label = `${t.title} · ${i + 1}/${months}`;
+      const of = cat(t);
       const rows: Transaction[] = [
-        { ...base, id: `${t.id}~${i + 1}`, title: label, category: cat(t), amount: price, plan: { of: t.id, month: i + 1, months, part: 'price' } },
+        { ...base, id: `${t.id}~${i + 1}`, title: label, category: INSTALLMENTS_CATEGORY, amount: price, plan: { of: t.id, month: i + 1, months, part: 'price', for: of } },
       ];
       if (interest >= (Number.isInteger(t.amount) ? 1 : 0.01))
-        rows.push({ ...base, id: `${t.id}~${i + 1}i`, title: `${label} interest`, category: INTEREST_CATEGORY, amount: interest, plan: { of: t.id, month: i + 1, months, part: 'interest' } });
+        rows.push({ ...base, id: `${t.id}~${i + 1}i`, title: `${label} interest`, category: INSTALLMENTS_CATEGORY, amount: interest, plan: { of: t.id, month: i + 1, months, part: 'interest', for: of } });
       return rows;
     });
   });
@@ -77,9 +96,36 @@ export function installmentBills(payments: Transaction[], cycle: Cycle): Bill[] 
     const key = `${t.plan.of}~${t.plan.month}`;
     const b = due.get(key);
     if (b) b.amount += t.amount;
-    else due.set(key, { date: t.date, title: t.title.replace(/ interest$/, ''), category: t.category === INTEREST_CATEGORY ? INTEREST_CATEGORY : t.category, amount: t.amount, source: 'Installment' });
+    else due.set(key, { date: t.date, title: t.title.replace(/ interest$/, ''), category: t.category, amount: t.amount, source: 'Installment' });
   }
-  return [...due.values()];
+  // What's left on each plan after the payment.
+  return [...due.entries()].map(([key, b]) => {
+    const [of, month] = [key.slice(0, key.lastIndexOf('~')), Number(key.slice(key.lastIndexOf('~') + 1))];
+    const left = payments.filter(t => t.plan?.of === of && t.plan.month > month).reduce((a, t) => a + t.amount, 0);
+    return { ...b, left };
+  });
+}
+
+/** One installment plan's place in the future: what it costs in each pay cycle from `from`, and when it ends. */
+export type PlanAhead = { of: string; title: string; account: string; perCycle: number[]; last: Date; left: number };
+
+/** For the next `n` cycles (starting with `cycles[0]`), how much each installment plan bills in each. */
+export function installmentsAhead(payments: Transaction[], cycles: { start: Date; end: Date }[], today: Date): PlanAhead[] {
+  const by = new Map<string, Transaction[]>();
+  for (const t of payments) if (t.plan) by.set(t.plan.of, [...(by.get(t.plan.of) ?? []), t]);
+  return [...by.entries()]
+    .map(([of, list]) => {
+      const last = list.reduce((a, t) => (t.date > a ? t.date : a), list[0].date);
+      return {
+        of,
+        title: list[0].title.replace(/ · \d+\/\d+( interest)?$/, ''),
+        account: list[0].account,
+        perCycle: cycles.map(c => list.filter(t => t.date >= c.start && t.date <= c.end).reduce((a, t) => a + t.amount, 0)),
+        last,
+        left: list.filter(t => t.date > today).reduce((a, t) => a + t.amount, 0),
+      };
+    })
+    .filter(p => p.left > 0 || p.perCycle.some(v => v > 0));
 }
 
 /** Last cycle's spend on one credit card (the bill paid this cycle). */
@@ -87,7 +133,15 @@ export type CardCycle = { account: string; prevCycleSpend: number };
 
 export const isCard = (account: string) => account.startsWith('CC ');
 
-export type Bill = { date: Date; title: string; category: string; amount: number; source: string };
+export type Bill = {
+  date: Date;
+  title: string;
+  category: string;
+  amount: number;
+  source: string;
+  /** Installments: what's still to pay on the plan after this payment. */
+  left?: number;
+};
 
 /** A predicted bill's identity within one cycle (`cycleId` = the cycle's start as ISO), for dismissing it. */
 export const billKey = (cycleId: string, b: Bill) => `${cycleId}|${b.title.toLowerCase()}|${b.amount}`;

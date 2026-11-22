@@ -52,6 +52,7 @@ type Dev = Record<string, unknown> & {
   perpPositions?: unknown[];
   perpEquity?: number;
   journalMonths?: Record<string, string>;
+  guesses?: Record<string, { category: string; sub: string; why: string; confidence: "high" | "medium" | "low" }>;
   rules?: Record<string, string>;
   ruleSubs?: Record<string, string>;
   subs?: Record<string, string>;
@@ -131,6 +132,20 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       if (String(q.note ?? '').trim()) m[q.key as string] = q.note as string;
       else delete m[q.key as string];
       return save();
+    }
+    case 'getGuesses':
+      return d.guesses ?? {};
+    case 'guessCategories': {
+      // Stand-in for Gemini: food-sounding names to Take out, the rest to the first category offered.
+      await new Promise(r => setTimeout(r, 800));
+      const cats = q.categories as { name: string }[];
+      const g = (d.guesses ??= {});
+      for (const it of q.items as { id: string; merchant: string; amount: number }[]) {
+        const food = /food|resto|bakmi|kopi|sate|ayam/i.test(it.merchant);
+        g[it.id] = { category: food ? 'Take out' : cats[0].name, sub: '', why: food ? '(dev stand-in) Sounds like food.' : '(dev stand-in) A guess.', confidence: food ? 'medium' : 'low' };
+      }
+      save();
+      return { guesses: Object.fromEntries((q.items as { id: string }[]).map(i => [i.id, g[i.id]])) };
     }
     case 'draftJournalMonth':
       // Stand-in for Gemini: a canned draft from the summary's first lines.

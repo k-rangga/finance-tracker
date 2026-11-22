@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import s from '../styles/ui.module.css';
 import { Modal, Options } from './ui';
-import { addMonths, priceParts, type InstallmentPlan } from '../data/transactions';
+import { addMonths, billDue, firstStatement, priceParts, type InstallmentPlan } from '../data/transactions';
+import { getCycle } from '../lib/cycle';
 import { dayMonth, fullDate, parseISO, sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
@@ -35,8 +36,12 @@ export function InstallmentDialog({ tx, plan, onSave, onUndo, onClose }: Props) 
 
   const [months, setMonths] = useState(plan?.amounts.length ?? 6);
   const [monthsText, setMonthsText] = useState(String(plan?.amounts.length ?? 6));
-  // The first payment is usually on the next statement after the purchase.
-  const [start, setStart] = useState(plan?.start ?? toISO(addMonths(tx.date, 1)));
+  // The first payment lands on the first statement after the purchase: from the card's statement day when you've
+  // set it in Settings, else a month after the purchase.
+  const dates = settings.cards?.[tx.account];
+  const card = dates && dates.statement >= 1 ? dates : undefined;
+  const suggested = card ? firstStatement(tx.date, card.statement) : addMonths(tx.date, 1);
+  const [start, setStart] = useState(plan?.start ?? toISO(suggested));
   const [amounts, setAmounts] = useState<string[]>(() => (plan?.amounts ?? priceParts(price, 6)).map(fmt));
   const [same, setSame] = useState('');
   const [total, setTotal] = useState('');
@@ -56,6 +61,7 @@ export function InstallmentDialog({ tx, plan, onSave, onUndo, onClose }: Props) 
   const tiny = idr ? 1 : 0.01;
   const valid = months >= 1 && months <= 60 && !!start && values.every(v => Number.isFinite(v) && v >= 0) && paid > 0;
   const first = start ? parseISO(start) : tx.date;
+  const isCardAccount = tx.account.startsWith('CC ');
 
   return (
     <Modal title="Pay in installments" onClose={onClose} width={560}>
@@ -63,7 +69,7 @@ export function InstallmentDialog({ tx, plan, onSave, onUndo, onClose }: Props) 
         <strong style={{ fontWeight: 600, color: C.text }}>{tidyName(tx.title)}</strong> · {full(price)} on {tx.account} · {fullDate(tx.date)}
       </span>
       <span style={{ fontSize: 13, color: C.textMuted }}>
-        The purchase stops counting at once; each payment counts in the cycle it's billed. Anything above your share of the price goes to Interest &amp; fees.
+        The purchase stops counting at once. Each payment, interest included, is a fixed bill under Installments in the pay cycle it's billed, so your plan covers it.
       </span>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -91,6 +97,24 @@ export function InstallmentDialog({ tx, plan, onSave, onUndo, onClose }: Props) 
       <label className={s.field}>
         First payment
         <input className={s.input} type="date" value={start} onChange={e => setStart(e.target.value)} style={{ maxWidth: 220 }} />
+        {start && (
+          <span style={{ fontWeight: 500 }}>
+            {(() => {
+              const c = getCycle(first);
+              return `Counts in the ${dayMonth(c.start)} – ${dayMonth(c.end)} pay cycle`;
+            })()}
+            {card && card.due >= 1 ? ` · paid with the card bill due ${dayMonth(billDue(first, card.due))}` : ''}
+            {card && start !== toISO(suggested) && (
+              <>
+                {' · '}
+                <button type="button" className={s.textBtnSm} style={{ padding: 0 }} onClick={() => setStart(toISO(suggested))}>
+                  Use the {dayMonth(suggested)} statement
+                </button>
+              </>
+            )}
+            {!card && isCardAccount && <> · set {tx.account}'s statement day in Settings to date this exactly</>}
+          </span>
+        )}
       </label>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 12 }}>

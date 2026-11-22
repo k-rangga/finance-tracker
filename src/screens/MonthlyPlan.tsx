@@ -77,6 +77,8 @@ export function MonthlyPlan({ budget: b, onOpenInvest }: { budget: Budget; onOpe
 
   /** A plan that's off from last cycle by more than a little, and the amount that would match it. */
   const flagOf = (c: CatView): { text: string; ink: string; to: number } | null => {
+    // Installments plan themselves from your schedule: nothing to fix.
+    if (c.auto) return null;
     const last = lastOf(c);
     if (last <= 0) return null;
     const round = settings.currency === 'IDR' ? 10_000 : 1;
@@ -92,7 +94,8 @@ export function MonthlyPlan({ budget: b, onOpenInvest }: { budget: Budget; onOpe
     const paid = new Map<string, { total: number; last: Date }>();
     for (const t of b.txs)
       if (t.cat === c.name && isSpend(t)) {
-        const k = tidyName(t.title);
+        // An installment's interest joins its payment.
+        const k = tidyName(t.plan ? t.title.replace(/ interest$/, '') : t.title);
         const x = paid.get(k);
         paid.set(k, { total: (x?.total ?? 0) + t.net, last: x && x.last > t.date ? x.last : t.date });
       }
