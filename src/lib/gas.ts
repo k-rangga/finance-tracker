@@ -272,7 +272,13 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       return save();
     }
     case 'listLabels':
+      // Set `googleMissing` in the stand-in data to try the Vercel "Connect Google" step.
+      if (d.googleMissing) throw new Error('google_not_connected: Connect your Google account first (Settings → Gmail).');
       return ['Receipts'];
+    case 'googleConnectUrl':
+      delete d.googleMissing;
+      save();
+      return { url: '/?google=connected' };
     case 'chooseLabel':
       d.label = q.name;
       save();

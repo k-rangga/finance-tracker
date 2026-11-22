@@ -47,6 +47,19 @@ export function GmailDialog({ onClose, notice }: { onClose: () => void; notice?:
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
 
+  const run = async (what: string, fn: () => Promise<string>) => {
+    setBusy(what);
+    setErr('');
+    setMsg('');
+    try {
+      setMsg(await fn());
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // Vercel: Gmail is read through your own Google connection, made once.
   const [needsGoogle, setNeedsGoogle] = useState(onVercel && gmail.google_connected === false && notice !== 'connected');
   useEffect(() => {
@@ -82,18 +95,6 @@ export function GmailDialog({ onClose, notice }: { onClose: () => void; notice?:
       </Modal>
     );
 
-  const run = async (what: string, fn: () => Promise<string>) => {
-    setBusy(what);
-    setErr('');
-    setMsg('');
-    try {
-      setMsg(await fn());
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(null);
-    }
-  };
 
   const lastError = gmail.last_sync_status?.startsWith('error') ? gmail.last_sync_status.replace(/^error:\s*/, '') : null;
   const partial = gmail.last_sync_status === 'partial';
