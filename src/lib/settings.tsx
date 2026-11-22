@@ -2,6 +2,7 @@ import { createContext, useContext, useMemo, useRef, type ReactNode } from 'reac
 import { fmtFull, fmtShort, type Currency } from './format';
 import { useData } from './data';
 import { applyCategorySettings, DEFAULT_SUBCATEGORIES, setSavingsTarget, type CustomCategory } from '../data/categories';
+import { currentCycleKey, type CyclePlan } from './cyclePlans';
 
 export type Settings = {
   /** What the Summary greeting calls you; empty for a greeting without a name. */
@@ -39,6 +40,8 @@ export type Settings = {
   paidBills?: string[];
   /** No-spend challenges: a category with nothing spent for 7 days from `start` (YYYY-MM-DD). */
   challenges?: { category: string; start: string }[];
+  /** Plans for particular pay cycles, by the cycle's start (YYYY-MM-DD): see lib/cyclePlans. */
+  cyclePlans?: Record<string, CyclePlan>;
   /** Per credit card (account name, e.g. "CC BCA"): the day its statement closes and the day the bill is due. */
   cards: Record<string, CardDates>;
 };
@@ -87,8 +90,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const settings = useMemo(() => {
     // `fixedStart` is set when the account had no settings yet (see backend load).
     const merged: Settings = { ...DEFAULT_SETTINGS, ...stored };
-    // Before children render, so every screen sees the same category list.
-    applyCategorySettings(merged.customCategories, merged);
+    // Before children render, so every screen sees the same category list. This cycle's own plan (made as
+    // "next cycle") overrides the regular amounts while it runs.
+    const thisCycle = merged.cyclePlans?.[currentCycleKey()]?.limits ?? {};
+    applyCategorySettings(merged.customCategories, { ...merged, limitOverrides: { ...merged.limitOverrides, ...thisCycle } });
     setSavingsTarget(merged.savingsPct);
     latest.current = merged;
     return merged;

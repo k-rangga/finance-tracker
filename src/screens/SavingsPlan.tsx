@@ -9,12 +9,42 @@ import { paydaysFrom, type Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth, diffDays } from '../lib/format';
 import { C } from '../lib/tokens';
 
-/** `children` sit under the monthly plan (Subscriptions). */
-type Props = { cycle: Cycle; budget: Budget; onOpenInvest: () => void; onShowTransactions: (cat: string) => void; children?: ReactNode };
+import { NextCycle } from './NextCycle';
+import type { Bill } from '../data/transactions';
 
-export function SavingsPlan({ cycle, budget: b, onOpenInvest, onShowTransactions, children }: Props) {
+/** `children` sit under the monthly plan (Subscriptions). `view`: this cycle, or planning the next one. */
+type Props = {
+  cycle: Cycle;
+  budget: Budget;
+  onOpenInvest: () => void;
+  onShowTransactions: (cat: string) => void;
+  view: 'this' | 'next';
+  setView: (v: 'this' | 'next') => void;
+  next: Cycle;
+  nextKnown: { installments: Bill[]; subscriptions: Bill[] };
+  children?: ReactNode;
+};
+
+export function SavingsPlan({ cycle, budget: b, onOpenInvest, onShowTransactions, view, setView, next, nextKnown, children }: Props) {
+  const switcher = (
+    <div className={s.segment} role="group" aria-label="Which cycle" style={{ alignSelf: 'flex-start' }}>
+      {(['this', 'next'] as const).map(v => (
+        <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}>
+          {v === 'this' ? 'This cycle' : 'Next cycle'}
+        </button>
+      ))}
+    </div>
+  );
+  if (view === 'next')
+    return (
+      <div className={s.stack}>
+        {switcher}
+        <NextCycle cycle={cycle} next={next} budget={b} known={nextKnown} />
+      </div>
+    );
   return (
     <div className={s.stack}>
+      {switcher}
       <ActionPlan cycle={cycle} budget={b} onShowTransactions={onShowTransactions} />
 
       <MonthlyPlan budget={b} onOpenInvest={onOpenInvest} />

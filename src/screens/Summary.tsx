@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { Badge, Card, CardHead, DismissBill, Dot, DueChip, IconChip } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
+import { cycleKey, hasPlan, nextCycleOf } from '../lib/cyclePlans';
 import { Celebrate, useCountUp } from '../components/Delight';
 import { changeBadge, dayAmount, dayTotalLabel, iconChip, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
@@ -43,6 +44,8 @@ type SummaryProps = Props & {
   onShowTransactions: (range: 'today' | 'cycle', cat?: string) => void;
   /** Ask Gemini this question. */
   onAsk: (question: string) => void;
+  /** Open Plan on the next cycle. */
+  onPlanNext: () => void;
 };
 
 /**
@@ -50,8 +53,26 @@ type SummaryProps = Props & {
  * Phones: one column read top to bottom (spend today → today and what's coming → savings → where it went),
  * with the comparisons folded under More.
  */
-export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismissBill, onShowTransactions, onAsk }: SummaryProps) {
-  const { ofIncome } = useSettings();
+/** Near payday: a nudge to plan the next cycle before it starts (or to look over the plan already made). */
+function PlanNextNudge({ cycle, planned, onOpen }: { cycle: Cycle; planned: boolean; onOpen: () => void }) {
+  return (
+    <section className={s.nudgeCard}>
+      <Icon d={IC.calendar} size={20} color={C.accent800} />
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
+        <span style={{ fontWeight: 600 }}>{planned ? 'Next cycle is planned' : 'Plan your next cycle'}</span>
+        <span style={{ fontSize: 13, color: C.textSoft }}>
+          {planned ? `It starts on payday, ${dayLabel(cycle.next)}. Look it over once more.` : `Payday is ${dayLabel(cycle.next)}. See what's already promised and plan the rest.`}
+        </span>
+      </span>
+      <button type="button" className={s.btnPrimarySm} style={{ flex: 'none' }} onClick={onOpen}>
+        {planned ? 'Review' : 'Plan it'}
+      </button>
+    </section>
+  );
+}
+
+export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismissBill, onShowTransactions, onAsk, onPlanNext }: SummaryProps) {
+  const { ofIncome, settings } = useSettings();
   const phone = useIsPhone();
   const [more, setMore] = useState(false);
   const target = ofIncome(SAVINGS_TARGET_PCT);
@@ -75,6 +96,7 @@ export function Summary({ cycle, budget, onOpenCategory, onOpenSettings, onDismi
       {/* Small wins, once per cycle on this device. */}
       <Celebrate id={id + '.saved'} when={target > 0 && budget.saved >= target} />
       <Celebrate id={id + '.under'} when={cycle.daysLeft <= 1 && budget.spent <= budget.budget} />
+      {cycle.daysLeft <= 4 && <PlanNextNudge cycle={cycle} planned={hasPlan(settings.cyclePlans?.[cycleKey(nextCycleOf(cycle))])} onOpen={onPlanNext} />}
       {phone ? (
         <>
           {thisCycle}

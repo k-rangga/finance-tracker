@@ -534,7 +534,7 @@ function BillRow({
 }
 
 /** A monthly amount typed in rupiah (or dollars), saved as the bill's plan. */
-function AmountEditor({ label, initial, onSave, onCancel, onRemove }: { label: string; initial: number; onSave: (v: number) => void; onCancel?: () => void; onRemove?: () => void }) {
+export function AmountEditor({ label, initial, onSave, onCancel, onRemove }: { label: string; initial: number; onSave: (v: number) => void; onCancel?: () => void; onRemove?: () => void }) {
   const { settings } = useSettings();
   const idr = settings.currency === 'IDR';
   const show = (v: number) => (v > 0 ? (idr ? Math.round(v).toLocaleString('id-ID') : String(Math.round(v * 100) / 100)) : '');

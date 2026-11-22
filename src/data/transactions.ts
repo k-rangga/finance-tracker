@@ -147,7 +147,7 @@ export type Bill = {
 export const billKey = (cycleId: string, b: Bill) => `${cycleId}|${b.title.toLowerCase()}|${b.amount}`;
 
 /** Installment payments and subscriptions come from your plans; only bills predicted from last cycle can be dismissed. */
-export const canDismissBill = (b: Bill) => b.source !== 'Installment' && b.source !== 'Subscription';
+export const canDismissBill = (b: Bill) => b.source !== 'Installment' && b.source !== 'Subscription' && b.source !== 'Planned';
 
 /** A row of the `transactions` table, as imported from Gmail. */
 export type TxRow = {

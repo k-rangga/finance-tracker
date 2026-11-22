@@ -14,6 +14,7 @@ import { useData } from './lib/data';
 import { billKey, merchantKey, expectedBills, inCycle, installmentBills, installmentPayments, resolveSubs, toTransaction, withMerchantRules, type Bill } from './data/transactions';
 import { INSTALLMENT_CATEGORY } from './data/categories';
 import { InstallmentsAhead } from './screens/InstallmentsAhead';
+import { cycleKey, matchCosts, nextCycleOf, plannedCostBills } from './lib/cyclePlans';
 import { Summary } from './screens/Summary';
 import { Categories } from './screens/Categories';
 import { Activity, type ActivityFilter } from './screens/Activity';
@@ -98,13 +99,28 @@ export default function App() {
       const last = subCharges.get(id)?.[0];
       return last ? catOf(last) : 'Subscriptions';
     };
+    // One-off costs planned for this cycle, until a matching payment comes in.
+    const costs = settings.cyclePlans?.[cycleKey(cycle)]?.costs ?? [];
+    const spending = transactions.filter(t => t.type === 'expense').map(t => ({ id: t.id, date: t.date, amount: t.amount, cat: recat[t.id] ?? t.category }));
     return [
       ...expectedBills(prevTransactions, prevCycle, transactions, cycle, recat).filter(b => !isSub(b.title) && !settings.dismissedBills.includes(billKey(toISO(cycle.start), b))),
       ...installmentBills(payments, cycle),
       ...subscriptionBills(subscriptions, subStates, cycle, subCat),
+      ...plannedCostBills(costs, cycle, matchCosts(costs, spending)),
     ].sort((x, y) => x.date.getTime() - y.date.getTime());
     // Custom categories change which categories are fixed bills.
-  }, [prevTransactions, prevCycle, transactions, cycle, recat, payments, settings.customCategories, settings.dismissedBills, subscriptions, subStates, subCharges, catOf]);
+  }, [prevTransactions, prevCycle, transactions, cycle, recat, payments, settings.customCategories, settings.dismissedBills, settings.cyclePlans, subscriptions, subStates, subCharges, catOf]);
+  /** What the next cycle already holds: installment payments and subscription charges due in it. */
+  const nextCycle = useMemo(() => nextCycleOf(cycle), [cycle]);
+  const nextKnown = useMemo(() => {
+    const subCat = (id: string) => {
+      const last = subCharges.get(id)?.[0];
+      return last ? catOf(last) : 'Subscriptions';
+    };
+    return { installments: installmentBills(payments, nextCycle), subscriptions: subscriptionBills(subscriptions, subStates, nextCycle, subCat) };
+  }, [payments, nextCycle, subscriptions, subStates, subCharges, catOf]);
+  /** Plan tab: this cycle, or planning the next one (Summary's nudge opens it there). */
+  const [planView, setPlanView] = useState<'this' | 'next'>('this');
   /** "Not a bill this cycle": hides a predicted bill until payday, with a few seconds to undo. */
   const [billUndo, setBillUndo] = useState<{ text: string; run: () => void } | null>(null);
   useEffect(() => {
@@ -343,6 +359,10 @@ export default function App() {
                   setTxFilter({ range, cat, q: '' });
                   setTab('tx');
                 }}
+                onPlanNext={() => {
+                  setPlanView('next');
+                  setTab('plan');
+                }}
               />
             )}
             {tab === 'categories' && (
@@ -350,7 +370,16 @@ export default function App() {
             )}
             {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} onDismissBill={dismissBill} />}
             {tab === 'plan' && (
-              <SavingsPlan cycle={cycle} budget={budget} onOpenInvest={() => setTab('invest')} onShowTransactions={showTransactions}>
+              <SavingsPlan
+                cycle={cycle}
+                budget={budget}
+                onOpenInvest={() => setTab('invest')}
+                onShowTransactions={showTransactions}
+                view={planView}
+                setView={setPlanView}
+                next={nextCycle}
+                nextKnown={nextKnown}
+              >
                 <InstallmentsAhead payments={payments} cycle={cycle} />
                 <Subscriptions budget={budget} states={subStates} txs={all} catOf={catOf} />
               </SavingsPlan>
