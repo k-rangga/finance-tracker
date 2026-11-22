@@ -145,14 +145,18 @@ export function toCategory(c: CustomCategory): Category {
   return { name: c.name, type: c.type, limitPct: c.limitPct, ...hue, icon: IC[c.icon as keyof typeof IC] ?? IC.wallet, custom: true };
 }
 
-/** Your changes to built-in categories, as saved in settings. */
-export type BuiltInOverrides = { limitOverrides?: Record<string, number>; colorOverrides?: Record<string, string> };
+/**
+ * Your changes to built-in categories, as saved in settings. `fixedStart: 'empty'` (accounts made after fixed
+ * bills became opt-in): built-in fixed bills start at 0 until you set them, instead of a guessed share of income.
+ */
+export type BuiltInOverrides = { limitOverrides?: Record<string, number>; colorOverrides?: Record<string, string>; fixedStart?: 'empty' };
 
 /** Called whenever settings load or change (see SettingsProvider). */
-export function applyCategorySettings(custom: CustomCategory[] = [], { limitOverrides = {}, colorOverrides = {} }: BuiltInOverrides = {}) {
+export function applyCategorySettings(custom: CustomCategory[] = [], { limitOverrides = {}, colorOverrides = {}, fixedStart }: BuiltInOverrides = {}) {
   const builtIn = BUILT_IN.map(c => {
     const hue = HUES.find(h => h.color === colorOverrides[c.name]);
-    return { ...c, ...(hue ?? {}), limitPct: limitOverrides[c.name] ?? c.limitPct, defaultLimitPct: c.limitPct };
+    const start = fixedStart === 'empty' && c.type === 'fixed' && !c.auto ? 0 : c.limitPct;
+    return { ...c, ...(hue ?? {}), limitPct: limitOverrides[c.name] ?? start, defaultLimitPct: start };
   });
   // A category you made before it became built in (e.g. your own "Cafe") is now the built-in one.
   CATEGORIES = [...builtIn, ...custom.filter(c => !isBuiltIn(c.name)).map(toCategory)];

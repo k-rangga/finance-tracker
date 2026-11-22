@@ -33,6 +33,12 @@ export type Settings = {
   subcategories: Record<string, string[]>;
   /** Predicted bills you said aren't due this cycle, by `billKey`. Older cycles' keys are dropped. */
   dismissedBills: string[];
+  /** 'empty' for accounts started after fixed bills became opt-in: they begin at 0 until you set them. */
+  fixedStart?: 'empty';
+  /** Fixed bills you ticked off by hand this cycle (paid in cash, say): "cycleStartISO|Category". */
+  paidBills?: string[];
+  /** No-spend challenges: a category with nothing spent for 7 days from `start` (YYYY-MM-DD). */
+  challenges?: { category: string; start: string }[];
   /** Per credit card (account name, e.g. "CC BCA"): the day its statement closes and the day the bill is due. */
   cards: Record<string, CardDates>;
 };
@@ -79,7 +85,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   /** Settings as of the last update, so two updates in one click (a new category, then a merchant rule) both land. */
   const latest = useRef<Settings>(DEFAULT_SETTINGS);
   const settings = useMemo(() => {
-    const merged = { ...DEFAULT_SETTINGS, ...stored };
+    // `fixedStart` is set when the account had no settings yet (see backend load).
+    const merged: Settings = { ...DEFAULT_SETTINGS, ...stored };
     // Before children render, so every screen sees the same category list.
     applyCategorySettings(merged.customCategories, merged);
     setSavingsTarget(merged.savingsPct);

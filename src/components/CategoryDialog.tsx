@@ -24,6 +24,9 @@ import { merchantKey } from '../data/transactions';
 import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
 
+/** A built-in category's starting limit for this account (0 for fixed bills on newer accounts). */
+const startPctOf = (name: string) => categoryByName(name)?.defaultLimitPct ?? builtInCategory(name)?.limitPct ?? 0;
+
 type Props = {
   /** Name of a category to edit (built-in: limit and colour only); omit to create a new one. */
   editing?: string;
@@ -143,7 +146,7 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
       // Only store what differs from the default, so defaults can still change later.
       const limits = { ...settings.limitOverrides, [builtIn.name]: limitPct };
       const colors = { ...settings.colorOverrides, [builtIn.name]: color };
-      if (Math.abs(limitPct - builtIn.limitPct) < 1e-9) delete limits[builtIn.name];
+      if (Math.abs(limitPct - startPctOf(builtIn.name)) < 1e-9) delete limits[builtIn.name];
       if (color === builtIn.color) delete colors[builtIn.name];
       update({
         limitOverrides: limits,
@@ -311,11 +314,11 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
           </div>
           <span style={{ fontSize: 13, fontWeight: 500, color: C.textMuted }}>
             Of your {full(settings.income)} income · adds to your spending budget
-            {builtIn && Math.abs(limitPct - builtIn.limitPct) > 1e-9 && (
+            {builtIn && Math.abs(limitPct - startPctOf(builtIn.name)) > 1e-9 && (
               <>
                 {' · '}
-                <button type="button" className={s.textBtnSm} onClick={() => resetTo(builtIn.limitPct)} style={{ padding: 0 }}>
-                  Reset to {builtIn.limitPct}%
+                <button type="button" className={s.textBtnSm} onClick={() => resetTo(startPctOf(builtIn.name))} style={{ padding: 0 }}>
+                  Reset to {startPctOf(builtIn.name)}%
                 </button>
               </>
             )}

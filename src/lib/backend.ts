@@ -238,7 +238,8 @@ export const backend: Backend = {
     const s = await run<State>('getState', { since: since.toISOString() });
     return {
       email: s.email,
-      settings: { ...DEFAULT_SETTINGS, ...(s.settings ?? {}) },
+      // Nothing saved yet: a new account, whose fixed bills start empty (older accounts keep their amounts).
+      settings: { ...DEFAULT_SETTINGS, ...(s.settings ?? { fixedStart: 'empty' as const }) },
       recat: s.recat,
       links: s.links ?? {},
       shares: s.shares ?? {},

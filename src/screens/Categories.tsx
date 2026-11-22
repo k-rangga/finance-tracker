@@ -1,21 +1,38 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
-import { Badge, IconChip, Pills } from '../components/ui';
+import { Badge, IconChip } from '../components/ui';
+import { Celebrate } from '../components/Delight';
 import { IC, Icon } from '../components/Icon';
 import { categoryStatus, changeBadge, iconChip, type Budget, type CatView, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { dayMonth, pc, sum, tidyName } from '../lib/format';
+import { dayMonth, pc, sum, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
 import { catFilter } from '../data/categories';
 import { useSetLimits } from '../lib/limits';
+import {
+  ChallengeBox,
+  ChallengeChip,
+  challengeState,
+  MoveBudget,
+  SectionHead,
+  startChallenge,
+  StreakChip,
+  streaks,
+  Summary,
+  TopMerchants,
+  useSwipeRight,
+  WeekBars,
+} from './categoriesExtras';
 
 type Mode = 'cycle' | 'week';
 
 type Props = {
   cycle: Cycle;
   budget: Budget;
+  /** Every transaction, for streaks across cycles and no-spend challenges. */
+  allTxs: TxView[];
   open: string | null;
   setOpen: (n: string | null) => void;
   onShowTransactions: (cat: string) => void;
@@ -42,8 +59,8 @@ const makeView = (mode: Mode, wi: number, warnAt: number, txs: TxView[]) => (c: 
 };
 
 
-export function Categories({ cycle, budget, open, setOpen, onShowTransactions, onEditCategory, onNewCategory }: Props) {
-  const { settings, full, short, ofIncome } = useSettings();
+export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransactions, onEditCategory, onNewCategory }: Props) {
+  const { settings, update, full, short, ofIncome } = useSettings();
   const phone = useIsPhone();
   const fit = phone ? short : full;
   const setLimits = useSetLimits();
@@ -69,30 +86,62 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
   const variable = budget.cats.filter(c => c.type === 'variable').map(view).sort(rank);
   const used = variable.filter(r => r.cur > 0 || r.st.key !== 'ok');
   const unused = variable.filter(r => !used.includes(r));
-  const fixed = mode === 'cycle' ? budget.cats.filter(c => c.type === 'fixed').map(view) : [];
+  const fixedAll = mode === 'cycle' ? budget.cats.filter(c => c.type === 'fixed').map(view) : [];
+  /** A fixed bill shows once it has an amount, a payment or a bill coming; the rest wait under "Add a fixed bill". */
+  const isSet = (r: Row) => r.lim > 0 || r.cur > 0 || budget.bills.some(b => b.category === r.c.name);
+  const fixed = fixedAll.filter(isSet);
+  // Installments plan themselves from your plans, so they're never added by hand.
+  const addable = fixedAll.filter(r => !isSet(r) && !r.c.auto);
+  const [adding, setAdding] = useState<string | null>(null);
+  /** A fixed bill's monthly amount, as its limit (% of income); 0 hides it again. */
+  const setAmount = (name: string, amount: number, before: number) => {
+    setLimits({ [name]: settings.income > 0 ? (amount / settings.income) * 100 : 0 });
+    setToast({
+      text: amount > 0 ? `${name}: ${full(amount)} a month` : `${name} removed from fixed bills`,
+      undo: () => setLimits({ [name]: settings.income > 0 ? (before / settings.income) * 100 : 0 }),
+    });
+  };
   const varSpent = sum(variable.map(r => r.cur));
   const varLimit = sum(variable.map(r => r.lim));
 
-  /**
-   * Over its limit (cycle view only): the variable category with the most room left can cover it, moving that
-   * much of its limit across, so the total budget stays the same.
-   */
-  const coverFor = (r: Row) => {
-    if (mode !== 'cycle' || r.c.type !== 'variable' || r.cur <= r.lim) return undefined;
-    const from = variable.filter(x => x !== r && x.lim - x.cur > 0).sort((x, y) => y.lim - y.cur - (x.lim - x.cur))[0];
-    if (!from) return undefined;
-    const amount = Math.min(r.cur - r.lim, from.lim - from.cur);
-    return {
-      from: from.c.name,
-      amount,
-      run: () => {
-        // In % of income, rounded up so the category is covered in full.
-        const pct = Math.ceil((amount / ofIncome(1)) * 100) / 100;
-        setLimits({ [r.c.name]: r.c.limitPct + pct, [from.c.name]: Math.max(0, from.c.limitPct - pct) });
-        setToast({ text: `${from.c.name} → ${r.c.name}: ${short(amount)} of its limit`, undo: () => setLimits({ [r.c.name]: r.c.limitPct, [from.c.name]: from.c.limitPct }) });
-      },
-    };
+  /** Where spending should be by today, as a share of a limit: days gone in the cycle, or in the week. */
+  const todayFrac = mode === 'cycle' ? cycle.dayN / cycle.cycleDays : Math.min(1, (cycle.dayIdx - wi * 7 + 1) / 7);
+  const streakOf = useMemo(
+    () => streaks(allTxs, cycle, Object.fromEntries(budget.cats.filter(c => c.type === 'variable').map(c => [c.name, c.limit]))),
+    [allTxs, cycle, budget.cats],
+  );
+  const challenges = settings.challenges ?? [];
+  const challengeOf = (name: string) => {
+    const ch = challenges.find(x => x.category === name);
+    return ch ? challengeState(ch, allTxs, cycle.today) : null;
   };
+  const setChallenge = (name: string, on: boolean) =>
+    update({ challenges: [...challenges.filter(x => x.category !== name), ...(on ? [startChallenge(name, cycle.today)] : [])] });
+  /** Move part of one variable category's limit to another; the total stays the same. */
+  const move = (from: string, to: string, amount: number) => {
+    const f = budget.cats.find(c => c.name === from)!;
+    const t = budget.cats.find(c => c.name === to)!;
+    // ofIncome(1) is 1% of income, so this is the amount as a % of income.
+    const pct = amount / ofIncome(1);
+    setLimits({ [to]: t.limitPct + pct, [from]: Math.max(0, f.limitPct - pct) });
+    setToast({ text: `${short(amount)} moved from ${from} to ${to}`, undo: () => setLimits({ [to]: t.limitPct, [from]: f.limitPct }) });
+  };
+  const donorsFor = (name: string) =>
+    variable
+      .filter(x => x.c.name !== name && x.lim - x.cur > 0)
+      .map(x => ({ name: x.c.name, room: x.lim - x.cur }))
+      .sort((a, b) => b.room - a.room);
+
+  // Fixed bills you ticked off by hand this cycle.
+  const cycleKey = toISO(cycle.start);
+  const marked = new Set((settings.paidBills ?? []).filter(k => k.startsWith(cycleKey + '|')).map(k => k.slice(cycleKey.length + 1)));
+  const toggleMarked = (name: string) => {
+    const key = cycleKey + '|' + name;
+    // Only this cycle's ticks are kept.
+    const kept = (settings.paidBills ?? []).filter(k => k.startsWith(cycleKey + '|') && k !== key);
+    update({ paidBills: marked.has(name) ? kept : [...kept, key] });
+  };
+  const isPaid = (r: Row) => r.cur > 0 || marked.has(r.c.name);
 
   const toggle = (name: string) => setOpen(open === name ? null : name);
   const row = (r: Row) => (
@@ -103,7 +152,12 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
       cycle={cycle}
       open={open === r.c.name}
       onToggle={() => toggle(r.c.name)}
-      cover={coverFor(r)}
+      todayFrac={todayFrac}
+      streak={streakOf[r.c.name]}
+      challenge={mode === 'cycle' ? challengeOf(r.c.name) : null}
+      onChallenge={on => setChallenge(r.c.name, on)}
+      donors={mode === 'cycle' && r.c.type === 'variable' ? donorsFor(r.c.name) : []}
+      onMove={(from, amount) => move(from, r.c.name, amount)}
       onShowTransactions={onShowTransactions}
       onEditCategory={onEditCategory}
     />
@@ -112,34 +166,59 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
   return (
     <div className={s.splitGrid}>
       <div className={s.splitMain} style={{ gap: 16 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Pills
-            label="Compare"
-            items={[
-              ['cycle', 'Cycle'],
-              ['week', 'Week'],
-            ]}
-            value={mode}
-            onChange={m => {
-              setMode(m);
-              setOpen(null);
-            }}
-          />
-          <button type="button" className={s.btnOutline} onClick={onNewCategory} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <Icon d={IC.plus} size={15} /> New category
-          </button>
-        </div>
+        {(() => {
+          const rows = mode === 'cycle' ? [...variable, ...fixed] : variable;
+          const spent = sum(rows.map(r => r.cur));
+          const limit = sum(rows.map(r => r.lim));
+          const frac = mode === 'cycle' && budget.budget > 0 ? budget.paceToday / budget.budget : todayFrac;
+          const days = cycle.daysLeft + 1;
+          const footnote =
+            mode === 'week'
+              ? spent > limit
+                ? `${short(spent - limit)} over this week's share`
+                : `${short(limit - spent)} left for the rest of this week`
+              : spent > limit
+                ? `${short(spent - limit)} over the plan this cycle`
+                : `${short(budget.safeDay)} a day is safe for the next ${days} ${days === 1 ? 'day' : 'days'}`;
+          return (
+            <Summary
+              spent={spent}
+              limit={limit}
+              todayFrac={frac}
+              period={mode === 'cycle' ? 'this cycle' : `in week ${wi + 1}`}
+              footnote={footnote}
+              switcher={
+                <div className={s.segment} role="group" aria-label="Compare">
+                  {(['cycle', 'week'] as const).map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      aria-pressed={mode === m}
+                      onClick={() => {
+                        setMode(m);
+                        setOpen(null);
+                      }}
+                    >
+                      {m === 'cycle' ? 'Cycle' : 'Week'}
+                    </button>
+                  ))}
+                </div>
+              }
+            />
+          );
+        })()}
 
         <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <h2 className={s.catSection}>
-            {mode === 'cycle' ? 'Variable spending' : `Variable · week ${wi + 1}`} · <span style={{ color: C.text }}>{fit(varSpent)}</span> of {fit(varLimit)}
-            {varLimit > 0 && (
-              <span style={{ color: varSpent > varLimit ? C.redInk : C.textMuted }}>
-                {' '}
-                · {varSpent > varLimit ? `${short(varSpent - varLimit)} over` : `${short(varLimit - varSpent)} left`}
-              </span>
-            )}
-          </h2>
+          <SectionHead
+            title={mode === 'cycle' ? 'Everyday spending' : `Everyday, week ${wi + 1}`}
+            right={
+              varLimit > 0 ? (
+                <span style={{ color: varSpent > varLimit ? C.redInk : C.textMuted }}>
+                  {varSpent > varLimit ? `${fit(varSpent - varLimit)} over` : `${fit(varLimit - varSpent)} left`}
+                </span>
+              ) : undefined
+            }
+          />
           <div className={s.cardFlush} style={{ padding: '4px 0' }}>
             {used.length === 0 && <div style={{ padding: '16px 20px', fontSize: 14, color: C.textMuted }}>Nothing spent yet {mode === 'cycle' ? 'this cycle' : 'this week'}.</div>}
             {used.map(row)}
@@ -152,18 +231,88 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
                 {showUnused && unused.map(row)}
               </>
             )}
+            <button type="button" className={s.catFold} onClick={onNewCategory} style={{ color: C.accent800, fontWeight: 600 }}>
+              <Icon d={IC.plus} size={14} />
+              New category
+            </button>
           </div>
         </section>
 
-        {fixed.length > 0 && (
+        {mode === 'cycle' && (
           <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <h2 className={s.catSection}>
-              Fixed bills · <span style={{ color: C.text }}>{fit(sum(fixed.map(r => r.cur)))}</span> paid of {fit(sum(fixed.map(r => r.lim)))}
-            </h2>
+            <SectionHead
+              title="Fixed bills"
+              right={
+                fixed.length > 0 ? (
+                  fixed.every(isPaid) ? (
+                    <span style={{ color: C.accent800, fontWeight: 600 }}>All paid ✓</span>
+                  ) : (
+                    `${fixed.filter(isPaid).length} of ${fixed.length} paid`
+                  )
+                ) : undefined
+              }
+            />
+            <Celebrate id={'bills-' + cycleKey} when={fixed.length > 0 && fixed.every(isPaid)} />
             <div className={s.cardFlush} style={{ padding: '4px 0' }}>
-              {billOrder(fixed, budget).map(r => (
-                <BillRow key={r.c.name} r={r} budget={budget} cycle={cycle} open={open === r.c.name} onToggle={() => toggle(r.c.name)} onShowTransactions={onShowTransactions} onEditCategory={onEditCategory} />
+              {fixed.length === 0 && (
+                <div style={{ padding: '16px 20px', fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>
+                  No fixed bills yet. Add what you pay every month (rent, electricity, insurance) so your plan sets it aside.
+                </div>
+              )}
+              {billOrder(fixed, budget, isPaid).map(r => (
+                <BillRow
+                  key={r.c.name}
+                  r={r}
+                  budget={budget}
+                  cycle={cycle}
+                  open={open === r.c.name}
+                  onToggle={() => toggle(r.c.name)}
+                  onShowTransactions={onShowTransactions}
+                  onEditCategory={onEditCategory}
+                  onAmount={amount => setAmount(r.c.name, amount, r.lim)}
+                  marked={marked.has(r.c.name)}
+                  onMark={() => toggleMarked(r.c.name)}
+                />
               ))}
+              <button
+                type="button"
+                className={s.catFold}
+                aria-expanded={adding != null}
+                onClick={() => setAdding(adding == null ? '' : null)}
+                style={{ color: C.accent800, fontWeight: 600 }}
+              >
+                <Icon d={IC.plus} size={14} />
+                Add a fixed bill
+              </button>
+              {adding != null && (
+                <div className={s.billAdd}>
+                  <div className={s.tplGrid}>
+                    {addable.map(r => (
+                      <button key={r.c.name} type="button" className={s.tplOpt} aria-pressed={adding === r.c.name} onClick={() => setAdding(r.c.name)}>
+                        <Icon d={r.c.icon} size={14} />
+                        {r.c.name}
+                      </button>
+                    ))}
+                    <button type="button" className={s.tplOpt} onClick={onNewCategory}>
+                      <Icon d={IC.plus} size={14} />
+                      Other…
+                    </button>
+                  </div>
+                  {adding && (
+                    <AmountEditor
+                      key={adding}
+                      label={`${adding} each month`}
+                      initial={0}
+                      onSave={amount => {
+                        setAmount(adding, amount, 0);
+                        setAdding(null);
+                      }}
+                      onCancel={() => setAdding('')}
+                    />
+                  )}
+                  {!adding && <span style={{ fontSize: 13, color: C.textMuted }}>Pick one, or Other… to name your own (choose Fixed bill as its type).</span>}
+                </div>
+              )}
             </div>
           </section>
         )}
@@ -171,7 +320,7 @@ export function Categories({ cycle, budget, open, setOpen, onShowTransactions, o
       </div>
 
       {/* Phones: Summary already has the totals, and the rows above say what's over. */}
-      {!phone && <CategoriesPanel cycle={cycle} budget={budget} mode={mode} rows={[...variable, ...fixed]} onPick={name => setOpen(name)} />}
+      {!phone && <CategoriesPanel cycle={cycle} mode={mode} rows={[...variable, ...fixed]} onPick={name => setOpen(name)} />}
       {toast && (
         <div className={s.toast} role="status">
           <span style={{ marginRight: 'auto', minWidth: 0 }}>{toast.text}</span>
@@ -198,14 +347,19 @@ function ChangeChip({ cur, last }: { cur: number; last: number }) {
   return <span style={{ fontSize: 12, fontWeight: 600, color: ch.ink, whiteSpace: 'nowrap' }}>{ch.label}</span>;
 }
 
-/** One line per category: name, amount of limit and the share used; the bar underneath (on phones). */
+/** One line per category: name, how much of its limit, and a bar with where you should be by today. */
 function CategoryRow({
   r,
   mode,
   cycle,
   open,
   onToggle,
-  cover,
+  todayFrac,
+  streak,
+  challenge,
+  onChallenge,
+  donors,
+  onMove,
   onShowTransactions,
   onEditCategory,
 }: {
@@ -214,7 +368,12 @@ function CategoryRow({
   cycle: Cycle;
   open: boolean;
   onToggle: () => void;
-  cover?: { from: string; amount: number; run: () => void };
+  todayFrac: number;
+  streak?: number;
+  challenge: ReturnType<typeof challengeState> | null;
+  onChallenge: (on: boolean) => void;
+  donors: { name: string; room: number }[];
+  onMove: (from: string, amount: number) => void;
   onShowTransactions: (cat: string) => void;
   onEditCategory: (name: string) => void;
 }) {
@@ -222,8 +381,11 @@ function CategoryRow({
   const phone = useIsPhone();
   // Phones: "1.0M / 300K", so the name keeps its room.
   const fit = (v: number) => (phone ? short(v).replace(/^Rp\s?/, '') : full(v));
-  const { c, cur, last, lim, used, st, scale, mine } = r;
+  const { c, cur, last, lim, scale, mine } = r;
   const toSort = c.name === UNSORTED ? mine.length : 0;
+  const expected = lim * todayFrac;
+  // One quiet colour while on pace; amber when running ahead of today's mark, red past the limit.
+  const bar = lim > 0 && cur > lim ? C.red : expected > 0 && cur > expected * 1.1 ? C.amber : C.accent500;
   return (
     <div id={'cat-' + c.name}>
       <button type="button" className={s.catRow} aria-expanded={open} onClick={onToggle}>
@@ -234,21 +396,21 @@ function CategoryRow({
           <span className={s.ellipsis} style={{ fontSize: 14, fontWeight: 500 }}>
             {c.name}
           </span>
-          <ChangeChip cur={cur} last={last} />
+          {/* Phones: the change against last time is in the opened row, so the name keeps its room. */}
+          {!phone && <ChangeChip cur={cur} last={last} />}
+          {cur <= lim && <StreakChip n={streak} />}
+          {challenge && <ChallengeChip text={challenge.text} kind={challenge.key} />}
         </span>
         <span className={s.catBar} title={last > 0 ? `Last ${mode === 'cycle' ? 'cycle by now' : 'week'}: ${full(last)}` : undefined}>
           <span className={s.track} style={{ display: 'block', height: 6 }}>
-            <span className={s.fill} style={{ width: pc((cur / scale) * 100), background: st.bar }} />
+            <span className={s.fill} style={{ width: pc((cur / scale) * 100), background: bar }} />
             {/* The limit only needs marking once you're past it. */}
             {cur > lim && <span className={s.tick} style={{ left: pc((lim / scale) * 100) }} />}
-            {last > 0 && <span className={s.lastMark} style={{ left: pc((Math.min(last, scale) / scale) * 100) }} />}
+            {lim > 0 && todayFrac > 0 && todayFrac < 1 && cur <= lim && <span className={s.todayMark} style={{ left: pc((expected / scale) * 100) }} />}
           </span>
         </span>
         <span className={s.catAmount}>
           <span style={{ fontWeight: 600, color: C.text }}>{fit(cur)}</span> / {fit(lim)}
-        </span>
-        <span className={s.catPct} style={{ color: st.ink }}>
-          {lim ? Math.round(used) + '%' : '—'}
         </span>
         <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ gridArea: 'chev', transform: open ? 'rotate(180deg)' : 'none' }} />
       </button>
@@ -257,19 +419,24 @@ function CategoryRow({
           {toSort} {toSort === 1 ? 'transaction' : 'transactions'} to sort <Icon d={IC.arrowRight} size={13} />
         </button>
       )}
-      {open && <CategoryDetail r={r} mode={mode} cycle={cycle} cover={cover} toSort={toSort} onShowTransactions={onShowTransactions} onEditCategory={onEditCategory} />}
+      {open && (
+        <CategoryDetail r={r} mode={mode} cycle={cycle} toSort={toSort} onShowTransactions={onShowTransactions} onEditCategory={onEditCategory}>
+          {donors.length > 0 && <MoveBudget name={c.name} need={Math.max(0, cur - lim)} donors={donors} onMove={onMove} />}
+          {mode === 'cycle' && c.type === 'variable' && <ChallengeBox name={c.name} state={challenge} onStart={() => onChallenge(true)} onClear={() => onChallenge(false)} />}
+        </CategoryDetail>
+      )}
     </div>
   );
 }
 
 /** Fixed bills sorted for a checklist: due soonest first, then not seen yet, then paid. */
-function billOrder(rows: Row[], b: Budget) {
+function billOrder(rows: Row[], b: Budget, isPaid: (r: Row) => boolean) {
   const due = (r: Row) => b.bills.filter(x => x.category === r.c.name).sort((x, y) => x.date.getTime() - y.date.getTime())[0];
-  const key = (r: Row) => (r.cur > 0 ? 2 : due(r) ? 0 : 1);
+  const key = (r: Row) => (isPaid(r) ? 2 : due(r) ? 0 : 1);
   return [...rows].sort((x, y) => key(x) - key(y) || (due(x)?.date.getTime() ?? 0) - (due(y)?.date.getTime() ?? 0) || x.c.name.localeCompare(y.c.name));
 }
 
-/** A fixed bill: paid (✓), due on a date (from last cycle's charge), or not paid yet. */
+/** A fixed bill: paid (✓, from a payment or ticked by hand), due on a date (from last cycle's charge), or not paid yet. */
 function BillRow({
   r,
   budget: b,
@@ -278,6 +445,9 @@ function BillRow({
   onToggle,
   onShowTransactions,
   onEditCategory,
+  onAmount,
+  marked,
+  onMark,
 }: {
   r: Row;
   budget: Budget;
@@ -286,6 +456,11 @@ function BillRow({
   onToggle: () => void;
   onShowTransactions: (cat: string) => void;
   onEditCategory: (name: string) => void;
+  /** Set the monthly amount (0 removes it from fixed bills). */
+  onAmount: (amount: number) => void;
+  /** Ticked off by hand this cycle. */
+  marked: boolean;
+  onMark: () => void;
 }) {
   const { full, short } = useSettings();
   const phone = useIsPhone();
@@ -294,16 +469,35 @@ function BillRow({
   const due = b.bills.filter(x => x.category === c.name).sort((x, y) => x.date.getTime() - y.date.getTime());
   const dueTotal = sum(due.map(x => x.amount));
   const inDays = due[0] ? cycle.offsetOf(due[0].date) - cycle.dayIdx : 0;
-  const state = cur > 0 ? 'paid' : due.length ? 'due' : 'none';
+  const state = cur > 0 || marked ? 'paid' : due.length ? 'due' : 'none';
+  // Swipe right on a phone to tick it off (or untick one you ticked); a payment ticks it by itself.
+  const canMark = cur === 0 && !c.auto;
+  const swipe = useSwipeRight(() => canMark && onMark());
   const line =
     state === 'paid'
-      ? `Paid of ${fit(lim)}` + (due.length ? ` · ${fit(dueTotal)} still due` : '')
+      ? cur > 0
+        ? `Paid of ${fit(lim)}` + (due.length ? ` · ${fit(dueTotal)} still due` : '')
+        : 'Ticked off by you'
       : state === 'due'
-        ? `Due ${dayMonth(due[0].date)} · ${inDays <= 0 ? 'today' : inDays === 1 ? 'tomorrow' : `in ${inDays} days`}`
-        : 'Not paid yet';
+        ? `Due ${dayMonth(due[0].date)}, ${inDays <= 0 ? 'today' : inDays === 1 ? 'tomorrow' : `in ${inDays} days`}`
+        : phone && canMark
+          ? 'Not paid yet · swipe to tick off'
+          : 'Not paid yet';
   return (
-    <div id={'cat-' + c.name}>
-      <button type="button" className={s.billRow} aria-expanded={open} onClick={onToggle}>
+    <div id={'cat-' + c.name} className={s.billWrap}>
+      {swipe.swiping && (
+        <span className={s.billSwipeHint} aria-hidden="true">
+          {marked ? 'Untick' : 'Paid ✓'}
+        </span>
+      )}
+      <button
+        type="button"
+        className={s.billRow}
+        aria-expanded={open}
+        onClick={() => !swipe.swiping && onToggle()}
+        {...swipe.handlers}
+        style={swipe.dx ? { transform: `translateX(${swipe.dx}px)` } : undefined}
+      >
         <span className={s.billMark} data-state={state} aria-hidden="true">
           <Icon d={state === 'paid' ? 'M20 6 9 17l-5-5' : IC.calendar} size={15} strokeWidth={state === 'paid' ? 3 : 2} />
         </span>
@@ -312,36 +506,91 @@ function BillRow({
           <span style={{ fontSize: 13, whiteSpace: 'nowrap', color: state === 'paid' && cur > lim ? C.redInk : state === 'due' && inDays <= 3 ? C.amberInk : C.textMuted }}>{line}</span>
         </span>
         <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', color: state === 'none' ? C.textMuted : C.text }}>
-          {state === 'paid' ? fit(cur) : state === 'due' ? fit(dueTotal) : fit(lim)}
+          {state === 'paid' ? fit(cur || lim) : state === 'due' ? fit(dueTotal) : fit(lim)}
         </span>
         <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ flex: 'none', transform: open ? 'rotate(180deg)' : 'none' }} />
       </button>
+      {open && !c.auto && (
+        <div className={s.billAdd} style={{ borderTop: 'none', paddingTop: 0 }}>
+          <AmountEditor label="Each month" initial={lim} onSave={onAmount} onRemove={() => onAmount(0)} />
+          {canMark && (
+            <button type="button" className={s.btnOutlineSm} style={{ alignSelf: 'flex-start' }} onClick={onMark}>
+              {marked ? 'Mark as not paid' : '✓ Mark as paid'}
+            </button>
+          )}
+        </div>
+      )}
       {open && <CategoryDetail r={r} mode="cycle" cycle={cycle} toSort={0} onShowTransactions={onShowTransactions} onEditCategory={onEditCategory} />}
     </div>
   );
 }
 
-/** Opened row: what the money went on, against last time, and what you can do about it. */
+/** A monthly amount typed in rupiah (or dollars), saved as the bill's plan. */
+function AmountEditor({ label, initial, onSave, onCancel, onRemove }: { label: string; initial: number; onSave: (v: number) => void; onCancel?: () => void; onRemove?: () => void }) {
+  const { settings } = useSettings();
+  const idr = settings.currency === 'IDR';
+  const show = (v: number) => (v > 0 ? (idr ? Math.round(v).toLocaleString('id-ID') : String(Math.round(v * 100) / 100)) : '');
+  const [text, setText] = useState(show(initial));
+  const value = idr ? Number(text.replace(/\D/g, '')) : Number(text.replace(/[^\d.]/g, ''));
+  const changed = value > 0 && Math.abs(value - initial) >= (idr ? 1 : 0.01);
+  return (
+    <form
+      className={s.amountEdit}
+      onSubmit={e => {
+        e.preventDefault();
+        if (changed) onSave(value);
+      }}
+    >
+      <label className={s.field} style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ fontWeight: 500 }}>{label}</span>
+        <input
+          className={s.input}
+          inputMode="decimal"
+          autoFocus
+          value={text}
+          placeholder={idr ? 'e.g. 4.200.000' : 'e.g. 1200'}
+          onChange={e => setText(idr ? (Number(e.target.value.replace(/\D/g, '')) || '').toLocaleString('id-ID') : e.target.value)}
+          aria-label={label}
+        />
+      </label>
+      <button type="submit" className={s.btnPrimary} disabled={!changed}>
+        Save
+      </button>
+      {onCancel && (
+        <button type="button" className={s.btnGhost} onClick={onCancel}>
+          Cancel
+        </button>
+      )}
+      {onRemove && initial > 0 && (
+        <button type="button" className={s.btnGhost} onClick={onRemove} style={{ color: C.redInk }}>
+          Remove
+        </button>
+      )}
+    </form>
+  );
+}
+
+/** Opened row: the last 7 days, where the money went, against last time, and what you can do about it. */
 function CategoryDetail({
   r,
   mode,
   cycle,
-  cover,
   toSort,
   onShowTransactions,
   onEditCategory,
+  children,
 }: {
   r: Row;
   mode: Mode;
   cycle: Cycle;
-  cover?: { from: string; amount: number; run: () => void };
   toSort: number;
   onShowTransactions: (cat: string) => void;
   onEditCategory: (name: string) => void;
+  /** Extra actions (moving budget, a challenge). */
+  children?: ReactNode;
 }) {
   const { full, short, settings } = useSettings();
   const { c, cur, last, mine } = r;
-  const top = [...mine].sort((x, y) => y.net - x.net).slice(0, 3);
   // What it went on inside the category, biggest first; untagged spending is "Other".
   const subNames = settings.subcategories[c.name] ?? [];
   const bySub = subNames.length
@@ -352,6 +601,7 @@ function CategoryDetail({
     : [];
   return (
     <div className={`fade-in ${s.catDetail}`}>
+      {c.type === 'variable' && mine.length > 0 && <WeekBars mine={mine} today={cycle.today} color={c.color} />}
       {bySub.length > 0 && cur > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span className={s.statLabel}>By sub-category</span>
@@ -371,35 +621,19 @@ function CategoryDetail({
           ))}
         </div>
       )}
-      {top.length === 0 ? (
+      {mine.length === 0 ? (
         <span style={{ fontSize: 13, color: C.textMuted }}>Nothing spent here {mode === 'cycle' ? 'this cycle' : 'this week'}.</span>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span className={s.statLabel} style={{ paddingBottom: 4 }}>
-            {mine.length > top.length ? `Biggest ${top.length} of ${mine.length}` : 'Spent on'}
-          </span>
-          {top.map(t => (
-            <div key={t.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '5px 0', fontSize: 14 }}>
-              <span className={s.ellipsis} style={{ minWidth: 0, marginRight: 'auto' }}>
-                {tidyName(t.title)}
-              </span>
-              <span style={{ fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>{dayMonth(t.date)}</span>
-              <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{full(t.net)}</span>
-            </div>
-          ))}
-        </div>
+        <TopMerchants mine={mine} />
       )}
       {last > 0 && (
         <span style={{ fontSize: 13, color: C.textMuted }}>
-          {mode === 'cycle' ? `Last cycle by day ${cycle.dayN}` : 'Last week'}: {full(last)} · <span style={{ color: changeBadge(cur, last).ink, fontWeight: 600 }}>{changeBadge(cur, last).label}</span>
+          {mode === 'cycle' ? `Last cycle by day ${cycle.dayN}` : 'Last week'}: {full(last)}{' '}
+          <span style={{ color: changeBadge(cur, last).ink, fontWeight: 600 }}>({changeBadge(cur, last).label})</span>
         </span>
       )}
+      {children && <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>{children}</div>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {cover && (
-          <button type="button" className={s.btnPrimarySm} onClick={cover.run} title={`Move ${full(cover.amount)} of ${cover.from}'s limit to ${c.name}`}>
-            Cover {short(cover.amount)} from {cover.from}
-          </button>
-        )}
         <button type="button" className={s.btnOutlineSm} onClick={() => onShowTransactions(c.name)}>
           {toSort > 0 ? `Sort ${toSort} ${toSort === 1 ? 'transaction' : 'transactions'}` : 'Transactions'}
         </button>
@@ -411,12 +645,9 @@ function CategoryDetail({
   );
 }
 
-/** Side panel (wide screens): budget used, what needs watching, and the biggest changes against last time. */
-function CategoriesPanel({ cycle, budget: b, mode, rows, onPick }: { cycle: Cycle; budget: Budget; mode: Mode; rows: Row[]; onPick: (name: string) => void }) {
-  const { full, short } = useSettings();
-  const spent = sum(rows.map(r => r.cur));
-  const limit = sum(rows.map(r => r.lim));
-  const pct = limit ? Math.round((spent / limit) * 100) : 0;
+/** Side panel (wide screens): what needs watching, and the biggest changes against last time. */
+function CategoriesPanel({ cycle, mode, rows, onPick }: { cycle: Cycle; mode: Mode; rows: Row[]; onPick: (name: string) => void }) {
+  const { short } = useSettings();
   const watch = rows.filter(r => r.st.key !== 'ok').sort((x, y) => x.st.rank - y.st.rank || y.used - x.used);
   const changes = rows
     .filter(r => r.c.type === 'variable' && r.last > 0 && Math.abs(r.cur - r.last) > 0)
@@ -424,21 +655,6 @@ function CategoriesPanel({ cycle, budget: b, mode, rows, onPick }: { cycle: Cycl
     .slice(0, 3);
   return (
     <aside className={s.splitSide} aria-label="Categories at a glance">
-      <section className={s.sideCard}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <h3 className={s.sideTitle}>Budget used</h3>
-          <span style={{ fontSize: 13, color: C.textMuted }}>{mode === 'cycle' ? `Day ${cycle.dayN} of ${cycle.cycleDays}` : `Week ${cycle.weekIdx + 1}, variable only`}</span>
-        </div>
-        <span style={{ fontSize: 22, fontWeight: 600 }}>
-          {full(spent)} <span style={{ fontSize: 14, fontWeight: 400, color: C.textMuted }}>of {full(limit)}</span>
-        </span>
-        <span className={s.recapTrack} style={{ height: 6 }}>
-          <span style={{ width: pc(pct), background: spent > limit ? C.red : C.accent500 }} />
-        </span>
-        <span style={{ fontSize: 13, color: C.textMuted }}>
-          {pct}% used{mode === 'cycle' && b.paceToday ? ` · pace says ${Math.round((b.paceToday / b.budget) * 100)}% by today` : ''}
-        </span>
-      </section>
       <section className={s.sideCard}>
         <h3 className={s.sideTitle}>Watch list</h3>
         {watch.length === 0 ? (
