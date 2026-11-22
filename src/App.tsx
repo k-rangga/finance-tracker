@@ -11,9 +11,11 @@ import { computeBudget, txViews } from './lib/budget';
 import { addDays, dayLabel, dayMonth, startOfToday, tidyName, toISO } from './lib/format';
 import { useSettings } from './lib/settings';
 import { useData } from './lib/data';
-import { billKey, merchantKey, expectedBills, inCycle, installmentBills, installmentPayments, resolveSubs, toTransaction, withMerchantRules, type Bill } from './data/transactions';
-import { INSTALLMENT_CATEGORY } from './data/categories';
+import { billKey, merchantKey, expectedBills, inCycle, installmentPayments, resolveSubs, toTransaction, withMerchantRules, type Bill } from './data/transactions';
+import { CATEGORIES, INSTALLMENT_CATEGORY, INSTALLMENTS_CATEGORY, SAVINGS_CATEGORY } from './data/categories';
 import { InstallmentsAhead } from './screens/InstallmentsAhead';
+import { PlansProvider, ScheduleModal } from './components/Plans';
+import { detectInstallments, matchTracked, planBills, planViews, trackFound, withTrackedPlans } from './lib/installments';
 import { cycleKey, matchCosts, nextCycleOf, plannedCostBills } from './lib/cyclePlans';
 import { Summary } from './screens/Summary';
 import { Categories } from './screens/Categories';
@@ -73,7 +75,11 @@ export default function App() {
   /** Your fixes by hand, plus your merchant rules for every other transaction of those merchants. */
   // Categories are in the deps: a rule naming a category you just made starts to apply.
   const fixedAndRules = useMemo(() => withMerchantRules(imported, fixed, rules), [imported, fixed, rules, settings.customCategories]);
-  const kept = useMemo(() => imported.filter(t => !removedIds.has(t.id)), [imported, removedIds]);
+  const keptRaw = useMemo(() => imported.filter(t => !removedIds.has(t.id)), [imported, removedIds]);
+  /** Installments the bank bills monthly that you confirmed: their charges become payments of the plan. */
+  const tracked = useMemo(() => settings.trackedInstallments ?? [], [settings.trackedInstallments]);
+  const matched = useMemo(() => matchTracked(keptRaw, tracked), [keptRaw, tracked]);
+  const kept = useMemo(() => withTrackedPlans(keptRaw, tracked, matched), [keptRaw, tracked, matched]);
   /** Installment purchases become monthly payments, each on its due date, in the purchase's category. */
   const payments = useMemo(() => installmentPayments(kept, installments, t => fixedAndRules[t.id] ?? t.category), [kept, installments, fixedAndRules]);
   /** What every screen counts: imported transactions you kept, plus installment payments. */
@@ -82,8 +88,11 @@ export default function App() {
   const recat = useMemo(() => {
     const out = { ...fixedAndRules };
     for (const id of Object.keys(installments)) out[id] = INSTALLMENT_CATEGORY;
+    for (const list of matched.values()) for (const t of list) out[t.id] = INSTALLMENTS_CATEGORY;
     return out;
-  }, [fixedAndRules, installments]);
+  }, [fixedAndRules, installments, matched]);
+  /** Every installment plan's payments: the one schedule Fixed bills, Next cycle, transactions and card bills read. */
+  const plans = useMemo(() => planViews(payments, keptRaw, tracked, matched, today), [payments, keptRaw, tracked, matched, today]);
   /** Sub-categories: yours, else your rules', else a guess from the merchant name. */
   const subs = useMemo(() => resolveSubs(all, t => recat[t.id] ?? t.category, picked, ruleSubs, settings.subcategories), [all, recat, picked, ruleSubs, settings.subcategories]);
   const transactions = useMemo(() => inCycle(all, cycle), [all, cycle]);
@@ -105,12 +114,12 @@ export default function App() {
     const spending = transactions.filter(t => t.type === 'expense').map(t => ({ id: t.id, date: t.date, amount: t.amount, cat: recat[t.id] ?? t.category }));
     return [
       ...expectedBills(prevTransactions, prevCycle, transactions, cycle, recat).filter(b => !isSub(b.title) && !settings.dismissedBills.includes(billKey(toISO(cycle.start), b))),
-      ...installmentBills(payments, cycle),
+      ...planBills(plans, cycle),
       ...subscriptionBills(subscriptions, subStates, cycle, subCat),
       ...plannedCostBills(costs, cycle, matchCosts(costs, spending)),
     ].sort((x, y) => x.date.getTime() - y.date.getTime());
     // Custom categories change which categories are fixed bills.
-  }, [prevTransactions, prevCycle, transactions, cycle, recat, payments, settings.customCategories, settings.dismissedBills, settings.cyclePlans, subscriptions, subStates, subCharges, catOf]);
+  }, [prevTransactions, prevCycle, transactions, cycle, recat, plans, settings.customCategories, settings.dismissedBills, settings.cyclePlans, subscriptions, subStates, subCharges, catOf]);
   /** What the next cycle already holds: installment payments and subscription charges due in it. */
   const nextCycle = useMemo(() => nextCycleOf(cycle), [cycle]);
   const nextKnown = useMemo(() => {
@@ -118,8 +127,43 @@ export default function App() {
       const last = subCharges.get(id)?.[0];
       return last ? catOf(last) : 'Subscriptions';
     };
-    return { installments: installmentBills(payments, nextCycle), subscriptions: subscriptionBills(subscriptions, subStates, nextCycle, subCat) };
-  }, [payments, nextCycle, subscriptions, subStates, subCharges, catOf]);
+    return { installments: planBills(plans, nextCycle), subscriptions: subscriptionBills(subscriptions, subStates, nextCycle, subCat) };
+  }, [plans, nextCycle, subscriptions, subStates, subCharges, catOf]);
+  /** Charges that look like installments, for you to confirm (bills you set and subscriptions are left out). */
+  const foundPlans = useMemo(
+    () =>
+      detectInstallments(keptRaw, {
+        catOf: t => recat[t.id] ?? t.category,
+        skipCats: [...CATEGORIES.filter(c => c.type === 'fixed' && c.name !== INSTALLMENTS_CATEGORY).map(c => c.name), INSTALLMENT_CATEGORY, SAVINGS_CATEGORY],
+        subMerchants: Object.values(subscriptions).map(x => merchantKey(x.merchant)).filter(Boolean),
+        tracked,
+        notInstallments: settings.notInstallments ?? [],
+        minAmount: settings.currency === 'USD' ? 20 : 100_000,
+      }),
+    [keptRaw, recat, subscriptions, tracked, settings.notInstallments, settings.currency],
+  );
+  /** The plan whose full schedule is open. */
+  const [scheduleKey, setScheduleKey] = useState<string | null>(null);
+  const plansCtx = useMemo(
+    () => ({
+      views: plans,
+      today,
+      found: foundPlans,
+      confirm: (f: (typeof foundPlans)[number], payment: number, months: number) =>
+        update({ trackedInstallments: [...(settings.trackedInstallments ?? []), trackFound(f, payment, months)] }),
+      dismiss: (key: string) => update({ notInstallments: [...(settings.notInstallments ?? []), key] }),
+      untrack: (key: string) => {
+        const x = (settings.trackedInstallments ?? []).find(t => 'tracked:' + t.id === key);
+        if (!x) return;
+        update({
+          trackedInstallments: (settings.trackedInstallments ?? []).filter(t => t !== x),
+          notInstallments: [...(settings.notInstallments ?? []), `${x.account}|${x.merchant}`],
+        });
+      },
+      openSchedule: setScheduleKey,
+    }),
+    [plans, today, foundPlans, settings.trackedInstallments, settings.notInstallments, update],
+  );
   /** Plan tab: this cycle, or planning the next one (Summary's nudge opens it there). */
   const [planView, setPlanView] = useState<'this' | 'next'>('this');
   /** "Not a bill this cycle": hides a predicted bill until payday, with a few seconds to undo. */
@@ -214,6 +258,7 @@ export default function App() {
   const nextNote = cycle.next.getDate() !== 25 ? ` (25th is ${raw25.toLocaleDateString('en-GB', { weekday: 'long' })})` : '';
 
   return (
+    <PlansProvider value={plansCtx}>
     <div className={`${s.shell} ${collapsed ? s.collapsed : ''}`}>
       <aside className={s.sideFull} aria-label="Main navigation">
         <div className={s.brandRow}>
@@ -381,7 +426,7 @@ export default function App() {
                 next={nextCycle}
                 nextKnown={nextKnown}
               >
-                <InstallmentsAhead payments={payments} cycle={cycle} />
+                <InstallmentsAhead cycle={cycle} />
                 <Subscriptions budget={budget} states={subStates} txs={all} catOf={catOf} />
               </SavingsPlan>
             )}
@@ -419,6 +464,8 @@ export default function App() {
         />
       )}
       {catDialog && <CategoryDialog editing={catDialog.editing} onClose={() => setCatDialog(null)} />}
+      {scheduleKey && <ScheduleModal planKey={scheduleKey} onClose={() => setScheduleKey(null)} />}
     </div>
+    </PlansProvider>
   );
 }

@@ -94,7 +94,7 @@ const CH = 120;
  * your pace so far plus the bills still to come, and your plan as a flat line.
  */
 function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
-  const { compact: short, full } = useSettings();
+  const { short, full } = useSettings();
   const [hover, setHover] = useState<number | null>(null);
   const left = b.budget - b.spent - b.fixedDue;
   const shownLeft = useCountUp(Math.abs(left));
@@ -171,10 +171,11 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
 
 /** Three StatTiles (Maxie): a label, one number, and a note that says what it means. */
 function Tiles({ cycle, budget: b, onSavings }: { cycle: Cycle; budget: Budget; onSavings: () => void }) {
-  const { compact: short } = useSettings();
+  const { short } = useSettings();
   const bills = b.bills.filter(x => x.date > cycle.today);
   const billTotal = sum(bills.map(x => x.amount));
   const owed = sum(b.cards.map(c => Math.max(0, c.owed)));
+  const cardInstallments = sum(b.cards.map(c => c.installments));
   const savedShare = SAVINGS_TARGET_PCT > 0 ? Math.min(1, b.savedPct / SAVINGS_TARGET_PCT) : 0;
   return (
     <div className={s.sxTiles}>
@@ -200,14 +201,14 @@ function Tiles({ cycle, budget: b, onSavings }: { cycle: Cycle; budget: Budget; 
           <Icon d={IC.card} size={16} /> Card bill
         </span>
         <span className={s.sxTileValue}>{short(owed)}</span>
-        <span className={s.sxTileNote}>{owed > 0 ? 'Owed on your cards' : 'Nothing owed'}</span>
+        <span className={s.sxTileNote}>{owed > 0 ? (cardInstallments > 0 ? `Includes ${short(cardInstallments)} installments` : 'Owed on your cards') : 'Nothing owed'}</span>
       </div>
     </div>
   );
 }
 
 function DailyBars({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
-  const { compact: short, full } = useSettings();
+  const { short, full } = useSettings();
   const phone = useIsPhone();
   const [hover, setHover] = useState<number | null>(null);
   const days = cycle.cycleDays;
@@ -311,38 +312,29 @@ function squarify(items: Omit<Cell, 'x' | 'y' | 'w' | 'h'>[], W: number, H: numb
   return out;
 }
 
-/** How big a box's label can be: big boxes get a big name and share, small ones a small label or none. */
-function labelSize(w: number, h: number, name: string) {
-  for (const [nameSize, pctSize] of [
-    [20, 26],
-    [15, 18],
-    [12, 13],
-  ] as const) {
-    const fits = name.length * nameSize * 0.58 + 24 <= w && nameSize + pctSize + 26 <= h;
-    if (fits) return { nameSize, pctSize };
-  }
-  return null;
-}
+/** Whether a box has room for its label (name and share, one size everywhere); small boxes go in the legend. */
+const labelFits = (w: number, h: number, name: string) => name.length * 7.6 + 24 <= w && h >= 46;
 
 /**
  * Where it went, as a treemap: boxes sized by spending, split by thin gaps, each with its name and share when it
  * fits. Small boxes are named in the legend under it. Tap a box to open the category.
  */
 function WhereMap({ budget: b, onOpenCategory }: { budget: Budget; onOpenCategory: (name: string) => void }) {
-  const { compact: short, full } = useSettings();
+  const { short, full } = useSettings();
   const phone = useIsPhone();
   const [box, setBox] = useState<HTMLDivElement | null>(null);
   const W = useWidth(box);
   const H = phone ? 240 : 300;
   const cats = b.cats.filter(c => c.spent > 0).sort((x, y) => y.spent - x.spent);
   const total = sum(cats.map(c => c.spent));
-  // Eight categories at most, then the rest together as Other, shown last.
+  // Eight categories at most, then the rest together as Other.
   const main = cats.slice(0, 8);
   const rest = sum(cats.slice(8).map(c => c.spent));
+  // Biggest first, Other too, so the boxes read largest to smallest.
   const items = [
     ...main.map(c => ({ name: c.name, value: c.spent, color: c.color, on: onColor(c.color) })),
     ...(rest > 0 ? [{ name: 'Other', value: rest, color: 'var(--category-other)', on: 'var(--on-category-other)' }] : []),
-  ];
+  ].sort((x, y) => y.value - x.value);
   const cells = W ? squarify(items, W, H) : [];
   const pct = (v: number) => {
     const x = (v / total) * 100;
@@ -353,7 +345,7 @@ function WhereMap({ budget: b, onOpenCategory }: { budget: Budget; onOpenCategor
     const L = Math.round(c.x), T = Math.round(c.y), R = Math.round(c.x + c.w), B = Math.round(c.y + c.h);
     const x = L + (L > 0 ? 1 : 0), y = T + (T > 0 ? 1 : 0);
     const w = R - (R < W ? 1 : 0) - x, h = B - (B < H ? 1 : 0) - y;
-    return { ...c, x, y, w, h, label: labelSize(w, h, c.name) };
+    return { ...c, x, y, w, h, label: labelFits(w, h, c.name) };
   });
   const unlabelled = laid.filter(c => !c.label);
   return (
@@ -376,12 +368,8 @@ function WhereMap({ budget: b, onOpenCategory }: { budget: Budget; onOpenCategor
               >
                 {c.label && (
                   <>
-                    <span className={s.sxTmName} style={{ fontSize: c.label.nameSize, lineHeight: 1.2 }}>
-                      {c.name}
-                    </span>
-                    <span className={s.sxTmPct} style={{ fontSize: c.label.pctSize, lineHeight: 1.15 }}>
-                      {pct(c.value)}
-                    </span>
+                    <span className={s.sxTmName}>{c.name}</span>
+                    <span className={s.sxTmPct}>{pct(c.value)}</span>
                   </>
                 )}
               </button>
@@ -417,7 +405,7 @@ function useWidth(el: HTMLElement | null) {
 // ---- bills to come ----
 
 function BillsTimeline({ cycle, budget: b, onDismissBill }: { cycle: Cycle; budget: Budget; onDismissBill: (b: Bill) => void }) {
-  const { compact: short, full } = useSettings();
+  const { short, full } = useSettings();
   const bills = b.bills.filter(x => x.date > cycle.today);
   const [picked, setPicked] = useState(0);
   const from = cycle.today.getTime();

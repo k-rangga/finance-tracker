@@ -88,46 +88,6 @@ export function installmentPayments(purchases: Transaction[], plans: Record<stri
   });
 }
 
-/** Installment payments due later this cycle, as bills (price and interest together), so they're planned for. */
-export function installmentBills(payments: Transaction[], cycle: Cycle): Bill[] {
-  const due = new Map<string, Bill>();
-  for (const t of payments) {
-    if (!t.plan || t.date <= cycle.today || t.date > cycle.end) continue;
-    const key = `${t.plan.of}~${t.plan.month}`;
-    const b = due.get(key);
-    if (b) b.amount += t.amount;
-    else due.set(key, { date: t.date, title: t.title.replace(/ interest$/, ''), category: t.category, amount: t.amount, source: 'Installment' });
-  }
-  // What's left on each plan after the payment.
-  return [...due.entries()].map(([key, b]) => {
-    const [of, month] = [key.slice(0, key.lastIndexOf('~')), Number(key.slice(key.lastIndexOf('~') + 1))];
-    const left = payments.filter(t => t.plan?.of === of && t.plan.month > month).reduce((a, t) => a + t.amount, 0);
-    return { ...b, left };
-  });
-}
-
-/** One installment plan's place in the future: what it costs in each pay cycle from `from`, and when it ends. */
-export type PlanAhead = { of: string; title: string; account: string; perCycle: number[]; last: Date; left: number };
-
-/** For the next `n` cycles (starting with `cycles[0]`), how much each installment plan bills in each. */
-export function installmentsAhead(payments: Transaction[], cycles: { start: Date; end: Date }[], today: Date): PlanAhead[] {
-  const by = new Map<string, Transaction[]>();
-  for (const t of payments) if (t.plan) by.set(t.plan.of, [...(by.get(t.plan.of) ?? []), t]);
-  return [...by.entries()]
-    .map(([of, list]) => {
-      const last = list.reduce((a, t) => (t.date > a ? t.date : a), list[0].date);
-      return {
-        of,
-        title: list[0].title.replace(/ \(\d+\/\d+\)( interest)?$/, ''),
-        account: list[0].account,
-        perCycle: cycles.map(c => list.filter(t => t.date >= c.start && t.date <= c.end).reduce((a, t) => a + t.amount, 0)),
-        last,
-        left: list.filter(t => t.date > today).reduce((a, t) => a + t.amount, 0),
-      };
-    })
-    .filter(p => p.left > 0 || p.perCycle.some(v => v > 0));
-}
-
 /** Last cycle's spend on one credit card (the bill paid this cycle). */
 export type CardCycle = { account: string; prevCycleSpend: number };
 
@@ -257,7 +217,8 @@ export const inCycle = (txs: Transaction[], c: Cycle) => txs.filter(t => t.date 
 export function expectedBills(prev: Transaction[], prevCycle: Cycle, cur: Transaction[], cycle: Cycle, recat: Record<string, string>): Bill[] {
   const seen = new Set(cur.map(t => t.title.toLowerCase()));
   return prev
-    .filter(t => categoryByName(recat[t.id] ?? t.category)?.type === 'fixed')
+    // Installment payments come from their plan's schedule (lib/installments), not from last cycle's charge.
+    .filter(t => !t.plan && (recat[t.id] ?? t.category) !== INSTALLMENTS_CATEGORY && categoryByName(recat[t.id] ?? t.category)?.type === 'fixed')
     .map(t => ({ t, offset: prevCycle.offsetOf(t.date) }))
     .filter(({ t, offset }) => offset > cycle.dayIdx && offset < cycle.cycleDays && !seen.has(t.title.toLowerCase()))
     .map(({ t, offset }) => ({ date: cycle.dateOf(offset), title: t.title, category: recat[t.id] ?? t.category, amount: t.amount, source: t.source }));

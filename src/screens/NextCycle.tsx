@@ -95,13 +95,25 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
             value={'− ' + full(fixedTotal)}
             note={known.subscriptions.length ? 'Subscriptions due: ' + known.subscriptions.map(b => `${tidyName(b.title)} ${dayMonth(b.date)}`).join(', ') : undefined}
           />
-          {installments > 0 && (
-            <Line
-              label="Installments"
-              value={'− ' + full(installments)}
-              note={known.installments.map(b => tidyName(b.title.replace(/ \(\d+\/\d+\)$/, ''))).join(', ')}
-            />
-          )}
+          {installments > 0 && <Line label="Installments" value={'− ' + full(installments)} />}
+          {/* Each plan's payment in that cycle: the same schedule as Fixed bills and the transactions. */}
+          {[...known.installments]
+            .sort((a, b) => a.date.getTime() - b.date.getTime())
+            .map(b => {
+              const m = b.title.match(/^(.*) \((\d+)\/(\d+)\)$/);
+              return (
+                <div key={b.title} className={s.planSubLine}>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
+                    <span className={s.ellipsis}>{m ? m[1] : b.title}</span>
+                    <span style={{ fontSize: 13, color: C.textMuted }}>
+                      {m ? `${m[2]} of ${m[3]}${m[2] === m[3] ? ', last payment' : ''}, ` : ''}due {dayMonth(b.date)}
+                      {b.left ? `, ${full(b.left)} left after` : ''}
+                    </span>
+                  </span>
+                  <span style={{ whiteSpace: 'nowrap' }}>{full(b.amount)}</span>
+                </div>
+              );
+            })}
           {oneOffs > 0 && <Line label="One-off costs" value={'− ' + full(oneOffs)} note={costs.map(c => c.name).join(', ')} />}
           <Line label={`Savings and investing (${settings.savingsPct}%)`} value={'− ' + full(savings)} />
           <div className={s.planDivider} />

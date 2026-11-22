@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
+import { FoundInstallments, PlanLines } from '../components/Plans';
 import { Badge, IconChip } from '../components/ui';
 import { Celebrate } from '../components/Delight';
 import { IC, Icon } from '../components/Icon';
 import { categoryStatus, changeBadge, iconChip, type Budget, type CatView, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { dayMonth, pc, sum, tidyName, toISO } from '../lib/format';
+import { dayMonth, pc, sum, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
@@ -238,6 +239,7 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
           </div>
         </section>
 
+        {mode === 'cycle' && <FoundInstallments />}
         {mode === 'cycle' && (
           <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <SectionHead
@@ -535,6 +537,12 @@ function BillRow({
           )}
         </div>
       )}
+      {/* Installments: each plan on its own line, from the same schedule as Next cycle and the transactions. */}
+      {c.auto && !open && (
+        <div className={s.planLinesWrap}>
+          <PlanLines cycle={cycle} />
+        </div>
+      )}
       {open && <CategoryDetail r={r} mode="cycle" cycle={cycle} toSort={0} onShowTransactions={onShowTransactions} onEditCategory={onEditCategory} />}
     </div>
   );
@@ -639,7 +647,7 @@ function CategoryDetail({
       {mine.length === 0 ? (
         <span style={{ fontSize: 13, color: C.textMuted }}>Nothing spent here {mode === 'cycle' ? 'this cycle' : 'this week'}.</span>
       ) : c.auto ? (
-        <PlanPayments mine={mine} />
+        <PlanLines cycle={cycle} />
       ) : (
         <TopMerchants mine={mine} />
       )}
@@ -658,37 +666,6 @@ function CategoryDetail({
           {c.custom ? 'Edit category' : 'Adjust limit'}
         </button>
       </div>
-    </div>
-  );
-}
-
-/** Installments, opened: each payment this cycle on two lines (the plan, then which payment and when). */
-function PlanPayments({ mine }: { mine: TxView[] }) {
-  const { full } = useSettings();
-  const by = new Map<string, { title: string; month: number; months: number; date: Date; total: number }>();
-  for (const t of mine) {
-    if (!t.plan) continue;
-    const k = t.plan.of + '~' + t.plan.month;
-    const x = by.get(k) ?? { title: tidyName(t.title.replace(/ \(\d+\/\d+\)( interest)?$/, '')), month: t.plan.month, months: t.plan.months, date: t.date, total: 0 };
-    x.total += t.net;
-    by.set(k, x);
-  }
-  const list = [...by.values()].sort((a, b) => b.total - a.total);
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {list.map(p => (
-        <div key={p.title + p.month} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
-            <span className={s.ellipsis} style={{ fontSize: 14 }}>
-              {p.title}
-            </span>
-            <span style={{ fontSize: 13, color: C.textMuted }}>
-              Payment {p.month} of {p.months}, {dayMonth(p.date)}
-            </span>
-          </span>
-          <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>{full(p.total)}</span>
-        </div>
-      ))}
     </div>
   );
 }

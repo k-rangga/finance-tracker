@@ -7,6 +7,8 @@ import { CategoryDialog } from '../components/CategoryDialog';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { Select } from '../components/Select';
 import { InstallmentDialog } from '../components/InstallmentDialog';
+import { planOf, planSummary, usePlans } from '../components/Plans';
+import { leftAfter } from '../lib/installments';
 import { useData } from '../lib/data';
 import { dayAmount, dayTotalLabel, iconChip, inDayTotal, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
@@ -679,6 +681,8 @@ type RowProps = {
 
 function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewCategory, expenses, popover, setPopover, compact, usualAccount, onNotice }: RowProps) {
   const { installments, notes, setNote, receipts, attachReceipt, removeReceipt } = useData();
+  /** The installment plan this row is (a purchase you split) or pays into (a monthly payment), from the one schedule. */
+  const { views: plans, openSchedule, untrack } = usePlans();
   const receipt = receipts[receiptTxId(t)];
   const filePick = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -725,10 +729,13 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
   const where = compact && t.type === 'expense' && t.account === usualAccount ? '' : fullWhere;
   const paidBy = t.paidBackBy.join(', ');
   const shareNote = t.share != null ? `your share of ${full(t.amount)}` : '';
-  const amount = t.isIncome
+  const thePlan = planOf(plans, t.plan?.of ?? (t.isInstallment ? t.id : null));
+  const amount: { text: string; ink: string; note?: string; noteInk?: string } = t.isIncome
     ? { text: '+ ' + full(t.amount), ink: t.reimbursesId ? C.textMuted : C.good }
     : t.isInstallment
-      ? { text: full(t.amount), ink: C.textMuted, note: `in ${installments[t.id]?.amounts.length ?? '?'} payments` }
+      ? { text: full(t.amount), ink: C.textMuted, note: `in ${installments[t.id]?.amounts.length ?? '?'} payments`, noteInk: C.textMuted }
+      : t.plan && thePlan
+        ? { text: '- ' + full(t.amount), ink: C.text, note: `${full(leftAfter(thePlan, t.date))} left`, noteInk: C.textMuted }
       : t.isTransfer
       ? { text: full(t.amount), ink: C.textMuted }
       : t.reimbursed && t.net === 0
@@ -741,14 +748,21 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
   /** Less-used actions, behind the row's ⋯ button. */
   /** The installment purchase this row belongs to: itself, or the purchase a monthly payment pays for. */
   const planId = t.plan?.of ?? (t.isInstallment ? t.id : null);
+  const detected = !!planId?.startsWith('tracked:');
   type Item = [string, () => void];
   const more: Item[] = [
     [note ? 'Edit note' : 'Add note…', () => setPopover('note')],
     ...(isExpense && !t.plan ? [[t.share != null ? 'Edit my share' : 'My share…', () => setPopover('share')] as Item] : []),
     ...(canLink && !t.reimbursesId ? [['Paid back for…', () => setPicking(true)] as Item] : []),
     // Installments: card purchases, and shopping paid any other way (paylater, store credit).
-    ...(planId
+    ...(planId && detected
       ? ([
+          ['Installment schedule', () => openSchedule(planId)],
+          ['Not an installment', () => untrack(planId)],
+        ] as Item[])
+      : planId
+      ? ([
+          ['Installment schedule', () => openSchedule(planId)],
           ['Edit installment…', () => onPlan(planId)],
           ['Make it one purchase again', () => onUnplan(planId)],
         ] as Item[])
@@ -796,8 +810,16 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
               </button>
             </span>
           ) : t.isInstallment ? (
-            <button type="button" className={s.catPill} onClick={() => onPlan(t.id)} title="Edit the installment plan">
-              <span className={s.catPillText}>Installment, {installments[t.id]?.amounts.length} months</span>
+            <button type="button" className={s.catPill} onClick={() => (thePlan ? openSchedule(t.id) : onPlan(t.id))} title="See the installment schedule">
+              <span className={s.catPillText}>Installment, {thePlan ? planSummary(thePlan, full) : `${installments[t.id]?.amounts.length} months`}</span>
+              <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+            </button>
+          ) : t.plan ? (
+            <button type="button" className={s.catPill} onClick={() => planId && openSchedule(planId)} title="See the installment schedule">
+              <span className={s.catPillText}>
+                Installment {t.plan.month} of {t.plan.months}
+                {t.plan.part === 'interest' ? ', interest' : ''}
+              </span>
               <Icon d={IC.chevDown} size={14} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
             </button>
           ) : (
@@ -859,7 +881,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>
         <span style={{ fontSize: 15, fontWeight: 600, color: amount.ink }}>{amount.text}</span>
-        {amount.note && <span style={{ fontSize: 13, fontWeight: 600, color: C.good }}>{amount.note}</span>}
+        {amount.note && <span style={{ fontSize: 13, fontWeight: 600, color: amount.noteInk ?? C.good }}>{amount.note}</span>}
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>
           {uploading ? (
             'Uploading…'

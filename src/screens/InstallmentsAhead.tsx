@@ -1,6 +1,7 @@
 import s from '../styles/ui.module.css';
 import { Card } from '../components/ui';
-import { installmentsAhead, type Transaction } from '../data/transactions';
+import { plansAhead } from '../lib/installments';
+import { usePlans } from '../components/Plans';
 import { paydaysFrom, type Cycle } from '../lib/cycle';
 import { dayMonth, tidyName } from '../lib/format';
 import { useSettings } from '../lib/settings';
@@ -13,11 +14,12 @@ const monthYear = (d: Date) => d.toLocaleDateString('en-GB', { month: 'short', y
  * Installments already promised for the next pay cycles: what each cycle owes, when it drops because a plan
  * ends, and each plan's end date and what's left. This cycle's payments are also in Fixed bills above.
  */
-export function InstallmentsAhead({ payments, cycle }: { payments: Transaction[]; cycle: Cycle }) {
+export function InstallmentsAhead({ cycle }: { cycle: Cycle }) {
   const { full } = useSettings();
+  const { views, openSchedule } = usePlans();
   const days = paydaysFrom(cycle.start, 5);
   const cycles = days.slice(0, 4).map((start, i) => ({ start, end: new Date(days[i + 1].getTime() - DAY) }));
-  const plans = installmentsAhead(payments, cycles, cycle.today);
+  const plans = plansAhead(views, cycles, cycle.today);
   if (!plans.length) return null;
   const totals = cycles.map((_, i) => plans.reduce((a, p) => a + p.perCycle[i], 0));
   const left = plans.reduce((a, p) => a + p.left, 0);
@@ -60,19 +62,19 @@ export function InstallmentsAhead({ payments, cycle }: { payments: Transaction[]
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <span className={s.eyebrow}>Plans</span>
         {plans
-          .sort((a, b) => a.last.getTime() - b.last.getTime())
+          .sort((a, b) => (a.last?.getTime() ?? 0) - (b.last?.getTime() ?? 0))
           .map(p => (
-            <div key={p.of} className={s.aheadRow} style={{ fontSize: 14 }}>
+            <button key={p.of} type="button" className={s.aheadRow} style={{ fontSize: 14, width: '100%', background: 'none', border: 'none', font: 'inherit', color: 'inherit', textAlign: 'left', cursor: 'pointer' }} onClick={() => openSchedule(p.of)}>
               <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
                 <span className={s.ellipsis} style={{ fontWeight: 600 }}>
                   {tidyName(p.title)}
                 </span>
                 <span style={{ fontSize: 13, color: C.textMuted }}>
-                  {p.account}, last payment {monthYear(p.last)}
+                  {p.account}{p.last ? `, last payment ${monthYear(p.last)}` : ''}
                 </span>
               </span>
               <span style={{ whiteSpace: 'nowrap', color: C.textSoft }}>{p.left ? `${full(p.left)} left` : 'Paid off'}</span>
-            </div>
+            </button>
           ))}
       </div>
       <span style={{ fontSize: 13, color: C.textMuted }}>Already promised: each cycle's amount is planned for you under Fixed bills → Installments.</span>

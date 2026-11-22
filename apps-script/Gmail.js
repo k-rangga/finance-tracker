@@ -7,8 +7,8 @@
 const FIRST_SYNC_DAYS = 62; // first import covers this pay cycle and the previous one
 const RANGE_SYNC_DAYS = 62; // "Sync last 2 months"
 const OVERLAP_DAYS = 2;
-/** Automatic sync hours, Asia/Jakarta (TZ). The trigger fires hourly; other hours do nothing. */
-const SYNC_HOURS = [0, 6, 8, 10, 12, 14, 16, 18, 20, 22];
+/** Automatic sync hours, Asia/Jakarta (TZ): every hour. The trigger fires hourly; hours left out here do nothing. */
+const SYNC_HOURS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
 
 function gmailState_() {
   return props_('gmail', {});

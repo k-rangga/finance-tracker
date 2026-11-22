@@ -68,6 +68,8 @@ export type CardView = {
   carriedOver: number;
   owed: number;
   paidInFull: boolean;
+  /** Installment payments in `spent` (the same payments as the plan schedule). */
+  installments: number;
 };
 
 export type CatView = Category & {
@@ -134,7 +136,8 @@ export function cardViews(txs: TxView[], prev: CardCycle[]): CardView[] {
     const paid = sum(payments.map(t => t.amount));
     const lastBill = prev.find(p => p.account === account)?.prevCycleSpend ?? 0;
     const carriedOver = Math.max(0, lastBill - paid);
-    return { account, spent, lastBill, paid, paidOn: payments[0]?.date ?? null, carriedOver, owed: carriedOver + spent, paidInFull: carriedOver < 1 };
+    const installments = sum(txs.filter(t => t.account === account && t.plan && SPENDING.has(t.cat)).map(t => t.amount));
+    return { account, spent, installments, lastBill, paid, paidOn: payments[0]?.date ?? null, carriedOver, owed: carriedOver + spent, paidInFull: carriedOver < 1 };
   });
 }
 

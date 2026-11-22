@@ -3,6 +3,7 @@ import { fmtFull, fmtShort, type Currency } from './format';
 import { useData } from './data';
 import { setPaydayRule, type PaydayRule } from './cycle';
 import { useIsPhone } from './media';
+import type { TrackedInstallment } from './installments';
 import { applyCategorySettings, DEFAULT_SUBCATEGORIES, setSavingsTarget, type CustomCategory } from '../data/categories';
 import { currentCycleKey, type CyclePlan } from './cyclePlans';
 
@@ -48,6 +49,10 @@ export type Settings = {
   chatFeedback?: ChatFeedback[];
   /** Plans for particular pay cycles, by the cycle's start (YYYY-MM-DD): see lib/cyclePlans. */
   cyclePlans?: Record<string, CyclePlan>;
+  /** Installments the bank bills monthly that you confirmed (see lib/installments). */
+  trackedInstallments?: TrackedInstallment[];
+  /** Charges you said aren't installments ("account|merchant"), so they aren't suggested again. */
+  notInstallments?: string[];
   /** Where you live (e.g. "Jakarta Selatan"), so Maxie can compare your spending with local prices. */
   city?: string;
   /** When you're paid: your pay cycle runs from one payday to the day before the next. Default the 25th. */

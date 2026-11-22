@@ -71,6 +71,31 @@ export function DataProvider({ backend, children, loading, failed }: { backend: 
     };
   }, [backend, attempt]);
 
+  // While the app is open, pick up new imports every hour (the server syncs Gmail hourly), and when you come
+  // back to a tab that's been in the background for an hour or more.
+  const loaded = data !== null;
+  useEffect(() => {
+    if (!loaded) return;
+    const HOUR = 60 * 60 * 1000;
+    let last = Date.now();
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - last < HOUR - 60_000) return;
+      last = Date.now();
+      backend
+        .loadImports(importsSince())
+        .then(imports => setData(d => d && { ...d, ...imports }))
+        .catch(() => {
+          /* the next hour tries again */
+        });
+    };
+    const timer = setInterval(refresh, HOUR);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [backend, loaded]);
+
   const write = useCallback((p: Promise<void>) => {
     p.catch(e => setSaveError("Couldn't save your last change: " + (e instanceof Error ? e.message : String(e))));
   }, []);
