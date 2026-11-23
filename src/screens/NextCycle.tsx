@@ -5,9 +5,13 @@ import { IC, Icon } from '../components/Icon';
 import { Select } from '../components/Select';
 import { builtInCategory, CATEGORIES, categoryByName, type Category } from '../data/categories';
 import type { Bill } from '../data/transactions';
+import { perMonth, type Suggestion } from '../lib/subscriptions';
+import { useData } from '../lib/data';
+import { newSubId } from './Subscriptions';
+import { MaxieNote } from './categoryCards';
 import type { Budget } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { checkPlan, cycleKey, spendingProfile, type CyclePlan, type PlanCheck, type PlannedCost } from '../lib/cyclePlans';
+import { checkPlan, cycleKey, matchCosts, spendingProfile, type CyclePlan, type PlanCheck, type PlannedCost } from '../lib/cyclePlans';
 import { Logo } from '../components/Logo';
 import { ThinkingArcs, thinkingLabel } from '../components/Chat';
 import { dayLabel, dayMonth, sum, tidyName, toISO } from '../lib/format';
@@ -20,7 +24,7 @@ type Props = {
   next: Cycle;
   budget: Budget;
   /** Installment payments and subscription charges already due in the next cycle. */
-  known: { installments: Bill[]; subscriptions: Bill[] };
+  known: { installments: Bill[]; subscriptions: Bill[]; notAdded: Suggestion[] };
 };
 
 /**
@@ -30,6 +34,8 @@ type Props = {
  */
 export function NextCycle({ cycle, next, budget, known }: Props) {
   const { settings, update, full } = useSettings();
+  const { setSubscription } = useData();
+  const [raiseGone, setRaiseGone] = useState(false);
   const key = cycleKey(next);
   const plan: CyclePlan = settings.cyclePlans?.[key] ?? {};
   // The newest plan, so several changes in a row (Apply, Apply) each build on the last one.
@@ -110,6 +116,51 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
                 ))}
             </>
           )}
+          {/* Repeat charges this cycle that aren't in your subscriptions: add them so next cycle plans for them. */}
+          {known.notAdded.length > 0 && (
+            <>
+              <span className={s.planSubHead}>Charged this cycle, not added yet</span>
+              {known.notAdded.map(x => (
+                <div key={x.key} className={s.planSubLine}>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
+                    <span className={s.ellipsis}>{x.name}</span>
+                    <span style={{ fontSize: 13, color: C.textMuted }}>
+                      {full(perMonth(x))} a month, next about {dayMonth(new Date(x.next + 'T00:00:00'))}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className={s.btnOutlineSm}
+                    onClick={() => {
+                      const { key: _k, count: _c, ...sub } = x;
+                      setSubscription(newSubId(), sub);
+                    }}
+                  >
+                    Add
+                  </button>
+                  <button type="button" className={s.mxLinkBtn} onClick={() => update({ notSubscriptions: [...settings.notSubscriptions, x.key] })}>
+                    Not a subscription
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+          {(() => {
+            // The Subscriptions plan for next cycle against what's due in it.
+            const subsCat = CATEGORIES.find(c => c.name === 'Subscriptions');
+            const due = sum(known.subscriptions.filter(b => b.category === 'Subscriptions').map(b => b.amount));
+            const planned = subsCat ? amountOf(nextPct(subsCat)) : 0;
+            if (!subsCat || raiseGone || due <= planned * 1.05 + 1) return null;
+            return (
+              <MaxieNote
+                text={`Your subscriptions due next cycle add up to ${full(due)}, but the plan for Subscriptions is ${full(planned)}. Raise it to ${full(due)}?`}
+                actions={[
+                  { label: `Raise to ${full(due)}`, primary: true, onClick: () => setAmount(subsCat, due) },
+                  { label: 'Not now', onClick: () => setRaiseGone(true) },
+                ]}
+              />
+            );
+          })()}
           {installments > 0 && <Line label="Installments" value={'− ' + full(installments)} />}
           {/* Each plan's payment in that cycle: the same schedule as Fixed bills and the transactions. */}
           {[...known.installments
@@ -494,16 +545,38 @@ function Suggestions({ cycle, budget, nextPct, onApply }: { cycle: Cycle; budget
 }
 
 /** One-off costs in the next cycle: set aside in the plan, shown as bills on their date, ticked off when paid. */
-function OneOffs({ next, costs, onChange }: { next: Cycle; costs: PlannedCost[]; onChange: (list: PlannedCost[]) => void }) {
+/**
+ * Costs you already know are coming in a cycle (a wedding gift, a car service): each is set aside as a bill in its
+ * category until a matching payment comes in. `paid`: the ones already paid (This cycle only).
+ */
+function OneOffs({
+  next,
+  costs,
+  onChange,
+  title = 'One-off costs',
+  hint = 'Anything extra next cycle: a wedding gift, a trip, a car service.',
+  from,
+  paid,
+}: {
+  next: Cycle;
+  costs: PlannedCost[];
+  onChange: (list: PlannedCost[]) => void;
+  title?: string;
+  hint?: string;
+  /** The earliest date allowed (today, for this cycle). */
+  from?: Date;
+  paid?: Set<string>;
+}) {
   const { settings, full } = useSettings();
   const idr = settings.currency === 'IDR';
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(toISO(new Date(next.start.getTime() + 7 * 864e5)));
+  const first = from ?? next.start;
+  const [date, setDate] = useState(toISO(new Date(Math.min(first.getTime() + 7 * 864e5, next.end.getTime()))));
   const [category, setCategory] = useState('Buffer');
   const value = idr ? Number(amount.replace(/\D/g, '')) : Number(amount.replace(/[^\d.]/g, ''));
-  const valid = name.trim() && value > 0 && date >= toISO(next.start) && date <= toISO(next.end);
+  const valid = name.trim() && value > 0 && date >= toISO(first) && date <= toISO(next.end);
   const add = () => {
     if (!valid) return;
     onChange([...costs, { id: Math.random().toString(36).slice(2, 10), name: name.trim().slice(0, 60), amount: value, date, category }]);
@@ -514,10 +587,10 @@ function OneOffs({ next, costs, onChange }: { next: Cycle; costs: PlannedCost[];
   return (
     <Card style={{ gap: 8 }}>
       <div className={s.cardHead}>
-        <h2 className={s.h2}>One-off costs</h2>
+        <h2 className={s.h2}>{title}</h2>
         {costs.length > 0 && <span className={s.caption}>{full(sum(costs.map(c => c.amount)))} set aside</span>}
       </div>
-      {costs.length === 0 && !adding && <span style={{ fontSize: 14, color: C.textMuted }}>Anything extra next cycle: a wedding gift, a trip, a car service.</span>}
+      {costs.length === 0 && !adding && <span style={{ fontSize: 14, color: C.textMuted }}>{hint}</span>}
       {[...costs]
         .sort((a, b) => a.date.localeCompare(b.date))
         .map(c => (
@@ -526,6 +599,7 @@ function OneOffs({ next, costs, onChange }: { next: Cycle; costs: PlannedCost[];
               <span>{c.name}</span>
               <span style={{ fontSize: 13, color: C.textMuted }}>
                 {dayMonth(new Date(c.date + 'T00:00:00'))}, {c.category}
+                {paid?.has(c.id) ? ', paid' : ''}
               </span>
             </span>
             <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{full(c.amount)}</span>
@@ -558,7 +632,7 @@ function OneOffs({ next, costs, onChange }: { next: Cycle; costs: PlannedCost[];
           </label>
           <label className={s.field}>
             <span>When</span>
-            <input className={s.input} type="date" value={date} min={toISO(next.start)} max={toISO(next.end)} onChange={e => setDate(e.target.value)} />
+            <input className={s.input} type="date" value={date} min={toISO(first)} max={toISO(next.end)} onChange={e => setDate(e.target.value)} />
           </label>
           <label className={s.field}>
             <span>Category</span>
@@ -576,9 +650,40 @@ function OneOffs({ next, costs, onChange }: { next: Cycle; costs: PlannedCost[];
       ) : (
         <button type="button" className={s.catFold} style={{ color: C.clayInk, fontWeight: 600, borderTop: costs.length ? undefined : 'none', paddingLeft: 0 }} onClick={() => setAdding(true)}>
           <Icon d={IC.plus} size={14} />
-          Add a one-off cost
+          {title === 'One-off costs' ? 'Add a one-off cost' : 'Add a planned expense'}
         </button>
       )}
     </Card>
+  );
+}
+
+/**
+ * This cycle's planned expenses (Plan tab, This cycle): costs you already know are coming before payday. Each is
+ * set aside as a bill in its category until a matching payment comes in, then shows as paid.
+ */
+export function PlannedExpenses({ cycle, budget }: { cycle: Cycle; budget: Budget }) {
+  const { settings, update } = useSettings();
+  const key = cycleKey(cycle);
+  const plan: CyclePlan = settings.cyclePlans?.[key] ?? {};
+  const latest = useRef(plan);
+  latest.current = plan;
+  const costs = plan.costs ?? [];
+  const spending = budget.txs.filter(t => t.type === 'expense').map(t => ({ id: t.id, date: t.date, amount: t.amount, cat: t.cat }));
+  const paid = new Set(matchCosts(costs, spending).keys());
+  const save = (list: PlannedCost[]) => {
+    const p = { ...latest.current, costs: list };
+    latest.current = p;
+    update({ cyclePlans: { ...(settings.cyclePlans ?? {}), [key]: p } });
+  };
+  return (
+    <OneOffs
+      next={cycle}
+      from={cycle.today}
+      costs={costs}
+      onChange={save}
+      paid={paid}
+      title="Planned expenses"
+      hint="Something you already know is coming before payday? Add it and I'll set the money aside in its category."
+    />
   );
 }

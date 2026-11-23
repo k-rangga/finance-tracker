@@ -237,6 +237,15 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   )
     .filter(([, v]) => v > 0)
     .sort((x, y) => y[1] - x[1]);
+  /** Each category's spending by sub-category ("No sub-category" for the rest), biggest first. */
+  const subsOf: Record<string, [string, number][]> = {};
+  for (const [name] of byCat) {
+    const mine = spending.filter(t => t.cat === name);
+    if (!mine.some(t => t.sub)) continue;
+    const by = new Map<string, number>();
+    for (const t of mine) by.set(t.sub ?? '', (by.get(t.sub ?? '') ?? 0) + t.net);
+    subsOf[name] = [...by].filter(([, v]) => v > 0).sort((x, y) => (x[0] === '' ? 1 : y[0] === '' ? -1 : y[1] - x[1]));
+  }
   const bills = budget.bills.filter(b => !cat || b.category === pick.cat);
   /** The account most spending comes from: phones only name the account on rows paid from another one. */
   const usualAccount = useMemo(() => {
@@ -265,6 +274,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
       spent={out}
       transfers={transferCount}
       byCat={byCat}
+      subsOf={subsOf}
       cat={cat}
       onPickCat={c => setFilter({ ...filter, cat: c === cat ? '' : c })}
     />
@@ -577,6 +587,7 @@ function Recap({
   figures,
   transfers,
   byCat,
+  subsOf,
   cat,
   onPickCat,
 }: {
@@ -586,6 +597,8 @@ function Recap({
   figures: [string, number, string][];
   transfers: number;
   byCat: [string, number][];
+  /** Sub-categories per category, shown when you open one. */
+  subsOf: Record<string, [string, number][]>;
   cat: string;
   onPickCat: (cat: string) => void;
   /** Phones: inside the Recap fold, without its own title and total. */
@@ -593,6 +606,9 @@ function Recap({
 }) {
   const { full } = useSettings();
   const total = sum(byCat.map(([, v]) => v));
+  /** Categories opened to show their sub-categories (the filtered one opens by itself). */
+  const [opened, setOpened] = useState<string[]>([]);
+  const picked = parseCatFilter(cat);
   const hasFigures = figures.some(([, v]) => v > 0) || transfers > 0;
   return (
     <aside className={bare ? undefined : s.splitSide} aria-label="Recap of these dates">
@@ -640,21 +656,61 @@ function Recap({
           <div className={s.sideList} style={{ gap: 4 }}>
             {byCat.map(([name, v]) => {
               const color = categoryByName(name)?.color ?? C.textFaint;
+              const subs = subsOf[name];
+              const isOpen = !!subs && (opened.includes(name) || picked.cat === name);
               return (
-                <button key={name} type="button" className={s.recapRow} aria-pressed={cat === name} onClick={() => onPickCat(name)}>
-                  <span style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                      <span aria-hidden="true" style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: color }} />
-                      <span className={s.ellipsis}>{name}</span>
-                    </span>
-                    <span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
-                      {full(v)} <span style={{ color: C.textMuted, fontWeight: 400 }}>({Math.round((v / total) * 100)}%)</span>
-                    </span>
-                  </span>
-                  <span className={s.recapTrack}>
-                    <span style={{ width: `${(v / byCat[0][1]) * 100}%`, background: color }} />
-                  </span>
-                </button>
+                <div key={name} style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                    <button type="button" className={s.recapRow} style={{ flex: 1, minWidth: 0 }} aria-pressed={picked.cat === name && !picked.sub} onClick={() => onPickCat(name)}>
+                      <span style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span aria-hidden="true" style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: color }} />
+                          <span className={s.ellipsis}>{name}</span>
+                        </span>
+                        <span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
+                          {full(v)} <span style={{ color: C.textMuted, fontWeight: 400 }}>({Math.round((v / total) * 100)}%)</span>
+                        </span>
+                      </span>
+                      <span className={s.recapTrack}>
+                        <span style={{ width: `${(v / byCat[0][1]) * 100}%`, background: color }} />
+                      </span>
+                    </button>
+                    {subs && (
+                      <button
+                        type="button"
+                        className={s.iconBtnSm}
+                        aria-expanded={isOpen}
+                        aria-label={`${isOpen ? 'Hide' : 'Show'} ${name} sub-categories`}
+                        title={isOpen ? 'Hide sub-categories' : 'Show sub-categories'}
+                        onClick={() => setOpened(isOpen ? opened.filter(x => x !== name) : [...opened, name])}
+                        style={{ marginTop: 6 }}
+                      >
+                        <Icon d={IC.chevDown} size={14} style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.16s ease-out' }} />
+                      </button>
+                    )}
+                  </div>
+                  {isOpen && (
+                    <div className={s.recapSubs}>
+                      {subs.map(([sub, sv]) => (
+                        <button
+                          key={sub || '—'}
+                          type="button"
+                          className={s.recapSubRow}
+                          aria-pressed={picked.cat === name && picked.sub === sub && !!sub}
+                          disabled={!sub}
+                          onClick={() => onPickCat(picked.cat === name && picked.sub === sub ? name : catFilter(name, sub))}
+                        >
+                          <span className={s.ellipsis} style={{ color: sub ? C.text : C.textMuted }}>
+                            {sub || 'No sub-category'}
+                          </span>
+                          <span style={{ whiteSpace: 'nowrap' }}>
+                            {full(sv)} <span style={{ color: C.textMuted }}>({Math.round((sv / v) * 100)}%)</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -1152,8 +1208,10 @@ function CategoryMenu({
   const needle = q.trim().toLowerCase();
   const match = (label: string) => !needle || label.toLowerCase().includes(needle);
   const items: MenuItem[] = [
-    ...CATEGORIES.flatMap(c => {
-      const subs = settings.subcategories[c.name] ?? [];
+    // A to Z, so a category is where you expect it; sub-categories A to Z under each.
+    // Installments isn't offered: payments count in their own category (see lib/installments).
+    ...CATEGORIES.filter(c => !c.auto).sort((a, b) => a.name.localeCompare(b.name)).flatMap(c => {
+      const subs = [...(settings.subcategories[c.name] ?? [])].sort((a, b) => a.localeCompare(b));
       // A category shows when it or one of its sub-categories matches; then all its sub-categories that match too.
       const own = match(c.name);
       const shown = subs.filter(x => own || match(x));

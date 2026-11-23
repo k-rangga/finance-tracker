@@ -4523,3 +4523,38 @@ button.sxTile:hover {
   font-size: 13px;
   color: var(--ink-muted);
 }
+
+/* Transactions recap: a category's sub-categories, opened under it. */
+.recapSubs {
+  display: flex;
+  flex-direction: column;
+  margin: 2px 0 6px 16px;
+  padding-left: 10px;
+  border-left: 2px solid var(--divider);
+}
+.recapSubRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.recapSubRow:hover:not(:disabled) {
+  background: var(--hover);
+}
+.recapSubRow:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.recapSubRow[aria-pressed='true'] {
+  background: var(--clay-soft);
+  color: var(--clay-ink);
+  font-weight: 600;
+}

@@ -20,6 +20,7 @@ type Props = {
   catOf: (t: Transaction) => string;
 };
 
+export const newSubId = () => 'sub_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const newId = () => 'sub_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const per = (e: Every) => ({ month: '/ month', year: '/ year', week: '/ week' })[e];
 
@@ -29,13 +30,13 @@ const per = (e: Every) => ({ month: '/ month', year: '/ year', week: '/ week' })
  */
 export function Subscriptions({ budget: b, states, txs, catOf }: Props) {
   const { full, settings, update } = useSettings();
-  const { subscriptions: subs, setSubscription } = useData();
+  const { subscriptions: subs, setSubscription, notes } = useData();
   const setLimits = useSetLimits();
   const [editing, setEditing] = useState<{ id: string; sub?: Subscription } | null>(null);
   const [showCancelled, setShowCancelled] = useState(false);
   const today = useMemo(startOfToday, []);
 
-  const suggestions = useMemo(() => suggestSubscriptions(txs, subs, settings.notSubscriptions, catOf, today), [txs, subs, settings.notSubscriptions, catOf, today]);
+  const suggestions = useMemo(() => suggestSubscriptions(txs, subs, settings.notSubscriptions, catOf, today, t => notes[t.id]), [txs, subs, settings.notSubscriptions, catOf, today, notes]);
   const entries = Object.entries(subs);
   const live = entries.filter(([, x]) => x.status !== 'cancelled');
   const cancelled = entries.filter(([, x]) => x.status === 'cancelled');

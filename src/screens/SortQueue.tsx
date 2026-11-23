@@ -54,9 +54,11 @@ export function SortQueue({ ids, allTxs, g, onPick, onClose }: Props) {
   const pick = (cat: string, sub?: string | null) => onPick(t, cat, sub ?? null, !!merchantKey(t.title) && all);
   const label = (o: { category: string; sub?: string }) => categoryLabel(o.category) + (o.sub ? ' › ' + o.sub : '');
   const every = [
-    ...CATEGORIES.filter(c => c.name !== 'Buffer').flatMap(c => [
+    ...CATEGORIES.filter(c => c.name !== 'Buffer' && !c.auto)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .flatMap(c => [
       { value: c.name, label: c.name },
-      ...(settings.subcategories[c.name] ?? []).map(x => ({ value: catFilter(c.name, x), label: `${c.name} › ${x}` })),
+      ...[...(settings.subcategories[c.name] ?? [])].sort((a, b) => a.localeCompare(b)).map(x => ({ value: catFilter(c.name, x), label: `${c.name} › ${x}` })),
     ]),
     ...OTHER_CATEGORIES.map(o => ({ value: o, label: categoryLabel(o), group: 'Not spending' })),
   ];

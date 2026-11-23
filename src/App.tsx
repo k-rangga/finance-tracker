@@ -22,7 +22,7 @@ import { Categories } from './screens/Categories';
 import { Activity, type ActivityFilter } from './screens/Activity';
 import { SavingsPlan } from './screens/SavingsPlan';
 import { Subscriptions } from './screens/Subscriptions';
-import { chargesBySub, subscriptionBills, subState } from './lib/subscriptions';
+import { chargesBySub, subscriptionBills, subState, suggestSubscriptions } from './lib/subscriptions';
 import { Invest } from './screens/invest/Invest';
 import { Chat } from './components/Chat';
 import { useIsPhone } from './lib/media';
@@ -45,7 +45,7 @@ export default function App() {
     const t = storage.getRaw(KEYS.tab) as Tab | null;
     return t && TABS.some(x => x.key === t) ? t : 'summary';
   });
-  const { recat: fixed, links, shares, removed, installments, rules, ruleSubs, subs: picked, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email, refreshImports, subscriptions } = useData();
+  const { recat: fixed, links, shares, removed, installments, rules, ruleSubs, subs: picked, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email, refreshImports, subscriptions, notes } = useData();
   // Transactions remembers your last dates, category and search on this device.
   const [txFilter, setTxFilterState] = useState<ActivityFilter>(() => storage.get<ActivityFilter>(KEYS.txFilter, { range: 'week', cat: '', q: '' }));
   const setTxFilter = useCallback((f: ActivityFilter) => {
@@ -126,8 +126,13 @@ export default function App() {
       const last = subCharges.get(id)?.[0];
       return last ? catOf(last) : 'Subscriptions';
     };
-    return { installments: planBills(plans, nextCycle), subscriptions: subscriptionBills(subscriptions, subStates, nextCycle, subCat) };
-  }, [plans, nextCycle, subscriptions, subStates, subCharges, catOf]);
+    // Repeat charges this cycle that aren't in your subscriptions yet: they'd be missed next cycle.
+    const notAdded = suggestSubscriptions(all, subscriptions, settings.notSubscriptions, catOf, today, t => notes[t.id]).filter(x => {
+      const last = new Date(x.next + 'T00:00:00');
+      return last >= nextCycle.start && last <= nextCycle.end;
+    });
+    return { installments: planBills(plans, nextCycle), subscriptions: subscriptionBills(subscriptions, subStates, nextCycle, subCat), notAdded };
+  }, [plans, nextCycle, subscriptions, subStates, subCharges, catOf, all, settings.notSubscriptions, today, notes]);
   /** Charges that look like installments, for you to confirm (bills you set and subscriptions are left out). */
   const foundPlans = useMemo(
     () =>
@@ -180,8 +185,13 @@ export default function App() {
     setBillUndo({ text: `${tidyName(b.title)} removed from bills`, run: () => update({ dismissedBills: before }) });
   };
   const budget = useMemo(
-    () => computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, cycle, income: settings.income, warnAt: settings.warnAt }),
-    [transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, cycle, settings.income, settings.warnAt, settings.savingsPct, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
+    () => {
+      // Planned expenses you added for this cycle: money set aside in their category.
+      const plannedCosts: Record<string, number> = {};
+      for (const c of settings.cyclePlans?.[cycleKey(cycle)]?.costs ?? []) plannedCosts[c.category] = (plannedCosts[c.category] ?? 0) + c.amount;
+      return computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, cycle, income: settings.income, warnAt: settings.warnAt, plannedCosts });
+    },
+    [transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, cycle, settings.income, settings.warnAt, settings.cyclePlans, settings.savingsPct, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
   );
   /** Every synced transaction, for the Transactions screen's own date range. */
   const allTxs = useMemo(() => txViews(all, all, { recat, links, shares, cycle, subs }).txs, [all, recat, links, shares, cycle, subs]);

@@ -36,9 +36,14 @@ export const perMonth = (s: Pick<Subscription, 'amount' | 'every'>) => (s.every 
 /** A spending charge that could be a subscription's (not an installment payment, transfer or income). */
 const isCharge = (t: Transaction) => t.type === 'expense' && !t.plan;
 
+/** How far a charge can be from a subscription's price and still be its charge (a price rise, tax). */
+const PRICE_SLACK = 0.3;
+
 /**
  * Each subscription's charges, newest first. A receipt matches when the subscription's merchant appears in its name
- * as whole words; when two subscriptions share a merchant (Apple, Google), the one with the nearest amount gets it.
+ * as whole words and its amount is within 30% of the price; when two subscriptions share a merchant (Apple, Google),
+ * the one with the nearest amount gets it. A charge far from every price there is a different subscription billed
+ * through the same merchant (Claude and iCloud both via Apple), so it's left for suggestions.
  */
 export function chargesBySub(subs: Record<string, Subscription>, txs: Transaction[]): Map<string, Transaction[]> {
   const list = Object.entries(subs)
@@ -48,7 +53,7 @@ export function chargesBySub(subs: Record<string, Subscription>, txs: Transactio
   for (const t of txs) {
     if (!isCharge(t)) continue;
     const name = ` ${merchantKey(t.title)} `;
-    const hits = list.filter(x => name.includes(` ${x.key} `));
+    const hits = list.filter(x => name.includes(` ${x.key} `) && Math.abs(t.amount - x.amount) <= Math.max(1, x.amount * PRICE_SLACK));
     if (!hits.length) continue;
     const best = hits.reduce((a, b) => (Math.abs(b.amount - t.amount) < Math.abs(a.amount - t.amount) ? b : a));
     const charges = out.get(best.id) ?? [];
@@ -122,13 +127,17 @@ export function suggestSubscriptions(
   ignored: string[],
   catOf: (t: Transaction) => string,
   today: Date,
+  /** Your note on a charge ("Claude"), which names a subscription better than the merchant ("Apple.com/Bill"). */
+  noteOf: (t: Transaction) => string | undefined = () => undefined,
 ): Suggestion[] {
   const claimed = new Set([...chargesBySub(subs, txs).values()].flat().map(t => t.id));
   const skip = new Set(ignored);
   const groups = new Map<string, Transaction[]>();
   for (const t of txs) {
     if (!isCharge(t) || claimed.has(t.id) || t.date > today) continue;
-    const key = merchantKey(t.title);
+    // Charges you've named apart (a note) are different subscriptions even at one merchant.
+    const note = noteOf(t)?.trim();
+    const key = merchantKey(t.title) + (note ? '|' + note.toLowerCase() : '');
     if (!key || skip.has(key)) continue;
     groups.set(key, [...(groups.get(key) ?? []), t]);
   }
@@ -154,8 +163,10 @@ export function suggestSubscriptions(
     // The next charge should already have come and hasn't: it has probably stopped.
     if (diffDays(today, next) < -GRACE_DAYS) continue;
     // Receipt references at the end ("Spotify P5678") aren't part of the name, nor of what later charges match on.
-    const name = tidyName(latest.title).replace(/(\s+\S*\d\S*)+$/, '') || tidyName(latest.title);
-    out.push({ key, count: list.length, name, merchant: merchantKey(name) || key, amount: latest.amount, every, next: toISO(next), account: latest.account, status: 'active' });
+    const note = noteOf(latest)?.trim();
+    const name = note ? note.slice(0, 40) : tidyName(latest.title).replace(/(\s+\S*\d\S*)+$/, '') || tidyName(latest.title);
+    // Charges are matched on the merchant (and price), not on your note.
+    out.push({ key, count: list.length, name, merchant: merchantKey(latest.title) || key, amount: latest.amount, every, next: toISO(next), account: latest.account, status: 'active' });
   }
   return out.sort((a, b) => perMonth(b) - perMonth(a));
 }

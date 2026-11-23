@@ -1,3 +1,4 @@
+import type { Suggestion } from '../lib/subscriptions';
 import { useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { Card } from '../components/ui';
@@ -9,7 +10,7 @@ import { paydaysFrom, type Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth, diffDays } from '../lib/format';
 import { C } from '../lib/tokens';
 
-import { NextCycle } from './NextCycle';
+import { NextCycle, PlannedExpenses } from './NextCycle';
 import type { Bill } from '../data/transactions';
 
 /** `children` sit under the monthly plan (Subscriptions). `view`: this cycle, or planning the next one. */
@@ -21,7 +22,7 @@ type Props = {
   view: 'this' | 'next';
   setView: (v: 'this' | 'next') => void;
   next: Cycle;
-  nextKnown: { installments: Bill[]; subscriptions: Bill[] };
+  nextKnown: { installments: Bill[]; subscriptions: Bill[]; notAdded: Suggestion[] };
   children?: ReactNode;
 };
 
@@ -46,6 +47,8 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest, onShowTransactions
     <div className={s.stack}>
       {switcher}
       <ActionPlan cycle={cycle} budget={b} onShowTransactions={onShowTransactions} />
+
+      <PlannedExpenses cycle={cycle} budget={b} />
 
       <MonthlyPlan budget={b} onOpenInvest={onOpenInvest} />
 
