@@ -5,14 +5,26 @@ import { storage } from '../lib/storage';
 /** True when the device asks for less motion: count-ups, confetti and fades are skipped. */
 export const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-/** A number that counts up to `target` when it first appears (and glides when it changes). */
-export function useCountUp(target: number, ms = 700): number {
-  const [value, setValue] = useState(() => (reducedMotion() ? target : 0));
+const lastCounted = new Map<string, number>();
+
+/** A number that counts up to `target` when it first appears (and glides when it changes). Pass `key` to skip re-counting from 0 on remounts. */
+export function useCountUp(target: number, ms = 700, key?: string): number {
+  const [value, setValue] = useState(() => (reducedMotion() ? target : key && lastCounted.has(key) ? lastCounted.get(key)! : 0));
   const from = useRef(value);
   useEffect(() => {
-    if (reducedMotion()) return setValue(target);
-    const start = performance.now();
+    if (reducedMotion()) {
+      from.current = target;
+      if (key) lastCounted.set(key, target);
+      return setValue(target);
+    }
     const a = from.current;
+    if (Math.abs(target - a) < 0.5) {
+      from.current = target;
+      if (key) lastCounted.set(key, target);
+      setValue(target);
+      return;
+    }
+    const start = performance.now();
     let raf = 0;
     const step = (now: number) => {
       const p = Math.min(1, (now - start) / ms);
@@ -21,10 +33,11 @@ export function useCountUp(target: number, ms = 700): number {
       from.current = v;
       setValue(v);
       if (p < 1) raf = requestAnimationFrame(step);
+      else if (key) lastCounted.set(key, target);
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [target, ms]);
+  }, [target, ms, key]);
   return value;
 }
 

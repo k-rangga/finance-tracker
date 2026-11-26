@@ -3,7 +3,7 @@ import s from '../styles/ui.module.css';
 import { IconChip, Modal, Options } from './ui';
 import { Select } from './Select';
 import { CATEGORIES, toCategory } from '../data/categories';
-import { dayLabel, startOfToday, sum } from '../lib/format';
+import { dayLabel, ordinal, startOfToday, sum } from '../lib/format';
 import { DEFAULT_PAYDAY, nextPaydayFor, type PaydayRule } from '../lib/cycle';
 import { DEFAULT_INCOME, useSettings, type Settings } from '../lib/settings';
 import type { Currency } from '../lib/format';
@@ -333,6 +333,3 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
     </div>
   );
 }
-
-/** 1 → "1st", 22 → "22nd". */
-const ordinal = (n: number) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');

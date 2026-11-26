@@ -57,3 +57,7 @@ export function startOfToday(): Date {
 /** "KALAKA RANGGA S" → "Kalaka Rangga S"; names already in mixed case are left alone. */
 export const tidyName = (s: string) => (s === s.toUpperCase() && /[A-Z]/.test(s) ? s.toLowerCase().replace(/(^|[\s(/-])\p{L}/gu, c => c.toUpperCase()) : s);
 
+/** `1` → `"1st"`, `25` → `"25th"`. */
+export const ordinal = (n: number) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
+
+

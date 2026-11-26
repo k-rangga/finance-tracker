@@ -3503,58 +3503,18 @@ textarea.input {
   color: var(--text-muted);
 }
 
-/* The ring. */
-.sxRingWrap {
-  position: relative;
-  width: 180px;
-  height: 180px;
-  margin: 0 auto;
-}
-.sxRing {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-.sxRingCenter {
-  position: absolute;
-  inset: 0;
+/* Three interactive tiles: a column on wide screens, a row on phones. */
+.sxTilesWrap {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
+  gap: 10px;
+  min-width: 0;
 }
-.sxRingBig {
-  font-size: 26px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-}
-.sxRingSmall {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-.sxRingFoot {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 6px;
-}
-.sxRingFootValue {
-  font-size: 18px;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-.sxRingFootLabel {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-/* Three tiles: a column on wide screens, a row on phones. */
 .sxTiles {
   display: grid;
   grid-template-rows: repeat(3, 1fr);
   gap: 12px;
+  flex: 1;
 }
 @media (max-width: 759px) {
   .sxTiles {
@@ -3580,8 +3540,33 @@ textarea.input {
 button.sxTile {
   cursor: pointer;
 }
-button.sxTile:hover {
+button.sxTile:hover:not(:disabled) {
   box-shadow: var(--shadow-sm);
+  border-color: var(--border-strong);
+}
+button.sxTile:disabled {
+  cursor: default;
+}
+.sxCardBreakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+.sxCardBreakRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.sxCardBreakSub {
+  font-size: 12px;
+  color: var(--ink-muted);
+  white-space: nowrap;
 }
 .sxTileLabel {
   display: flex;
@@ -3692,65 +3677,206 @@ button.sxTile:hover {
   color: var(--text-muted);
 }
 
-/* Where it went: one bar, then a legend. */
-.sxStackBar {
-  display: flex;
-  gap: 2px;
-  height: 14px;
-  border-radius: 999px;
-  overflow: hidden;
-}
-.sxStackBar > span {
-  min-width: 4px;
-}
-.sxLegend {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
-  gap: 2px 20px;
-}
-.sxLegendItem {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-  border: none;
-  background: transparent;
-  font: inherit;
-  font-size: 14px;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  min-width: 0;
-}
-.sxLegendItem:disabled {
-  cursor: default;
-}
-.sxLegendItem:not(:disabled):hover .sxLegendName {
-  text-decoration: underline;
-}
 .sxLegendDot {
   width: 9px;
   height: 9px;
   border-radius: 50%;
   flex: none;
 }
-.sxLegendName {
-  margin-right: auto;
+
+/* Needs attention: over/near limit categories and inbox nudges. */
+.sxAttnCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
   min-width: 0;
+}
+.sxAttnHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sxAttnTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.sxAttnActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sxAttnPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-100);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.sxAttnPill:hover {
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+.sxAttnGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
+  gap: 8px;
+}
+.sxAttnItem {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-100);
+  text-align: left;
+  min-width: 0;
+}
+.sxAttnItem:hover {
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+.sxAttnTop {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  min-width: 0;
+}
+.sxAttnName {
+  font-weight: 600;
+  margin-right: auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sxLegendValue {
+.sxAttnMeta {
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+.sxAttnBar {
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--divider);
+  overflow: hidden;
+}
+.sxAttnBar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+.sxAttnMore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.sxAttnMore:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
 
-/* Bills to come: dots on a line from today to payday. */
+/* Daily bars: future baseline ticks, clickable spike callout, and selected-day drill-down bar. */
+.sxDayFuture {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+}
+.sxDayFutureTick {
+  display: block;
+  width: 100%;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--divider);
+  opacity: 0.65;
+}
+.sxSpikeBtn {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface-100);
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+.sxSpikeBtn:hover {
+  color: var(--ink);
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+.sxDayPick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-100);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+.sxDayPick > span {
+  margin-right: auto;
+}
+
+/* Compact segmented toggle inside a ChartCard header (e.g. Where it went: All / Everyday). */
+.sxMiniSeg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--surface-100);
+  border: 1px solid var(--border);
+}
+.sxMiniSeg button {
+  border: none;
+  background: transparent;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+.sxMiniSeg button[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Bills to come: grouped dots on a line from today to payday + scannable list. */
 .sxTimeline {
   position: relative;
-  height: 28px;
+  height: 30px;
 }
 .sxTimelineLine {
   position: absolute;
@@ -3762,34 +3888,86 @@ button.sxTile:hover {
   border-radius: 1px;
   background: var(--divider);
 }
-.sxTimelineDot {
+.sxTimelineDotBtn {
   position: absolute;
   top: 50%;
-  width: 14px;
-  height: 14px;
-  margin: -7px 0 0 -7px;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
   padding: 0;
-  border-radius: 50%;
-  border: 2px solid var(--surface);
+  border: none;
+  background: transparent;
+  display: grid;
+  place-items: center;
   cursor: pointer;
 }
-.sxTimelineDot[data-active] {
+.sxTimelineDotVisual {
+  display: grid;
+  place-items: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  border: 2px solid var(--surface);
+  color: var(--on-clay);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  transition: transform 0.12s ease-out, box-shadow 0.12s ease-out;
+}
+.sxTimelineDotBtn:hover .sxTimelineDotVisual,
+.sxTimelineDotBtn[data-active] .sxTimelineDotVisual {
   box-shadow: 0 0 0 2px var(--text-soft);
   transform: scale(1.15);
 }
-.sxTimelinePick {
+.sxBillList {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  min-height: 32px;
+  flex-direction: column;
+  gap: 2px;
 }
-.sxRecentRow {
+.sxBillRow {
   display: flex;
   align-items: center;
   gap: 10px;
   font-size: 14px;
-  padding: 2px 0;
+  min-height: 34px;
+  padding: 4px 8px;
+  margin: 0 -8px;
+  border-radius: 8px;
+}
+.sxBillRow[data-active] {
+  background: var(--hover);
+}
+.sxBillDate {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.sxRecentList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sxRecentBtn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: calc(100% + 16px);
+  margin: 0 -8px;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 14px;
+  text-align: left;
+}
+.sxRecentBtn:hover {
+  background: var(--hover);
+}
+.sxRecentDate {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 /* Summary: this cycle as a line (spent so far, projection to payday, the plan). */
@@ -3850,6 +4028,22 @@ button.sxTile:hover {
 .sxLineFoot {
   font-size: 14px;
   color: var(--ink-muted);
+}
+.sxLineFootRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sxDeltaBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* Summary: where it went as a treemap. Flush cells, only the outer corners round. */
@@ -4603,13 +4797,6 @@ button.sxTile:hover {
 }
 .sxDayBar {
   position: relative;
-}
-.sxSpike {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--ink-muted);
 }
 .sxSpikeDot {
   width: 8px;

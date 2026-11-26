@@ -7,9 +7,9 @@ import { SettingsDialog } from './components/SettingsDialog';
 import { CategoryDialog } from './components/CategoryDialog';
 import { GmailDialog, syncedAgo } from './components/GmailDialog';
 import { KEYS, storage } from './lib/storage';
-import { getCycle } from './lib/cycle';
+import { getCycle, paydayRule } from './lib/cycle';
 import { computeBudget, txViews } from './lib/budget';
-import { addDays, dayLabel, dayMonth, startOfToday, tidyName, toISO } from './lib/format';
+import { addDays, dayLabel, dayMonth, ordinal, startOfToday, tidyName, toISO } from './lib/format';
 import { useSettings } from './lib/settings';
 import { useData } from './lib/data';
 import { billKey, merchantKey, expectedBills, inCycle, installmentPayments, resolveSubs, toTransaction, withMerchantRules, type Bill } from './data/transactions';
@@ -264,8 +264,11 @@ export default function App() {
 
 
   const current = TABS.find(t => t.key === tab)!;
-  const raw25 = new Date(cycle.next.getFullYear(), cycle.next.getMonth(), 25);
-  const nextNote = cycle.next.getDate() !== 25 ? ` (25th is ${raw25.toLocaleDateString('en-GB', { weekday: 'long' })})` : '';
+  const rule = paydayRule();
+  const nextMonthDays = new Date(cycle.next.getFullYear(), cycle.next.getMonth() + 1, 0).getDate();
+  const targetDay = Math.min(rule.day, nextMonthDays);
+  const rawPayday = new Date(cycle.next.getFullYear(), cycle.next.getMonth(), targetDay);
+  const nextNote = cycle.next.getDate() !== targetDay ? ` (${ordinal(targetDay)} is ${rawPayday.toLocaleDateString('en-GB', { weekday: 'long' })})` : '';
 
   return (
     <PlansProvider value={plansCtx}>
@@ -411,9 +414,13 @@ export default function App() {
                 cycle={cycle}
                 budget={budget}
                 onOpenCategory={showCategory}
+                onOpenCategories={() => {
+                  setOpenCat(null);
+                  setTab('categories');
+                }}
                 onDismissBill={dismissBill}
-                onShowTransactions={(range, cat = '') => {
-                  setTxFilter({ range, cat, q: '' });
+                onShowTransactions={patch => {
+                  setTxFilter({ cat: '', q: '', ...patch });
                   setTab('tx');
                 }}
                 onPlanNext={() => {

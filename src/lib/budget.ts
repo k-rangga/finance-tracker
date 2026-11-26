@@ -285,9 +285,10 @@ export function computeBudget(args: {
     fixedDue,
     velDay,
     projTotal,
-    projSavePct: 100 - (projTotal / income) * 100,
+    projSavePct: income > 0 ? 100 - (projTotal / income) * 100 : 0,
     paceToday: fixedSpent + (varBudget * cycle.dayN) / cycle.cycleDays,
-    safeDay: Math.max(0, (budget - spent - fixedDue) / Math.max(1, cycle.daysLeft)),
+    // Days remaining including today (matches "N days to payday" on Summary and Categories).
+    safeDay: Math.max(0, (budget - spent - fixedDue) / Math.max(1, cycle.daysLeft + 1)),
     weekTotal: w => sum(cats.map(c => c.cur[w])),
     cards,
     nonCardSpent,
@@ -295,7 +296,7 @@ export function computeBudget(args: {
     cashOut: nonCardSpent + cardBillsPaid,
     invested: sum(txs.filter(t => t.isInvestment).map(t => t.amount)),
     saved: sum(txs.filter(t => t.isSavings).map(t => t.amount)),
-    savedPct: (sum(txs.filter(t => t.isSavings).map(t => t.amount)) / income) * 100,
+    savedPct: income > 0 ? (sum(txs.filter(t => t.isSavings).map(t => t.amount)) / income) * 100 : 0,
   };
 }
 
