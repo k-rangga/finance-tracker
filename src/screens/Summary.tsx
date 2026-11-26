@@ -30,13 +30,15 @@ type SummaryProps = {
   onShowTransactions: (patch: TxPatch) => void;
   /** Open Plan on the next cycle. */
   onPlanNext: () => void;
+  /** Open Ask Maxie, optionally pre-asking a contextual question. */
+  onAskMaxie: (ask?: string) => void;
 };
 
 /**
  * The cycle at a glance, charts first: a warm daily greeting from Maxie, actionable alerts when needed, what's left,
  * three interactive tiles, spending by day, where the money went (treemap), upcoming bills, and recent activity.
  */
-export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, onDismissBill, onShowTransactions, onPlanNext }: SummaryProps) {
+export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, onDismissBill, onShowTransactions, onPlanNext, onAskMaxie }: SummaryProps) {
   const { ofIncome, settings } = useSettings();
   const id = toISO(cycle.start);
   const target = ofIncome(SAVINGS_TARGET_PCT);
@@ -45,13 +47,14 @@ export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, on
     <div className={s.sxSumGrid}>
       <Celebrate id={id + '.saved'} when={target > 0 && b.saved >= target} />
       <Celebrate id={id + '.under'} when={cycle.daysLeft <= 1 && b.spent <= b.budget} />
-      <MaxieGreeting cycle={cycle} budget={b} />
+      <MaxieGreeting cycle={cycle} budget={b} onAskMaxie={onAskMaxie} />
       {cycle.daysLeft <= 4 && <PlanNextNudge cycle={cycle} planned={hasPlan(settings.cyclePlans?.[cycleKey(nextCycleOf(cycle))])} onOpen={onPlanNext} />}
       <NeedsAttention
         budget={b}
         onOpenCategory={onOpenCategory}
         onOpenCategories={onOpenCategories}
         onSortBuffer={() => onShowTransactions({ range: 'cycle', cat: 'Buffer' })}
+        onAskMaxie={onAskMaxie}
       />
       <CycleLine cycle={cycle} budget={b} />
       <Tiles
@@ -73,8 +76,8 @@ export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, on
   );
 }
 
-/** One warm daily sentence from Maxie tuned to time of day, your name, your cycle state, and language setting. */
-function MaxieGreeting({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
+/** One cheerful daily sentence from Maxie tuned to time of day, your name, your cycle state, and language setting. */
+function MaxieGreeting({ cycle, budget: b, onAskMaxie }: { cycle: Cycle; budget: Budget; onAskMaxie: (ask?: string) => void }) {
   const { short, settings } = useSettings();
   const id = settings.maxieLanguage === 'id';
   const name = settings.name.trim();
@@ -92,7 +95,7 @@ function MaxieGreeting({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
       : hr < 18
         ? 'Good afternoon'
         : 'Good evening';
-  const salutation = `${baseSalutation}${name ? `, ${name}` : ''}.`;
+  const salutation = `${baseSalutation}${name ? `, ${name}` : ''}!`;
   const left = b.budget - b.spent - b.fixedDue;
   const yesterdaySpend =
     cycle.dayIdx > 0
@@ -100,49 +103,58 @@ function MaxieGreeting({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
       : null;
   const recentSavings = b.txs.some(t => t.isSavings && t.offset >= Math.max(0, cycle.dayIdx - 1));
 
-  let mood: MaxieMood = 'calm';
+  let mood: MaxieMood = 'happy';
   let line = '';
+  let quickAsk: string | undefined;
   if (cycle.dayN === 1) {
     mood = 'happy';
     line = id
-      ? `Selamat gajian${name ? `, ${name}` : ''} — siklus baru, lembar baru. Siap mulai pelan-pelan.`
-      : `Happy payday${name ? `, ${name}` : ''}. Fresh cycle, clean slate — ready when you are.`;
+      ? `Selamat gajian${name ? `, ${name}` : ''}! Siklus baru, semangat baru — yuk mulai dengan langkah ringan hari ini.`
+      : `Happy payday${name ? `, ${name}` : ''}! Fresh cycle, clean slate — here's to a great month ahead!`;
   } else if (left < 0) {
     mood = 'steady';
     line = id
-      ? `${salutation} Siklus ini agak ketat, sudah lewat ${short(-left)} dari rencana. Kita atur pelan-pelan, ya.`
-      : `${salutation} Tight stretch — ${short(-left)} over plan so far. Let's take it one day at a time.`;
+      ? `${salutation} Siklus ini agak ketat, lewat ${short(-left)} dari rencana — tenang, kita atur bareng pelan-pelan ya.`
+      : `${salutation} A little tight at ${short(-left)} over plan — no stress, we've got this one day at a time.`;
+    quickAsk = id ? 'Kenapa siklus ini lewat rencana dan gimana cara aturnya?' : 'Why am I over plan and how do I recover?';
   } else if (cycle.daysLeft <= 3 && left >= 0) {
     mood = 'happy';
     line = id
-      ? `${salutation} Tinggal ${cycle.daysLeft + 1} hari lagi ke gajian, masih aman dengan sisa ${short(left)}.`
-      : `${salutation} Almost at payday with ${short(left)} still to spare — finishing strong.`;
+      ? `${salutation} Tinggal ${cycle.daysLeft + 1} hari lagi ke gajian dan masih ada sisa ${short(left)} — mantap banget, finishing strong!`
+      : `${salutation} Almost at payday with ${short(left)} still to spare — you're finishing strong!`;
   } else if (SAVINGS_TARGET_PCT > 0 && b.savedPct >= SAVINGS_TARGET_PCT && (cycle.dayN <= 4 || recentSavings)) {
     mood = 'happy';
     line = id
-      ? `${salutation} Target tabungan ${SAVINGS_TARGET_PCT}% siklus ini sudah tercapai!`
-      : `${salutation} Savings goal met — ${Math.round(b.savedPct)}% set aside this cycle!`;
+      ? `${salutation} Yeay, target tabungan ${SAVINGS_TARGET_PCT}% siklus ini sudah tercapai — keren banget!`
+      : `${salutation} Woohoo — savings goal met with ${Math.round(b.savedPct)}% set aside this cycle!`;
   } else if (yesterdaySpend === 0 && cycle.dayN >= 2) {
     mood = 'happy';
     line = id
-      ? `${salutation} Kemarin nol pengeluaran — awal yang enak buat jaga ritme.`
-      : `${salutation} Yesterday was a zero-spend day — nice momentum.`;
+      ? `${salutation} Kemarin nol pengeluaran — keren! Enak banget buat lanjutin ritme hari ini.`
+      : `${salutation} Zero spend yesterday — love that momentum! Let's keep the good groove going.`;
   } else if (b.paceToday > 0 && b.spent < b.paceToday * 0.9 && cycle.dayN >= 4) {
     mood = 'happy';
     line = id
-      ? `${salutation} Ritmemu rapi — masih ${short(b.paceToday - b.spent)} di bawah kecepatan normal hari ke-${cycle.dayN}.`
-      : `${salutation} Looking good — you're ${short(b.paceToday - b.spent)} under pace by day ${cycle.dayN}.`;
+      ? `${salutation} Ritmemu cakep banget — masih ${short(b.paceToday - b.spent)} di bawah kecepatan normal hari ke-${cycle.dayN}!`
+      : `${salutation} You're crushing it — ${short(b.paceToday - b.spent)} under pace by day ${cycle.dayN}!`;
   } else {
-    mood = 'calm';
+    mood = 'happy';
     line = id
-      ? `${salutation} Aman di ${short(b.safeDay)} per hari sampai gajian nanti.`
-      : `${salutation} You're set for ${short(b.safeDay)} a day until payday.`;
+      ? `${salutation} Semua masih aman di ${short(b.safeDay)} per hari sampai gajian nanti — semoga harimu menyenangkan!`
+      : `${salutation} Looking steady at ${short(b.safeDay)} a day until payday — hope you have a great day!`;
   }
 
   return (
     <div className={s.mxGreeting} data-wide>
       <Logo size={36} mood={mood} interactive />
-      <p className={s.mxGreetingText}>{line}</p>
+      <p className={s.mxGreetingText} style={{ marginRight: 'auto' }}>
+        {line}
+      </p>
+      {quickAsk && (
+        <button type="button" className={s.sxAttnPill} onClick={() => onAskMaxie(quickAsk)}>
+          <Icon d={IC.sparkle} size={12} /> {id ? 'Tanya Maxie' : 'Ask Maxie'}
+        </button>
+      )}
     </div>
   );
 }
@@ -154,20 +166,24 @@ function NeedsAttention({
   onOpenCategory,
   onOpenCategories,
   onSortBuffer,
+  onAskMaxie,
 }: {
   budget: Budget;
   onOpenCategory: (name: string) => void;
   onOpenCategories: () => void;
   onSortBuffer: () => void;
+  onAskMaxie: (ask?: string) => void;
 }) {
-  const { short } = useSettings();
+  const { short, settings } = useSettings();
   const { found } = usePlans();
+  const isId = settings.maxieLanguage === 'id';
   const alerts = b.cats
     .filter(c => c.status.key !== 'ok')
     .sort((a, z) => a.status.rank - z.status.rank || z.used - a.used);
   const bufferCount = b.txs.filter(t => t.cat === 'Buffer' && !t.isIncome && !t.isTransfer).length;
   const shown = alerts.slice(0, 4);
   if (alerts.length === 0 && bufferCount === 0 && found.length === 0) return null;
+  const topAlert = alerts[0];
 
   return (
     <section className={s.sxAttnCard} data-wide aria-label="Needs attention">
@@ -176,20 +192,33 @@ function NeedsAttention({
           <Icon d={IC.alert} size={15} color={alerts.some(c => c.status.key === 'over') ? C.redInk : C.amberInk} />
           Needs attention
         </span>
-        {(bufferCount > 0 || found.length > 0) && (
-          <div className={s.sxAttnActions}>
-            {bufferCount > 0 && (
-              <button type="button" className={s.sxAttnPill} onClick={onSortBuffer}>
-                Sort {bufferCount} in Buffer <Icon d={IC.arrowRight} size={12} />
-              </button>
-            )}
-            {found.length > 0 && (
-              <button type="button" className={s.sxAttnPill} onClick={onOpenCategories}>
-                Confirm {found.length} {found.length === 1 ? 'installment' : 'installments'} <Icon d={IC.arrowRight} size={12} />
-              </button>
-            )}
-          </div>
-        )}
+        <div className={s.sxAttnActions}>
+          {topAlert && (
+            <button
+              type="button"
+              className={s.sxAttnPill}
+              onClick={() =>
+                onAskMaxie(
+                  isId
+                    ? `Gimana cara ngerem ${topAlert.name} supaya siklus ini tetap aman?`
+                    : `How do I get back on track with ${topAlert.name}?`,
+                )
+              }
+            >
+              <Icon d={IC.sparkle} size={12} /> {isId ? 'Tanya Maxie' : 'Ask Maxie'}
+            </button>
+          )}
+          {bufferCount > 0 && (
+            <button type="button" className={s.sxAttnPill} onClick={onSortBuffer}>
+              Sort {bufferCount} in Buffer <Icon d={IC.arrowRight} size={12} />
+            </button>
+          )}
+          {found.length > 0 && (
+            <button type="button" className={s.sxAttnPill} onClick={onOpenCategories}>
+              Confirm {found.length} {found.length === 1 ? 'installment' : 'installments'} <Icon d={IC.arrowRight} size={12} />
+            </button>
+          )}
+        </div>
       </div>
       {shown.length > 0 && (
         <div className={s.sxAttnGrid}>

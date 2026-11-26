@@ -9,48 +9,65 @@
  *   GEMINI_PLAN_MODEL optional; the model for planning on the Plan tab, defaults to GEMINI_PLAN_MODEL
  */
 
-// Flash-Lite: a budgeting answer in seconds. Set GEMINI_MODEL to 'gemini-3.8-flash' for deeper (slower) answers.
+// Flash-Lite: fast budgeting answers & classification. Set GEMINI_MODEL to override.
 const GEMINI_DEFAULT_MODEL = 'gemini-3.5-flash-lite';
+// Balanced Flash fallback for chat & mid-tier planning.
+const GEMINI_MID_MODEL = 'gemini-3.8-flash';
+// Deep chat & planning: Gemini 4 Hydrogen (available on Free Tier) stepping down automatically to 3.8 Flash → 3.5 Flash-Lite.
+const GEMINI_PLAN_MODEL = 'gemini-4-hydrogen';
 
 const GEMINI_SYSTEM = [
   'You are Maxie, the budgeting assistant inside a personal spending tracker used by one person in Indonesia.',
-  'Voice: a calm, warm, capable friend who is very good with money. Speak as "I" and call the person "you". Lead with the answer, then the reason. Short sentences, contractions, plain everyday words.',
-  'No filler openers ("Great question!", "Certainly!"), no hype or flattery, no exclamation marks, no emoji, no dog puns. Be kind about overspending: say what happened and the next step, never scold.',
-  'In Indonesian use "kamu" for the person and "aku" for yourself, friendly and natural, not formal.',
-  'Answer from the data below (this pay cycle, amounts in its currency). Be concrete: name merchants, categories and amounts.',
-  'Keep replies short: at most about 120 words, short paragraphs or "- " bullets, **bold** for key numbers. Reply in the language of the user\'s latest message; when that is unclear, in the context\'s "language".',
+  'Voice: a cheerful, warm, capable friend who is great with money. Speak as "I" and call the person "you" (use their name from context when greeting). Lead with the answer, then the reason. Short sentences, contractions, plain everyday words.',
+  'Celebrate wins genuinely and keep tough stretches upbeat and constructive — never scold. Skip robotic filler ("Great question!", "Certainly!"), no emoji, no dog puns; light exclamation marks are fine when cheering a win.',
+  'In Indonesian use "kamu" for the person and "aku" for yourself — friendly, cheerful, and natural, not stiff or formal.',
+  'Answer from the data below (this pay cycle, amounts in its currency). Be concrete: name merchants, categories and amounts. Use pre-computed "topMerchants", "saved", "cards", and "categories" totals directly instead of recounting rows by hand.',
+  'Keep replies short: at most about 120 words, short paragraphs or "- " / "1. " lists, **bold** for key numbers. Reply in the language of the user\'s latest message; when that is unclear, in the context\'s "language".',
   'You give budgeting help only: no investment, tax or legal advice.',
   'Big one-off purchases inflate the daily average; say so when the pace projection looks driven by them.',
   'Transfers between own accounts, savings, investments and card bill payments are not spending.',
   '"answerFeedback" (when present) holds past answers the user rated: write more like the "liked" ones, and avoid whatever made the "disliked" ones unhelpful (length, tone, vagueness, wrong focus).',
   '',
-  'Respond with JSON only: {"reply": string, "actions": Action[]}. Suggest actions only when they clearly help; usually 0-3.',
+  'Respond with JSON only: {"reply": string, "actions": Action[], "followUps": string[]}.',
+  '"followUps": 2-3 very short (under 45 chars) helpful next questions the user might tap next, in the same language as your reply.',
+  'Suggest actions only when they clearly help; usually 0-3.',
   'Action is one of:',
   '- {"type":"rule","merchant":string,"category":string,"sub":string|null,"why":string}  every transaction from this merchant goes to category (and sub-category).',
   '- {"type":"recategorize","txIds":string[],"category":string,"sub":string|null,"why":string}  move these transactions.',
-  '- {"type":"move_limit","from":string,"to":string,"amount":number,"why":string}  move this much of one variable category\'s monthly limit to another (the total budget stays the same).',
+  '- {"type":"move_limit","from":string,"to":string,"amount":number,"why":string}  move this much of one variable category\'s monthly limit to another variable category (the total budget stays the same).',
   'Use only category names from "categoryNames", sub-categories from that category\'s "subs", and transaction ids from "transactions". "why" is one short sentence.',
 ].join('\n');
 
-/** p: { messages: [{ role: 'user'|'model', text }], context: object } → { reply, actions } or { error, detail }. */
+/** Deduplicate a list of model names while keeping order. */
+function uniqueModels_(list) {
+  const out = [];
+  list.forEach(m => {
+    const v = String(m || '').trim();
+    if (v && out.indexOf(v) === -1) out.push(v);
+  });
+  return out;
+}
+
+/** p: { messages: [{ role: 'user'|'model', text }], context: object, deep?: boolean } → { reply, actions, followUps, model } or { error, detail }. */
 function askGemini_(p) {
   const props = PropertiesService.getScriptProperties();
   const key = props.getProperty('GEMINI_API_KEY');
   if (!key) return { error: 'no_key' };
-  let model = props.getProperty('GEMINI_MODEL') || GEMINI_DEFAULT_MODEL;
+  const primary = props.getProperty('GEMINI_MODEL') || GEMINI_DEFAULT_MODEL;
+  let model = primary;
   // The last 12 turns are plenty for a budgeting chat and keep each request small.
   const messages = (p.messages || []).slice(-12);
   const body = {
     systemInstruction: { parts: [{ text: GEMINI_SYSTEM + '\n\nData (JSON):\n' + JSON.stringify(p.context || {}) }] },
     contents: messages.map(m => ({ role: m.role === 'model' ? 'model' : 'user', parts: [{ text: String(m.text || '').slice(0, 2000) }] })),
     // Low thinking: a budgeting answer doesn't need long reasoning, and it's what makes replies slow.
-    generationConfig: { responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 1200, thinkingConfig: { thinkingLevel: 'low' } },
+    generationConfig: { responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 1400, thinkingConfig: { thinkingLevel: 'low' } },
   };
   const started = Date.now();
   let res, data;
   if (p.deep) {
-    // Planning: the stronger model, a longer answer, and local prices when a city is known.
-    body.generationConfig.maxOutputTokens = 2400;
+    // Deep chat & planning: stronger model, longer answer, and local prices when a city is known.
+    body.generationConfig.maxOutputTokens = 2600;
     if (p.context && p.context.city)
       body.systemInstruction.parts[0].text +=
         '\n\nThe person lives in ' + p.context.city + '. Use Google Search to check typical local prices for their biggest everyday categories (a meal, coffee, groceries, rides) and compare with their own average purchase; mention the comparison where it matters.';
@@ -59,13 +76,20 @@ function askGemini_(p) {
     data = g.data;
     model = g.model;
   } else {
-    res = geminiFetch_(model, key, body);
-    data = geminiJson_(res);
-    // A model that doesn't take a thinking level: ask again without it.
-    if (res.getResponseCode() === 400 && /thinking/i.test(JSON.stringify(data || ''))) {
-      delete body.generationConfig.thinkingConfig;
-      res = geminiFetch_(model, key, body);
+    // Quick chat: fast primary model, automatically stepping to balanced Flash if rate-limited or unavailable.
+    const chain = uniqueModels_([primary, GEMINI_MID_MODEL, GEMINI_DEFAULT_MODEL]);
+    const stepDown = code => code === 429 || code === 403 || code === 404 || code >= 500;
+    for (let i = 0; i < chain.length; i++) {
+      model = chain[i];
+      const b = JSON.parse(JSON.stringify(body));
+      res = geminiFetch_(model, key, b);
       data = geminiJson_(res);
+      if (res.getResponseCode() === 400 && /thinking/i.test(JSON.stringify(data || ''))) {
+        delete b.generationConfig.thinkingConfig;
+        res = geminiFetch_(model, key, b);
+        data = geminiJson_(res);
+      }
+      if (res.getResponseCode() === 200 || !stepDown(res.getResponseCode())) break;
     }
   }
   // Timing and token use land in the Apps Script Executions log, to see what makes a reply slow.
@@ -83,10 +107,13 @@ function askGemini_(p) {
   try {
     // Some models wrap JSON in a code fence (or, with search on, in a sentence) even when asked not to.
     const out = JSON.parse(jsonPart_(text));
-    return { reply: String(out.reply || ''), actions: Array.isArray(out.actions) ? out.actions.slice(0, 5) : [], model: model };
+    const followUps = Array.isArray(out.followUps)
+      ? out.followUps.map(x => String(x || '').trim()).filter(x => x && x.length <= 70).slice(0, 3)
+      : [];
+    return { reply: String(out.reply || ''), actions: Array.isArray(out.actions) ? out.actions.slice(0, 5) : [], followUps: followUps, model: model };
   } catch (e) {
     // Not the JSON we asked for: show it as a plain answer.
-    return { reply: text, actions: [], model: model };
+    return { reply: text, actions: [], followUps: [], model: model };
   }
 }
 
@@ -116,20 +143,19 @@ function geminiJson_(res) {
   }
 }
 
-// Planning (Plan tab) gets the stronger model and more thinking: it's asked rarely and has to weigh the whole plan.
-// Set GEMINI_PLAN_MODEL in Script properties to use another one.
-const GEMINI_PLAN_MODEL = 'gemini-3.8-flash';
-
 /**
- * A planning request: the plan model with medium thinking and, when `search` is on, Google Search so Maxie can
- * check local prices. Steps back on its own when something isn't supported: no search (then JSON mode), no
- * thinking level, then the everyday model. Returns { res, data, model, searched }.
+ * A deep / planning request: tries the strongest configured model (default Gemini 4 Hydrogen, low thinking), then
+ * steps down cleanly to Gemini 3.8 Flash (medium) and Gemini 3.5 Flash-Lite (low), dropping Search grounding or
+ * thinkingConfig if unsupported. Returns { res, data, model, searched }.
  */
 function geminiPlan_(key, body, search) {
   const props = PropertiesService.getScriptProperties();
-  const models = [props.getProperty('GEMINI_PLAN_MODEL') || GEMINI_PLAN_MODEL, props.getProperty('GEMINI_MODEL') || GEMINI_DEFAULT_MODEL];
+  const models = uniqueModels_([
+    props.getProperty('GEMINI_PLAN_MODEL') || GEMINI_PLAN_MODEL,
+    GEMINI_MID_MODEL,
+    props.getProperty('GEMINI_MODEL') || GEMINI_DEFAULT_MODEL,
+  ]);
   const b = JSON.parse(JSON.stringify(body));
-  b.generationConfig.thinkingConfig = { thinkingLevel: 'medium' };
   // Search grounding and JSON mode don't mix: with search, the JSON comes back as text (parsed the same way).
   const withSearch = () => {
     b.tools = [{ google_search: {} }];
@@ -146,6 +172,9 @@ function geminiPlan_(key, body, search) {
   let res, data, model;
   for (let i = 0; i < models.length; i++) {
     model = models[i];
+    // Gemini 4 models think deeper per level, so 'low' keeps replies snappy; 3.8 Flash uses 'medium'; Flash-Lite uses 'low'.
+    const level = /^gemini-4/.test(model) ? 'low' : /flash-lite/.test(model) ? 'low' : 'medium';
+    b.generationConfig.thinkingConfig = { thinkingLevel: level };
     const started = Date.now();
     res = geminiFetch_(model, key, b);
     data = geminiJson_(res);
@@ -164,8 +193,6 @@ function geminiPlan_(key, body, search) {
     const code = res.getResponseCode();
     console.log('plan ' + model + (b.tools ? ' +search ' : ' ') + code + ' in ' + (Date.now() - started) + 'ms' + (code === 200 ? '' : ': ' + errText(data).slice(0, 200)));
     if (code === 200 || !(stepDown(code) || /model/i.test(errText(data)))) break;
-    // The next (everyday) model: low thinking, as it's used for chat.
-    if (b.generationConfig.thinkingConfig) b.generationConfig.thinkingConfig = { thinkingLevel: 'low' };
   }
   return { res: res, data: data, model: model, searched: !!b.tools };
 }
@@ -322,7 +349,7 @@ function guessCategories_(p) {
       ],
     },
     contents: [{ role: 'user', parts: [{ text: JSON.stringify({ categories: categories, examples: (p.examples || []).slice(0, 300), items: items }) }] }],
-    generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 4000, thinkingConfig: { thinkingLevel: 'low' } },
+    generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 4000, thinkingConfig: { thinkingLevel: 'minimal' } },
   };
   let res = geminiFetch_(model, key, body);
   let data = geminiJson_(res);

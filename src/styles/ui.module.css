@@ -2771,7 +2771,38 @@ textarea.input {
   font-size: 11px;
   color: var(--text-muted);
 }
-
+.chatContextBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+.chatRichHeading {
+  margin: 4px 0 0;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.chatCode {
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-200);
+}
+.chatActionBatch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+}
 .chatAction {
   display: flex;
   flex-direction: column;
@@ -2779,6 +2810,42 @@ textarea.input {
   padding: 10px 12px;
   border-radius: 10px;
   background: var(--accent-tint);
+  font-family: var(--font-sans);
+  line-height: 1.45;
+}
+.chatActionPreview {
+  font-size: 12px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+.chatModelTag {
+  margin-left: auto;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.chatFollowUps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+.chatFollowUp {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+}
+.chatFollowUp:hover {
+  border-color: var(--clay);
+  background: var(--clay-soft);
 }
 .chatNote {
   display: flex;
@@ -2851,7 +2918,8 @@ textarea.input {
 .chatInput::placeholder {
   color: var(--ink-muted);
 }
-.chatSend {
+.chatSend,
+.chatStop {
   flex: none;
   display: grid;
   place-items: center;
@@ -2872,10 +2940,42 @@ textarea.input {
   color: var(--ink-muted);
   cursor: default;
 }
-.chatNotesCheck {
-  font-size: 12px;
-  line-height: 16px;
+.chatStop {
+  background: var(--surface-200);
+  color: var(--ink);
+}
+.chatStop:hover {
+  background: var(--border-strong);
+}
+.chatStopSquare {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: currentColor;
+}
+.chatFootRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chatNotesChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
   color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.chatNotesChip[aria-pressed='true'] {
+  border-color: var(--clay);
+  background: var(--clay-soft);
+  color: var(--ink);
 }
 @media (max-width: 759px) {
   .chatPanel {

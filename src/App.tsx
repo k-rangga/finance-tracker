@@ -427,6 +427,7 @@ export default function App() {
                   setPlanView('next');
                   setTab('plan');
                 }}
+                onAskMaxie={ask => setChat({ ask })}
               />
             )}
             {tab === 'categories' && (

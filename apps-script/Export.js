@@ -9,7 +9,7 @@
  */
 
 /** Script properties that are this script's own (keys, ids, run flags), not the app's data. */
-const EXPORT_SKIP_PROPS = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_USER_ID', 'SPREADSHEET_ID', 'GEMINI_API_KEY', 'GEMINI_MODEL', 'gmailSyncRunning'];
+const EXPORT_SKIP_PROPS = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_USER_ID', 'SPREADSHEET_ID', 'GEMINI_API_KEY', 'GEMINI_MODEL', 'GEMINI_PLAN_MODEL', 'gmailSyncRunning'];
 
 function copyToSupabase() {
   const props = PropertiesService.getScriptProperties();

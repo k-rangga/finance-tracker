@@ -13,7 +13,7 @@ import type { Store, Tables } from './store.js';
 const FILES = ['Sheets.js', 'Parse.js', 'Code.js', 'Gmail.js', 'Gemini.js', 'Hyperliquid.js', 'Receipts.js'];
 const TZ = 'Asia/Jakarta';
 /** Script properties that are server secrets (Vercel environment variables), never per-user data. */
-const SECRET_PROPS = ['GEMINI_API_KEY', 'GEMINI_MODEL'];
+const SECRET_PROPS = ['GEMINI_API_KEY', 'GEMINI_MODEL', 'GEMINI_PLAN_MODEL'];
 
 export const appsScriptDir = () => path.join(process.cwd(), 'apps-script');
 
