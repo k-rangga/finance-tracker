@@ -19,6 +19,7 @@ import type { FixedBillStatus } from '../lib/fixedBills';
 import { dayLabel, dayMonth, tidyName, toISO } from '../lib/format';
 import type { PlanView } from '../lib/installments';
 import { useSettings } from '../lib/settings';
+import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -123,6 +124,7 @@ export function CalendarMain({
   todayISO: string;
 }) {
   const { settings, short } = useSettings();
+  const phone = useIsPhone();
 
   const downloadIcs = () => {
     const ics = buildIcsExport(data.allEvents, settings.currency);
@@ -142,8 +144,8 @@ export function CalendarMain({
   return (
     <div className={s.stack}>
       <Card style={{ gap: 16 }}>
-        <div className={s.calHead}>
-          <div className={s.calNav}>
+        <div className={s.cfCalHead}>
+          <div className={s.cfCalNav}>
             <button type="button" className={s.iconBtnSm} aria-label="Previous month" onClick={() => onShiftMonth(-1)}>
               <Icon d={IC.chevLeft} size={16} />
             </button>
@@ -156,7 +158,7 @@ export function CalendarMain({
             </button>
           </div>
           <div className={s.calActions}>
-            <div className={s.sxMiniSeg} role="group" aria-label="Calendar layers">
+            <div className={s.sxMiniSeg} data-own-gestures role="group" aria-label="Calendar layers">
               {LAYERS.map(([id, label]) => (
                 <button key={id} type="button" aria-pressed={layer === id} onClick={() => setLayer(id)}>
                   {label}
@@ -196,7 +198,7 @@ export function CalendarMain({
               <span key={w}>{w}</span>
             ))}
           </div>
-          <div className={s.calGrid} role="grid" aria-label={`Cashflow calendar for ${data.label}`}>
+          <div className={s.cfCalGrid} role="grid" aria-label={`Cashflow calendar for ${data.label}`}>
             {data.days.map(d => {
               const visEvents = d.events.filter(e => eventVisible(e, layer));
               const showSpend = (layer === 'all' || layer === 'spending') && d.spend > 0;
@@ -217,7 +219,10 @@ export function CalendarMain({
                   aria-pressed={isSelected}
                   aria-label={`${dayLabel(d.date)}${d.spend > 0 ? `, spent ${short(d.spend)}` : ''}${visEvents.length ? `, ${visEvents.length} scheduled` : ''}`}
                   style={heat > 0 ? { background: `color-mix(in srgb, var(--clay) ${Math.round(heat * 100)}%, var(--surface))` } : undefined}
-                  onClick={() => onSelectDay(d.iso)}
+                  onClick={() => {
+                    onSelectDay(d.iso);
+                    if (phone) requestAnimationFrame(() => document.getElementById('cal-day-detail')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+                  }}
                 >
                   <span className={s.calDayNum}>{d.date.getDate()}</span>
                   {showSpend && <span className={s.calDaySpend}>{short(d.spend)}</span>}
@@ -357,7 +362,7 @@ export function CalendarSide({
 
   const body = day ? (
     <>
-      <section className={s.sideCard}>
+      <section id="cal-day-detail" className={s.sideCard}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
           <h3 className={s.sideTitle}>{dayLabel(day.date)}</h3>
           {day.isToday && <span className={s.modelTag}>Today</span>}

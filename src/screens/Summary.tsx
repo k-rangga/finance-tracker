@@ -493,7 +493,7 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
           Zero spend today bumps tomorrow up to <strong>{short(tomorrowSafe)}/day</strong> (+{short(tomorrowSafe - b.safeDay)}).
         </span>
       )}
-      <div className={s.sxLine} onPointerMove={pick} onPointerDown={pick} onPointerLeave={() => setHover(null)} onPointerCancel={() => setHover(null)}>
+      <div className={s.sxLine} data-own-gestures onPointerMove={pick} onPointerDown={pick} onPointerLeave={() => setHover(null)} onPointerCancel={() => setHover(null)}>
         <svg viewBox={`0 0 ${CW} ${CH}`} preserveAspectRatio="none" role="img" aria-label={`Spent ${full(cum[today])} so far; heading for ${full(end)} by payday, plan ${full(b.budget)}`}>
           <defs>
             <linearGradient id="sxCycleFill" x1="0" y1="0" x2="0" y2="1">
@@ -734,16 +734,25 @@ function DailyBars({ cycle, budget: b, onOpenDay }: { cycle: Cycle; budget: Budg
   // Leave generous headroom above the tallest bar so top value labels never clump into the subtitle.
   const maxBar = Math.max(...sofar, 0);
   const top = Math.max(avg * 1.6, maxBar * 1.22, 1);
-  // Label only the three biggest days (two on phones) and today.
-  const labelled = new Set(
-    sofar
-      .map((v, i) => ({ v, i }))
-      .filter(x => x.v > 0)
-      .sort((x, y) => y.v - x.v)
-      .slice(0, phone ? 2 : 3)
-      .map(x => x.i),
-  );
+  // Label only the three biggest days (two on phones, spaced apart so labels don't collide) and today.
+  const labelled = new Set<number>();
   if (sofar[cycle.dayIdx] > 0) labelled.add(cycle.dayIdx);
+  const peaks = sofar
+    .map((v, i) => ({ v, i }))
+    .filter(x => x.v > 0)
+    .sort((x, y) => y.v - x.v);
+  const maxPeaks = phone ? 2 : 3;
+  let added = 0;
+  for (const p of peaks) {
+    if (added >= maxPeaks) break;
+    if (labelled.has(p.i)) {
+      added++;
+      continue;
+    }
+    if (phone && [...labelled].some(idx => Math.abs(idx - p.i) <= 2)) continue;
+    labelled.add(p.i);
+    added++;
+  }
   // A spike: a day over 2.5× the average, named by its two biggest categories.
   const spikeIdx = sofar.reduce((m, v, i) => (v > (sofar[m] ?? 0) ? i : m), 0);
   const spike = sofar[spikeIdx] > avg * 2.5 && cycle.dayN >= 5 ? spikeIdx : null;
@@ -764,7 +773,7 @@ function DailyBars({ cycle, budget: b, onOpenDay }: { cycle: Cycle; budget: Budg
       sub={`${dayMonth(cycle.start)} – ${dayMonth(cycle.today)}${zeroDays > 0 ? `, ${zeroDays} zero-spend ${zeroDays === 1 ? 'day' : 'days'}` : ''}`}
       right={
         <span>
-          <strong style={{ color: C.text }}>{full(total)}</strong> in {cycle.dayN} {cycle.dayN === 1 ? 'day' : 'days'}
+          <strong style={{ color: C.text }}>{(phone ? short : full)(total)}</strong> in {cycle.dayN} {cycle.dayN === 1 ? 'day' : 'days'}
         </span>
       }
     >
@@ -781,7 +790,7 @@ function DailyBars({ cycle, budget: b, onOpenDay }: { cycle: Cycle; budget: Budg
             <span className={s.sxAvgLabel}>Avg {short(avg)}</span>
           </span>
         )}
-        {shown != null && (
+        {shown != null && !(phone && picked === shown) && (
           <div className={s.mxTip} style={{ left: tipPct + '%', bottom: Math.min(92, Math.max(16, (sofar[shown] / top) * 100 + 8)) + '%' }} role="tooltip">
             <strong className={s.mxTipVal}>{full(sofar[shown])}</strong>
             <span className={s.mxTipLabel}>{dayMonth(cycle.dateOf(shown))}</span>
@@ -794,8 +803,8 @@ function DailyBars({ cycle, budget: b, onOpenDay }: { cycle: Cycle; budget: Budg
               type="button"
               className={s.sxDayBar}
               data-active={i === shown || undefined}
-              onMouseEnter={() => setHover(i)}
-              onFocus={() => setHover(i)}
+              onMouseEnter={() => !phone && setHover(i)}
+              onFocus={() => !phone && setHover(i)}
               onBlur={() => setHover(null)}
               onClick={() => setPicked(p => (p === i ? null : i))}
               aria-label={`${dayMonth(cycle.dateOf(i))}: ${full(v)}`}
@@ -1031,7 +1040,7 @@ function WhereMap({
                     <>
                       <span className={s.sxTmName}>{c.name}</span>
                       <span className={s.sxTmPct}>
-                        {c.w >= 120 ? `${short(c.value)} (${pct(c.value)})` : pct(c.value)}
+                        {c.w >= 135 ? `${short(c.value)} (${pct(c.value)})` : pct(c.value)}
                       </span>
                     </>
                   )}

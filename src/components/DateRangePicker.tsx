@@ -153,6 +153,12 @@ export function DateRangePicker({ from, to, min, max, cycleStart, onChange, onCl
 
   return (
     <div ref={box} className={s.calPop} role="dialog" aria-label="Pick a date range">
+      <div className={s.sheetHeadMobile}>
+        <span className={s.mxPopTitle}>Date range</span>
+        <button type="button" className={s.iconBtnSm} aria-label="Close date range" onClick={onClose}>
+          <Icon d={IC.close} size={16} />
+        </button>
+      </div>
       <div className={s.calMonths}>
         {month(firstOfMonth(view, -1), 'prev')}
         {month(view, 'cur')}

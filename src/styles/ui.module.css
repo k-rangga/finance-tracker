@@ -750,14 +750,14 @@ textarea.input {
   flex-direction: column;
   gap: 18px;
 }
-@media (max-width: 640px) {
+@media (max-width: 759px) {
   .overlay {
     align-items: flex-end;
     padding: 0;
   }
   .dialog {
     max-width: none !important;
-    max-height: 90vh;
+    max-height: 90dvh;
     overflow-y: auto;
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     padding: 20px;
@@ -835,6 +835,7 @@ textarea.input {
 .catText {
   display: inline-flex;
   align-items: center;
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
   font: inherit;
@@ -843,7 +844,8 @@ textarea.input {
   color: var(--text-soft);
   background: none;
   border: none;
-  padding: 2px 0;
+  padding: 4px 6px 4px 0;
+  margin: -2px 0;
   cursor: pointer;
 }
 .catText:focus-visible {
@@ -920,6 +922,41 @@ textarea.input {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+.sheetBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(20, 18, 16, 0.36);
+}
+.sheetHeadMobile {
+  display: none;
+}
+@media (max-width: 759px) {
+  .sheetHeadMobile {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 2px 4px;
+    min-width: 0;
+  }
+  .rowSheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    z-index: 65;
+    margin-top: 0;
+    width: auto;
+    max-width: none;
+    max-height: 82dvh;
+    overflow-y: auto;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding: 14px 16px calc(18px + env(safe-area-inset-bottom));
+    border-bottom: none;
+  }
 }
 .pickSearch {
   display: flex;
@@ -1308,7 +1345,7 @@ textarea.input {
   font-weight: 600;
 }
 /* Phones: one month, with its own back arrow. */
-@media (max-width: 640px) {
+@media (max-width: 759px) {
   .calMonthPrev {
     display: none;
   }
@@ -1348,6 +1385,18 @@ textarea.input {
 }
 .rowMore:hover {
   background: var(--divider);
+}
+@media (max-width: 759px) {
+  .rowMore {
+    width: 28px;
+    height: 32px;
+    margin-right: -6px;
+    opacity: 0.55;
+  }
+  .receiptBtn {
+    width: 28px;
+    height: 28px;
+  }
 }
 .toast {
   position: fixed;
@@ -1433,6 +1482,14 @@ textarea.input {
   background-color: var(--bg);
   background-image: var(--ambient-glow);
   background-attachment: fixed;
+}
+@media (max-width: 759px) {
+  .stickyBar {
+    background-image: none;
+    background-attachment: scroll;
+    padding: 8px 10px 6px;
+    gap: 8px;
+  }
 }
 .dayHead {
   position: sticky;
@@ -3256,7 +3313,8 @@ textarea.input {
 .sectionHead {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   padding: 0 4px;
   font-size: 13px;
   font-weight: 600;
@@ -3266,6 +3324,12 @@ textarea.input {
   margin-left: auto;
   font-weight: 500;
   white-space: nowrap;
+}
+@media (max-width: 759px) {
+  .sectionHeadRight {
+    white-space: normal;
+    text-align: right;
+  }
 }
 .streak {
   display: inline-flex;
@@ -3557,7 +3621,8 @@ textarea.input {
 .sxChartHead {
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px 6px;
   min-height: 24px;
 }
 .sxChartTitle {
@@ -3651,7 +3716,7 @@ textarea.input {
   color: var(--text-muted);
 }
 
-/* Three interactive tiles: a column on wide screens, a row on phones. */
+/* Three interactive tiles: a column on wide screens, 1+2 on phones so labels and values never get crushed. */
 .sxTilesWrap {
   display: flex;
   flex-direction: column;
@@ -3667,8 +3732,11 @@ textarea.input {
 @media (max-width: 759px) {
   .sxTiles {
     grid-template-rows: none;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+  }
+  .sxTiles > :first-child {
+    grid-column: 1 / -1;
   }
 }
 .sxTile {
@@ -3786,19 +3854,24 @@ button.sxTile:disabled {
 }
 @media (max-width: 759px) {
   .sxTile {
-    padding: 12px;
-    gap: 4px;
+    padding: 13px 14px;
+    gap: 5px;
   }
   .sxTileValue {
-    font-size: 18px;
-    line-height: 24px;
+    font-size: 21px;
+    line-height: 26px;
   }
   .sxTileIcon {
-    display: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+  }
+  .sxTileLabel {
+    gap: 6px;
   }
   .sxTileNote {
     white-space: normal;
-    line-height: 15px;
+    line-height: 16px;
   }
 }
 .sxTileMeter {
@@ -3824,6 +3897,11 @@ button.sxTile:disabled {
   gap: 4px;
   height: 120px;
   margin-top: 8px;
+}
+@media (max-width: 759px) {
+  .sxDayBars {
+    gap: 2px;
+  }
 }
 .sxDayBar {
   flex: 1;
@@ -4119,7 +4197,7 @@ button.sxTile:disabled {
 }
 .ubList {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) max-content max-content 32px;
+  grid-template-columns: 16px minmax(0, 1fr) max-content max-content max-content;
   column-gap: 10px;
   row-gap: 2px;
   margin: 0 -4px 0 -8px;
@@ -4127,7 +4205,7 @@ button.sxTile:disabled {
 .ubRow {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) 68px minmax(68px, auto) 28px;
+  grid-template-columns: 8px minmax(0, 1fr) 68px minmax(68px, auto) auto;
   grid-template-columns: subgrid;
   align-items: center;
   min-height: 36px;
@@ -4135,6 +4213,12 @@ button.sxTile:disabled {
   border-radius: 8px;
   font-size: 14px;
   transition: background 0.12s ease;
+}
+.ubActions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
 }
 .ubRow:hover {
   background: var(--hover);
@@ -4187,6 +4271,19 @@ button.sxTile:disabled {
   background: var(--border);
   color: var(--ink);
   opacity: 1;
+}
+@media (max-width: 759px) {
+  .ubList {
+    column-gap: 8px;
+  }
+  .ubRow {
+    min-height: 40px;
+  }
+  .ubRemove {
+    width: 32px;
+    height: 32px;
+    opacity: 0.78;
+  }
 }
 .sxRecentList {
   display: flex;
@@ -4352,15 +4449,16 @@ button.sxTile:disabled {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  column-gap: 16px;
-  row-gap: 6px;
+  column-gap: 14px;
+  row-gap: 4px;
   font-size: 14px;
 }
 .sxTmKey {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0;
+  padding: 4px 2px;
+  min-height: 32px;
   border: none;
   background: none;
   font: inherit;
@@ -4894,10 +4992,14 @@ button.sxTile:disabled {
 .mxLinks {
   display: flex;
   align-items: center;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 8px 20px;
   font-size: 14px;
 }
 .mxLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
   border: 0;
   background: none;
   padding: 0;
@@ -5016,8 +5118,41 @@ button.sxTile:disabled {
   color: var(--ink-muted);
 }
 @media (max-width: 759px) {
+  .mxHead {
+    gap: 10px;
+    padding: 14px 14px 10px;
+  }
+  .mxBill .mxHead {
+    padding: 14px;
+  }
+  .mxIcon {
+    width: 36px;
+    height: 36px;
+  }
+  .mxStatus {
+    font-size: 14px;
+  }
+  .mxBillAmt {
+    font-size: 15px;
+  }
+  .mxMeter {
+    margin: 0 14px 14px;
+  }
+  .mxBody {
+    padding: 0 14px 14px;
+  }
+  .mxWeek {
+    gap: 3px;
+  }
+  .mxDayVal {
+    font-size: 10.5px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .mxBillBody {
-    padding-left: 16px;
+    padding-left: 14px;
+    padding-right: 14px;
   }
   .mxItemBtn {
     flex-wrap: wrap;
@@ -5435,13 +5570,41 @@ button.sxTile:disabled {
   background: var(--surface-200);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 759px) {
+  .mxToolbar {
+    gap: 6px;
+  }
+  .mxToolbarLeft {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+    gap: 6px;
+  }
+  .mxToolbarLeft::-webkit-scrollbar {
+    display: none;
+  }
+  .mxTbtn {
+    padding: 0 10px;
+    gap: 6px;
+    font-size: 13.5px;
+    flex: none;
+  }
+  .mxViewSeg {
+    flex: none;
+  }
+  .mxViewSeg button {
+    padding: 0 10px;
+    font-size: 13px;
+  }
   .mxToolbarRight {
     flex-basis: 100%;
     justify-content: stretch;
   }
   .mxSearch {
     width: 100%;
+    height: 40px;
   }
   .mxPop,
   .calPop {
@@ -5453,10 +5616,11 @@ button.sxTile:disabled {
     margin-top: 0;
     width: auto;
     max-width: none;
-    max-height: 85vh;
+    max-height: 85dvh;
     overflow-y: auto;
     z-index: 65;
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    border-bottom: none;
     padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom));
   }
   .mxPopFilter,
@@ -5464,6 +5628,13 @@ button.sxTile:disabled {
     width: auto;
     padding: var(--space-4);
     padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom));
+  }
+  .mxPopFilter .picker {
+    position: static;
+    width: 100%;
+    max-width: none;
+    margin-top: 6px;
+    box-shadow: none;
   }
   .mxRule {
     flex-wrap: wrap;
@@ -5688,6 +5859,17 @@ button.sxTile:disabled {
   font-weight: 600;
   cursor: pointer;
 }
+@media (max-width: 759px) {
+  .catFilterPill {
+    height: 36px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+  .catSortSelect {
+    height: 38px;
+    padding: 0 12px;
+  }
+}
 .mxLabelRow {
   display: inline-flex;
   align-items: center;
@@ -5831,6 +6013,12 @@ button.sxTile:disabled {
 .mxNudgeBtn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+@media (max-width: 759px) {
+  .mxNudgeBtn {
+    height: 34px;
+    padding: 0 12px;
+  }
 }
 .mxShareBox {
   display: flex;
@@ -5996,6 +6184,7 @@ button.sxTile:disabled {
 .fbSuggestRow {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
 }
@@ -6159,6 +6348,12 @@ button.sxTile:disabled {
 }
 .ubPayBtn:active {
   transform: scale(0.92);
+}
+@media (max-width: 759px) {
+  .ubPayBtn {
+    width: 32px;
+    height: 32px;
+  }
 }
 .sortBanner {
   display: flex;
@@ -7059,14 +7254,14 @@ button.sxTile:active:not(:disabled),
 }
 
 /* ---- Transactions Integrated Cashflow Calendar ---- */
-.calHead {
+.cfCalHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
 }
-.calNav {
+.cfCalNav {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -7084,6 +7279,19 @@ button.sxTile:active:not(:disabled),
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  max-width: 100%;
+}
+.calActions .sxMiniSeg {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.calActions .sxMiniSeg::-webkit-scrollbar {
+  display: none;
+}
+.calActions .sxMiniSeg button {
+  white-space: nowrap;
+  flex: none;
 }
 .calKpis {
   display: grid;
@@ -7118,7 +7326,7 @@ button.sxTile:active:not(:disabled),
   text-transform: uppercase;
   color: var(--text-muted);
 }
-.calGrid {
+.cfCalGrid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 6px;
@@ -7299,26 +7507,51 @@ button.sxTile:active:not(:disabled),
 .calJumpRow:hover {
   background: var(--hover);
 }
-@media (max-width: 640px) {
+@media (max-width: 759px) {
+  .cfCalNav {
+    width: 100%;
+  }
+  .calTitle {
+    min-width: 0;
+    flex: 1;
+    font-size: 19px;
+  }
   .calKpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    padding: 10px;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+  .calKpis .modelKpiLabel {
+    font-size: 10px;
+    letter-spacing: 0.02em;
   }
   .calKpiVal {
     font-size: 17px;
   }
-  .calGrid {
-    gap: 4px;
+  .calWeekdays,
+  .cfCalGrid {
+    gap: 3px;
   }
   .calCell {
-    min-height: 54px;
-    padding: 5px;
+    min-height: 52px;
+    padding: 4px 2px;
     border-radius: 9px;
+    align-items: center;
+    text-align: center;
+    gap: 3px;
   }
   .calDaySpend,
   .calZeroTag {
     font-size: 9.5px;
+  }
+  .calWeekLabel {
+    width: 88px;
+    font-size: 12px;
+  }
+}
+@media (max-width: 420px) {
+  .calZeroTag {
+    display: none;
   }
 }
 
@@ -7437,7 +7670,7 @@ button.sxTile:active:not(:disabled),
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 18px 0;
+  padding: 12px 16px 0;
 }
 .storyDots {
   flex: 1;
@@ -7446,24 +7679,26 @@ button.sxTile:active:not(:disabled),
 }
 .storyDot {
   flex: 1;
-  height: 3.5px;
+  height: 24px;
   border: none;
   border-radius: 999px;
   background: rgba(255, 250, 242, 0.28);
-  padding: 0;
+  background-clip: content-box;
+  padding: 10px 0;
   cursor: pointer;
   transition: background-color 0.24s ease, opacity 0.24s ease;
 }
 .storyDot[data-past],
 .storyDot[data-active] {
   background: #f6efe4;
+  background-clip: content-box;
 }
 .storyDot[data-past] {
   opacity: 0.52;
 }
 .storyClose {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: 999px;
   border: 1px solid rgba(255, 250, 242, 0.18);
   background: rgba(20, 24, 28, 0.34);
@@ -7492,6 +7727,8 @@ button.sxTile:active:not(:disabled),
   flex-direction: column;
   gap: 18px;
   padding: 230px 22px 20px;
+  overflow-y: auto;
+  min-height: 0;
 }
 .storyCopy {
   display: flex;
@@ -7657,15 +7894,22 @@ button.sxTile:active:not(:disabled),
   transform: translateY(-1px);
 }
 @media (max-width: 560px) {
+  .vigCard {
+    gap: 12px;
+    padding: 12px 14px;
+  }
   .vigArtBtn {
-    width: 120px;
+    width: 96px;
+  }
+  .vigBody {
+    flex: 1 1 160px;
   }
   .storyModal {
-    min-height: 500px;
+    min-height: 460px;
     border-radius: 22px;
   }
   .storyContent {
-    padding: 205px 18px 18px;
+    padding: clamp(140px, 28dvh, 205px) 18px 18px;
   }
   .storyTitle {
     font-size: 23px;

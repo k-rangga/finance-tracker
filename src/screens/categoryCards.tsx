@@ -15,6 +15,7 @@ import { dayMonth, sum, tidyName, toISO } from '../lib/format';
 import { leftAfter } from '../lib/installments';
 import { useData } from '../lib/data';
 import { useSettings } from '../lib/settings';
+import { useIsPhone } from '../lib/media';
 import { storage } from '../lib/storage';
 import { C } from '../lib/tokens';
 import { TRANSFER_CATEGORY } from '../data/categories';
@@ -154,6 +155,7 @@ export function BudgetCard({
   extra?: ReactNode;
 }) {
   const { settings, full, short } = useSettings();
+  const phone = useIsPhone();
   const { setOverride } = useData();
   const { c, cur, lim, mine } = r;
   const over = lim > 0 && cur > lim ? cur - lim : 0;
@@ -267,7 +269,7 @@ export function BudgetCard({
         </span>
         <span className={s.mxStatus} data-over={over > 0 || undefined}>
           {over > 0 && <Icon d={IC.alert} size={15} />}
-          {over > 0 ? `${full(over)} over` : `${full(room)} left`}
+          {over > 0 ? `${(phone ? short : full)(over)} over` : `${(phone ? short : full)(room)} left`}
         </span>
         <Icon d={IC.chevDown} size={18} color={C.textMuted} style={{ flex: 'none', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.16s ease-out' }} />
       </button>
@@ -428,7 +430,8 @@ export function BillItem({
   editor: ReactNode;
   onShowTransactions: (cat: string) => void;
 }) {
-  const { full } = useSettings();
+  const { full, short } = useSettings();
+  const phone = useIsPhone();
   const { c, cur, lim, mine, last } = r;
   const dueTotal = sum(due.map(x => x.amount));
   const status: 'paid' | 'due' | 'none' = cur > 0 || marked ? 'paid' : due.length ? 'due' : 'none';
@@ -495,7 +498,7 @@ export function BillItem({
           </span>
         </span>
         <span className={s.mxBillAmt} data-unpaid={status !== 'paid' || undefined}>
-          {full(status === 'paid' ? cur || lim : status === 'due' ? dueTotal : lim)}
+          {(phone ? short : full)(status === 'paid' ? cur || lim : status === 'due' ? dueTotal : lim)}
         </span>
         <Icon d={IC.chevDown} size={18} color={C.textMuted} style={{ flex: 'none', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.16s ease-out' }} />
       </button>
@@ -535,7 +538,8 @@ export function BillItem({
  * cycle and the transactions. The payments count in their own categories; this is where you see them together.
  */
 export function InstallmentsGroup({ cycle, open, onToggle }: { cycle: Cycle; open: boolean; onToggle: () => void }) {
-  const { full } = useSettings();
+  const { full, short } = useSettings();
+  const phone = useIsPhone();
   const { views, openSchedule } = usePlans();
   const rows = views
     .map(p => ({ p, pay: p.payments.find(x => x.date >= cycle.start && x.date <= cycle.end) }))
@@ -561,7 +565,7 @@ export function InstallmentsGroup({ cycle, open, onToggle }: { cycle: Cycle; ope
           </span>
         </span>
         <span className={s.mxBillAmt} data-unpaid={!!nextDue || undefined}>
-          {full(total)}
+          {(phone ? short : full)(total)}
         </span>
         <Icon d={IC.chevDown} size={18} color={C.textMuted} style={{ flex: 'none', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.16s ease-out' }} />
       </button>

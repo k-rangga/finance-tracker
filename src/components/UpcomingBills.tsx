@@ -7,6 +7,7 @@ import type { Cycle } from '../lib/cycle';
 import { cycleKey, type PlannedCost } from '../lib/cyclePlans';
 import { addDays, dayMonth, sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
+import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
 import { CATEGORIES, categoryByName } from '../data/categories';
 import type { Bill } from '../data/transactions';
@@ -30,6 +31,7 @@ type Props = {
  */
 export function UpcomingBills({ id, cycle, bills, limit, compact, onDismiss, onMarkPaid }: Props) {
   const { settings, update, short, full } = useSettings();
+  const phone = useIsPhone();
   const [showAll, setShowAll] = useState(false);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
@@ -39,7 +41,7 @@ export function UpcomingBills({ id, cycle, bills, limit, compact, onDismiss, onM
   const [category, setCategory] = useState('Utilities');
 
   const idr = settings.currency === 'IDR';
-  const fmt = compact ? short : full;
+  const fmt = compact || phone ? short : full;
   const total = sum(bills.map(x => x.amount));
   const visible = limit && !showAll ? bills.slice(0, limit) : bills;
 
@@ -160,26 +162,28 @@ export function UpcomingBills({ id, cycle, bills, limit, compact, onDismiss, onM
                     {dateLabel}
                   </span>
                   <span className={s.ubAmt}>{fmt(x.amount)}</span>
-                  {onMarkPaid && x.billId && (
+                  <span className={s.ubActions}>
+                    {onMarkPaid && x.billId && (
+                      <button
+                        type="button"
+                        className={s.ubPayBtn}
+                        aria-label={`Mark ${cleanTitle} paid for this cycle`}
+                        title="Mark paid for this cycle"
+                        onClick={() => onMarkPaid(x)}
+                      >
+                        <Icon d={IC.check} size={13} strokeWidth={2.4} />
+                      </button>
+                    )}
                     <button
                       type="button"
-                      className={s.ubPayBtn}
-                      aria-label={`Mark ${cleanTitle} paid for this cycle`}
-                      title="Mark paid for this cycle"
-                      onClick={() => onMarkPaid(x)}
+                      className={s.ubRemove}
+                      aria-label={`Remove ${cleanTitle} for this cycle`}
+                      title="Skip or remove for this cycle"
+                      onClick={() => onDismiss(x)}
                     >
-                      <Icon d={IC.check} size={13} strokeWidth={2.4} />
+                      <Icon d={IC.close} size={14} />
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    className={s.ubRemove}
-                    aria-label={`Remove ${cleanTitle} for this cycle`}
-                    title="Skip or remove for this cycle"
-                    onClick={() => onDismiss(x)}
-                  >
-                    <Icon d={IC.close} size={14} />
-                  </button>
+                  </span>
                 </div>
               );
             })}

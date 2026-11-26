@@ -218,6 +218,7 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
   );
   const inst = useInstallmentTotals(cycle);
   const [instOpen, setInstOpen] = useState(false);
+  const [insightsOpen, setInsightsOpen] = useState(false);
 
   return (
     <div className={s.splitGrid}>
@@ -435,8 +436,33 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
         {mode === 'week' && <span style={{ fontSize: 13, color: C.textMuted, padding: '0 4px' }}>Fixed bills are monthly, so they're only in the cycle view.</span>}
       </div>
 
-      {/* Phones: Summary already has the totals, and the rows above say what's over. */}
-      {!phone && (
+      {phone ? (
+        <section className={s.splitSide}>
+          <button type="button" className={s.rowBtn} aria-expanded={insightsOpen} onClick={() => setInsightsOpen(v => !v)} style={{ padding: '14px 16px', minHeight: 48 }}>
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', textAlign: 'left' }}>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>Highlights &amp; changes</span>
+              <span style={{ fontSize: 13, color: C.textMuted }}>Watch list, biggest win, and changes vs last {mode === 'cycle' ? 'cycle' : 'week'}</span>
+            </span>
+            <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ transform: insightsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.16s ease' }} />
+          </button>
+          {insightsOpen && (
+            <div className="fade-in" style={{ borderTop: `1px solid ${C.divider}` }}>
+              <CategoriesPanel
+                bare
+                cycle={cycle}
+                mode={mode}
+                rows={[...variable, ...fixed]}
+                challenges={activeChallenges}
+                onPick={name => {
+                  setFilter('all');
+                  setOpen(name);
+                  requestAnimationFrame(() => document.getElementById('cat-' + name)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+                }}
+              />
+            </div>
+          )}
+        </section>
+      ) : (
         <CategoriesPanel
           cycle={cycle}
           mode={mode}
@@ -520,14 +546,16 @@ export function AmountEditor({ label, initial, onSave, onCancel, onRemove }: { l
   );
 }
 
-/** Side panel (wide screens): Watch list, active no-spend challenges, Biggest win, and Biggest changes. */
+/** Side panel (wide screens) or collapsible section (phones): Watch list, active no-spend challenges, Biggest win, and Biggest changes. */
 function CategoriesPanel({
+  bare,
   cycle,
   mode,
   rows,
   challenges,
   onPick,
 }: {
+  bare?: boolean;
   cycle: Cycle;
   mode: Mode;
   rows: Row[];
@@ -544,7 +572,7 @@ function CategoriesPanel({
     .sort((x, y) => Math.abs(y.cur - y.last) - Math.abs(x.cur - x.last))
     .slice(0, 3);
   return (
-    <aside className={s.splitSide} aria-label="Categories at a glance">
+    <aside className={bare ? undefined : s.splitSide} aria-label="Categories at a glance">
       <section className={s.sideCard}>
         <h3 className={s.sideTitle}>Watch list</h3>
         {watch.length === 0 ? (
@@ -593,15 +621,17 @@ function CategoriesPanel({
       )}
 
       {biggestWin && (
-        <button type="button" className={s.catSideWin} onClick={() => onPick(biggestWin.c.name)}>
-          <span className={s.catSideWinLabel}>Biggest win</span>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>
-            {biggestWin.c.name} is {short(biggestWin.last - biggestWin.cur)} lower
-          </span>
-          <span style={{ fontSize: 12.5, color: C.textMuted }}>
-            vs {mode === 'cycle' ? `last cycle by day ${cycle.dayN}` : 'last week'}
-          </span>
-        </button>
+        <section className={s.sideCard} style={{ paddingTop: bare ? 12 : undefined }}>
+          <button type="button" className={s.catSideWin} onClick={() => onPick(biggestWin.c.name)}>
+            <span className={s.catSideWinLabel}>Biggest win</span>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>
+              {biggestWin.c.name} is {short(biggestWin.last - biggestWin.cur)} lower
+            </span>
+            <span style={{ fontSize: 12.5, color: C.textMuted }}>
+              vs {mode === 'cycle' ? `last cycle by day ${cycle.dayN}` : 'last week'}
+            </span>
+          </button>
+        </section>
       )}
 
       {/* Only once there's a last time to compare with. */}

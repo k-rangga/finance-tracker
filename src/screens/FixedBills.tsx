@@ -7,6 +7,7 @@ import type { Budget, TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { useData } from '../lib/data';
 import { useSettings } from '../lib/settings';
+import { useIsPhone } from '../lib/media';
 import { dayMonth, ordinal, tidyName, toISO } from '../lib/format';
 import { C } from '../lib/tokens';
 import { CATEGORIES, categoryByName } from '../data/categories';
@@ -362,6 +363,7 @@ function FixedBillRow({
   onShowTransactions: (cat: string) => void;
 }) {
   const { full, short } = useSettings();
+  const phone = useIsPhone();
   const [pickingTx, setPickingTx] = useState(false);
   const [txQuery, setTxQuery] = useState('');
   const [editing, setEditing] = useState(false);
@@ -438,7 +440,7 @@ function FixedBillRow({
           </span>
         </span>
         <span className={s.mxBillAmt} data-unpaid={status === 'due' || status === 'overdue' || undefined}>
-          {full(status === 'paid' ? actual : expected)}
+          {(phone ? short : full)(status === 'paid' ? actual : expected)}
         </span>
         <Icon d={IC.chevDown} size={18} color={C.textMuted} style={{ flex: 'none', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.16s ease-out' }} />
       </button>

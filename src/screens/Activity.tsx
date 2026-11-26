@@ -76,18 +76,23 @@ type Popover = 'link' | 'share' | 'cat' | 'more' | 'note';
  */
 function useFlipUp<T extends HTMLElement>(style?: CSSProperties) {
   const ref = useRef<T>(null);
+  const phone = useIsPhone();
   const [up, setUp] = useState(false);
   useLayoutEffect(() => {
+    if (phone) return;
     const el = ref.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    // Room the bottom tab bar takes on phones.
-    const bottom = window.innerHeight - (window.innerWidth < 760 ? 104 : 16);
+    const bottom = window.innerHeight - 16;
     if (r.bottom <= bottom) return;
     if (r.top - r.height - 48 > 0) setUp(true);
-    // Fits neither way: scroll the page until it clears the tab bar.
+    // Fits neither way: scroll the page until it clears the viewport edge.
     else window.scrollBy({ top: r.bottom - bottom, behavior: 'smooth' });
-  }, []);
+  }, [phone]);
+  if (phone) {
+    const clean = style ? { ...style, left: undefined, right: undefined, top: undefined, bottom: undefined, width: undefined } : undefined;
+    return { ref, style: clean };
+  }
   return { ref, style: up ? { ...style, top: 'auto', bottom: '100%', marginTop: 0, marginBottom: 6 } : style };
 }
 
@@ -390,8 +395,9 @@ export function Activity({
       <div className={s.splitMain}>
         {/* Maxie Toolbar: view switcher, date chip, Filter, Sort on the left; Search on the right. */}
         <div ref={bar} className={s.stickyBar}>
+          {phone && panel && <div className={s.sheetBackdrop} onClick={() => setPanel(null)} aria-hidden="true" />}
           <div ref={toolbarRef} className={s.mxToolbar} role="toolbar" aria-label="Transaction view controls">
-            <div className={s.mxToolbarLeft}>
+            <div className={s.mxToolbarLeft} data-own-gestures>
               <div className={s.mxViewSeg} role="group" aria-label="View mode">
                 <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}>
                   List
@@ -449,11 +455,16 @@ export function Activity({
                   <div className={`${s.mxPop} ${s.mxPopFilter}`} role="dialog" aria-label="Filter transactions">
                     <div className={s.mxPopHead}>
                       <span className={s.mxPopTitle}>Filters</span>
-                      {activeFilterCount > 0 && (
-                        <button type="button" className={s.mxLinkBtn} onClick={() => setFilter({ ...filter, cat: '', hideTransfers: false })}>
-                          Clear all
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {activeFilterCount > 0 && (
+                          <button type="button" className={s.mxLinkBtn} onClick={() => setFilter({ ...filter, cat: '', hideTransfers: false })}>
+                            Clear all
+                          </button>
+                        )}
+                        <button type="button" className={`${s.iconBtnSm} ${s.mobileOnly}`} aria-label="Close filters" onClick={() => setPanel(null)}>
+                          <Icon d={IC.close} size={16} />
                         </button>
-                      )}
+                      </span>
                     </div>
                     <div className={s.mxRules}>
                       <div className={s.mxRule}>
@@ -497,6 +508,9 @@ export function Activity({
                     <div className={`${s.mxPop} ${s.mxPopSort}`} role="dialog" aria-label="Sort transactions">
                       <div className={s.mxPopHead}>
                         <span className={s.mxPopTitle}>Sort by</span>
+                        <button type="button" className={`${s.iconBtnSm} ${s.mobileOnly}`} aria-label="Close sort" onClick={() => setPanel(null)}>
+                          <Icon d={IC.close} size={16} />
+                        </button>
                       </div>
                       <div className={s.mxSortList} role="listbox" aria-label="Sort order">
                         {(Object.keys(SORT_LABELS) as TxSort[]).map(k => (
@@ -540,25 +554,42 @@ export function Activity({
               </label>
             </div>
           </div>
-
-          {/* Narrow screens: the recap as one short line (wide screens have the recap panel instead). */}
-          {view === 'list' && (
-            <div className={s.txSummaryLine} aria-live="polite">
-              <strong style={{ color: C.text, fontWeight: 600 }}>{full(out)} spent</strong>
-              {`, ${rangeLabel}`}, {inRange.length} {inRange.length === 1 ? 'transaction' : 'transactions'}
-              {cat ? `, ${cat}` : ''}
-              {filter.hideTransfers ? ', transfers hidden' : ''}
-              {guesses.toSort.length > 0 && (
-                <>
-                  {', '}
-                  <button type="button" className={s.sortLink} onClick={() => setSorting(guesses.toSort.map(t => t.id))}>
-                    {guesses.toSort.length} to sort →
-                  </button>
-                </>
-              )}
-            </div>
-          )}
         </div>
+
+        {/* Narrow screens: the recap as one short line + quick collapsible Recap card above the list. */}
+        {view === 'list' && (
+          <div className={s.txSummaryLine} aria-live="polite">
+            <strong style={{ color: C.text, fontWeight: 600 }}>{full(out)} spent</strong>
+            {`, ${rangeLabel}`}, {inRange.length} {inRange.length === 1 ? 'transaction' : 'transactions'}
+            {cat ? `, ${cat}` : ''}
+            {filter.hideTransfers ? ', transfers hidden' : ''}
+            {guesses.toSort.length > 0 && (
+              <>
+                {', '}
+                <button type="button" className={s.sortLink} onClick={() => setSorting(guesses.toSort.map(t => t.id))}>
+                  {guesses.toSort.length} to sort →
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {view === 'list' && phone && (
+          <section className={s.splitSide}>
+            <button type="button" className={s.rowBtn} aria-expanded={recapOpen} onClick={() => setRecapOpen(!recapOpen)} style={{ padding: '10px 14px', minHeight: 44 }}>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 1, marginRight: 'auto', textAlign: 'left' }}>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>Recap &amp; categories</span>
+                <span style={{ fontSize: 12.5, color: C.textMuted }}>Totals and tap-to-filter breakdown</span>
+              </span>
+              <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ transform: recapOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.16s ease' }} />
+            </button>
+            {recapOpen && (
+              <div className="fade-in" style={{ borderTop: `1px solid ${C.divider}` }}>
+                {recap}
+              </div>
+            )}
+          </section>
+        )}
 
         {view === 'calendar' ? (
           <CalendarMain
@@ -678,25 +709,9 @@ export function Activity({
           onMarkBillPaid={onMarkBillPaid}
           onDismissBill={onDismissBill}
         />
-      ) : phone ? (
-        // Phones: folded under one row; the total is already in the line above the list.
-        <section className={s.splitSide}>
-          <button type="button" className={s.rowBtn} aria-expanded={recapOpen} onClick={() => setRecapOpen(!recapOpen)} style={{ padding: '14px 16px', minHeight: 48 }}>
-            <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', textAlign: 'left' }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>Recap</span>
-              <span style={{ fontSize: 13, color: C.textMuted }}>Totals and spending by category</span>
-            </span>
-            <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ transform: recapOpen ? 'rotate(180deg)' : 'none' }} />
-          </button>
-          {recapOpen && (
-            <div className="fade-in" style={{ borderTop: `1px solid ${C.divider}` }}>
-              {recap}
-            </div>
-          )}
-        </section>
-      ) : (
+      ) : !phone ? (
         recap
-      )}
+      ) : null}
       {toast && (
         <Toast
           text={toast.text}
@@ -1031,8 +1046,9 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
       className={s.hoverRow}
       // Phones: tap anywhere that isn't a control to open the row's menu.
       onClick={e => compact && !(e.target as Element).closest('button, input, a, form, [role=dialog], [role=menu], [role=listbox]') && setPopover(popover === 'more' ? null : 'more')}
-      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: compact ? '10px 16px' : '8px 18px', cursor: compact ? 'pointer' : undefined }}
+      style={{ display: 'flex', alignItems: 'center', gap: compact ? 10 : 12, padding: compact ? '10px 14px' : '8px 18px', cursor: compact ? 'pointer' : undefined }}
     >
+      {compact && popover && <div className={s.sheetBackdrop} onClick={e => (e.stopPropagation(), setPopover(null))} aria-hidden="true" />}
       <span className={s.rowIcon}>
         <IconChip d={c ? c.icon : t.isCcPayment || t.isInstallment ? IC.card : t.isInvestment ? IC.trend : t.isSavings ? IC.piggy : t.isTransfer ? IC.transfer : IC.coins} bg={ic.bg} ink={ic.ink} />
       </span>
@@ -1042,7 +1058,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, fontSize: 13, color: C.textMuted }}>
           {t.isCcPayment ? (
-            <span style={{ fontSize: 13, fontWeight: 600, color: C.text, background: C.divider, borderRadius: 999, padding: '4px 10px' }}>
+            <span className={s.ellipsis} style={{ maxWidth: '100%', fontSize: 13, fontWeight: 600, color: C.text, background: C.divider, borderRadius: 999, padding: '4px 10px' }}>
               Transfer: {t.account} → {t.toAccount ?? 'card'}
             </span>
           ) : t.reimbursesId ? (
@@ -1068,13 +1084,18 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
               {note}
             </button>
           ) : (
-            where && <span className={s.ellipsis}>{where}</span>
+            where && (
+              <span className={s.ellipsis} style={{ flex: '1 1 0' }}>
+                {where}
+              </span>
+            )
           )}
         </div>
         {popover === 'note' && (
           <NoteEditor
             t={t}
             note={note ?? ''}
+            onClose={() => setPopover(null)}
             onSave={text => {
               setNote(t.id, text);
               setPopover(null);
@@ -1085,6 +1106,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
           <Picker
             income={t}
             expenses={expenses}
+            onClose={() => setPicking(false)}
             onPick={id => {
               onLink(t.id, id);
               setPicking(false);
@@ -1099,6 +1121,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
             others={sameMerchant}
             suggested={suggested}
             guess={guess}
+            onClose={() => setPopover(null)}
             onPick={(cat, sub, all) => {
               if (cat !== t.cat || (sub ?? undefined) !== t.sub) onRecat(t, cat, sub, all);
               setPopover(null);
@@ -1109,6 +1132,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
         {popover === 'share' && (
           <ShareEditor
             t={t}
+            onClose={() => setPopover(null)}
             onSave={ratio => {
               onShare(t.id, ratio);
               setPopover(null);
@@ -1116,10 +1140,18 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
           />
         )}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>
-        <span style={{ fontSize: 15, fontWeight: 600, color: amount.ink }}>{amount.text}</span>
-        {amount.note && <span style={{ fontSize: 13, fontWeight: 600, color: amount.noteInk ?? C.good }}>{amount.note}</span>}
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none', maxWidth: compact ? '42%' : undefined }}>
+        <span style={{ fontSize: 15, fontWeight: 600, color: amount.ink, whiteSpace: 'nowrap' }}>{amount.text}</span>
+        {amount.note && (
+          <span
+            className={compact ? s.ellipsis : undefined}
+            style={{ fontSize: compact ? 12 : 13, fontWeight: 600, color: amount.noteInk ?? C.good, maxWidth: '100%', textAlign: 'right' }}
+            title={amount.note}
+          >
+            {amount.note}
+          </span>
+        )}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textMuted, maxWidth: '100%' }}>
           {uploading ? (
             'Uploading…'
           ) : receipt ? (
@@ -1130,8 +1162,10 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
           {viewing && receipt ? (
             <ReceiptPreview txId={receiptTxId(t)} receipt={receipt} title={`${tidyName(t.title)}, ${dayMonth(t.date)}`} onClose={() => setViewing(false)} />
           ) : null}
-          {t.time}
-          {note && where ? `, ${where}` : ''}
+          <span className={s.ellipsis}>
+            {t.time}
+            {!compact && note && where ? `, ${where}` : ''}
+          </span>
         </span>
         <input
           ref={filePick}
@@ -1148,7 +1182,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
       <div style={{ position: 'relative', flex: 'none' }}>
         <button
           type="button"
-          className={compact ? 'sr-only' : s.rowMore}
+          className={s.rowMore}
           aria-haspopup="menu"
           aria-expanded={popover === 'more'}
           aria-label={`More for ${t.title}`}
@@ -1157,7 +1191,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
           <Icon d={IC.more} size={18} strokeWidth={3} />
         </button>
         {popover === 'more' && (
-          <MoreMenu>
+          <MoreMenu title={tidyName(t.title)} onClose={() => setPopover(null)}>
             {more.map(([label, run]) => (
               <button
                 key={label}
@@ -1181,18 +1215,25 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
 }
 
 /** The row's ⋯ menu. */
-function MoreMenu({ children }: { children: ReactNode }) {
+function MoreMenu({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const flip = useFlipUp<HTMLDivElement>({ left: 'auto', right: 0, width: 210 });
   return (
-    <div ref={flip.ref} className={s.picker} role="menu" style={flip.style}>
+    <div ref={flip.ref} className={`${s.picker} ${s.rowSheet}`} role="menu" style={flip.style}>
+      <div className={s.sheetHeadMobile}>
+        <span className={`${s.mxPopTitle} ${s.ellipsis}`}>{title}</span>
+        <button type="button" className={s.iconBtnSm} aria-label="Close menu" onClick={onClose}>
+          <Icon d={IC.close} size={16} />
+        </button>
+      </div>
       {children}
     </div>
   );
 }
 
 /** Popover listing this cycle's expenses; the one with the same amount as the income is suggested first. */
-function Picker({ income, expenses, onPick }: { income: TxView; expenses: TxView[]; onPick: (expenseId: string) => void }) {
+function Picker({ income, expenses, onPick, onClose }: { income: TxView; expenses: TxView[]; onPick: (expenseId: string) => void; onClose: () => void }) {
   const { full } = useSettings();
+  const phone = useIsPhone();
   const [q, setQ] = useState('');
   const needle = q.trim().toLowerCase();
   const suggested = needle ? undefined : expenses.find(e => e.amount === income.amount);
@@ -1201,10 +1242,16 @@ function Picker({ income, expenses, onPick }: { income: TxView; expenses: TxView
     ? expenses.filter(e => `${e.title} ${e.cat} ${e.source}`.toLowerCase().includes(needle))
     : (suggested ? [suggested, ...expenses.filter(e => e !== suggested)] : expenses).slice(0, 5);
   return (
-    <div ref={flip.ref} className={s.picker} style={flip.style} role="dialog" aria-label={`Expense paid back by ${income.title}`}>
+    <div ref={flip.ref} className={`${s.picker} ${s.rowSheet}`} style={flip.style} role="dialog" aria-label={`Expense paid back by ${income.title}`}>
+      <div className={s.sheetHeadMobile}>
+        <span className={s.mxPopTitle}>Paid back for</span>
+        <button type="button" className={s.iconBtnSm} aria-label="Close" onClick={onClose}>
+          <Icon d={IC.close} size={16} />
+        </button>
+      </div>
       <label className={s.pickSearch}>
         <Icon d={IC.search} size={15} color={C.textMuted} />
-        <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search the expense this pays back" aria-label="Search the expense this pays back" />
+        <input autoFocus={!phone} value={q} onChange={e => setQ(e.target.value)} placeholder="Search the expense this pays back" aria-label="Search the expense this pays back" />
       </label>
       <div className={s.pickList} style={{ maxHeight: needle ? 300 : undefined }}>
         {list.length === 0 && <div style={{ padding: '10px', fontSize: 13, color: C.textMuted }}>No expenses match.</div>}
@@ -1226,13 +1273,13 @@ function Picker({ income, expenses, onPick }: { income: TxView; expenses: TxView
 }
 
 /** Your own remark on a transaction: what it was for, the occasion. Saving it empty removes it. */
-function NoteEditor({ t, note, onSave }: { t: TxView; note: string; onSave: (note: string) => void }) {
+function NoteEditor({ t, note, onSave, onClose }: { t: TxView; note: string; onSave: (note: string) => void; onClose: () => void }) {
   const [text, setText] = useState(note);
   const flip = useFlipUp<HTMLFormElement>({ padding: 12, gap: 10 });
   return (
     <form
       ref={flip.ref}
-      className={s.picker}
+      className={`${s.picker} ${s.rowSheet}`}
       role="dialog"
       aria-label={`Note on ${t.title}`}
       onSubmit={e => {
@@ -1241,6 +1288,12 @@ function NoteEditor({ t, note, onSave }: { t: TxView; note: string; onSave: (not
       }}
       style={flip.style}
     >
+      <div className={s.sheetHeadMobile}>
+        <span className={s.mxPopTitle}>Note</span>
+        <button type="button" className={s.iconBtnSm} aria-label="Close note" onClick={onClose}>
+          <Icon d={IC.close} size={16} />
+        </button>
+      </div>
       <span style={{ fontSize: 13, color: C.textMuted }}>What was it for? It shows under the name, and search finds it.</span>
       <input
         autoFocus
@@ -1266,7 +1319,7 @@ function NoteEditor({ t, note, onSave }: { t: TxView; note: string; onSave: (not
 }
 
 /** Set the part of an expense that's yours, for a shared payment nobody has transferred back yet. */
-function ShareEditor({ t, onSave }: { t: TxView; onSave: (ratio: number | null) => void }) {
+function ShareEditor({ t, onSave, onClose }: { t: TxView; onSave: (ratio: number | null) => void; onClose: () => void }) {
   const { full, settings } = useSettings();
   const fmt = (v: number) => (settings.currency === 'IDR' ? Math.round(v).toLocaleString('id-ID') : String(Math.round(v * 100) / 100));
   const [text, setText] = useState(fmt(t.share ?? t.amount));
@@ -1277,7 +1330,7 @@ function ShareEditor({ t, onSave }: { t: TxView; onSave: (ratio: number | null) 
   return (
     <form
       ref={flip.ref}
-      className={s.picker}
+      className={`${s.picker} ${s.rowSheet}`}
       role="dialog"
       aria-label={`Your share of ${t.title}`}
       onSubmit={e => {
@@ -1286,6 +1339,12 @@ function ShareEditor({ t, onSave }: { t: TxView; onSave: (ratio: number | null) 
       }}
       style={flip.style}
     >
+      <div className={s.sheetHeadMobile}>
+        <span className={s.mxPopTitle}>My share</span>
+        <button type="button" className={s.iconBtnSm} aria-label="Close" onClick={onClose}>
+          <Icon d={IC.close} size={16} />
+        </button>
+      </div>
       <span style={{ fontSize: 13, color: C.textMuted }}>
         You paid {full(t.amount)}. How much of it was yours? Only your share counts as spending.
       </span>
@@ -1355,6 +1414,7 @@ function CategoryMenu({
   currentSub,
   onPick,
   onNew,
+  onClose,
   merchant,
   others = 0,
   suggested = [],
@@ -1364,6 +1424,7 @@ function CategoryMenu({
   currentSub?: string;
   onPick: (cat: string, sub: string | null, all: boolean) => void;
   onNew: (name: string) => void;
+  onClose: () => void;
   /** The row's merchant; without one, only this row can change. */
   merchant?: string;
   /** Other transactions from it. */
@@ -1373,6 +1434,7 @@ function CategoryMenu({
   guess?: Guess;
 }) {
   const { settings } = useSettings();
+  const phone = useIsPhone();
   /** Apply to this row only, or to every transaction from the merchant (and future ones). Remembered between picks. */
   const [all, pickScope] = useApplyAll();
   const [q, setQ] = useState('');
@@ -1427,11 +1489,17 @@ function CategoryMenu({
   };
 
   return (
-    <div ref={flip.ref} className={s.picker} style={flip.style}>
+    <div ref={flip.ref} className={`${s.picker} ${s.rowSheet}`} style={flip.style}>
+      <div className={s.sheetHeadMobile}>
+        <span className={s.mxPopTitle}>Choose category</span>
+        <button type="button" className={s.iconBtnSm} aria-label="Close categories" onClick={onClose}>
+          <Icon d={IC.close} size={16} />
+        </button>
+      </div>
       <label className={s.pickSearch}>
         <Icon d={IC.search} size={15} color={C.textMuted} />
         <input
-          autoFocus
+          autoFocus={!phone}
           value={q}
           onChange={e => {
             setQ(e.target.value);
