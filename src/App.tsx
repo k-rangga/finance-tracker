@@ -129,13 +129,15 @@ export default function App() {
     const spending = transactions.filter(t => t.type === 'expense').map(t => ({ id: t.id, date: t.date, amount: t.amount, cat: recat[t.id] ?? t.category }));
     return [
       ...expectedBills(prevTransactions, prevCycle, transactions, cycle, recat).filter(
-        b => !isSub(b.title) && !managedCats.has(b.category) && !paidCats.has(b.category) && !settings.dismissedBills.includes(billKey(cycleId, b)),
+        b => !isSub(b.title) && !managedCats.has(b.category) && !paidCats.has(b.category),
       ),
       ...fixedBillDueItems(fixedBillStatuses, cycle),
       ...planBills(plans, cycle),
       ...subscriptionBills(subscriptions, subStates, cycle, subCat),
       ...plannedCostBills(costs, cycle, matchCosts(costs, spending)),
-    ].sort((x, y) => x.date.getTime() - y.date.getTime());
+    ]
+      .filter(b => !settings.dismissedBills.includes(billKey(cycleId, b)))
+      .sort((x, y) => x.date.getTime() - y.date.getTime());
     // Custom categories change which categories are fixed bills.
   }, [prevTransactions, prevCycle, transactions, cycle, recat, plans, settings.customCategories, settings.dismissedBills, settings.cyclePlans, settings.fixedBills, settings.paidBills, fixedBillStatuses, subscriptions, subStates, subCharges, catOf]);
   /** What the next cycle already holds: installment payments and subscription charges due in it. */
@@ -198,10 +200,29 @@ export default function App() {
   }, [billUndo]);
   const dismissBill = (b: Bill) => {
     const id = toISO(cycle.start);
+    const label = tidyName(b.title.replace(/\s*\(overdue\)$/i, ''));
+    if (b.billId) {
+      const prevCycles = settings.fixedBillCycles ?? {};
+      const cur = prevCycles[id] ?? {};
+      const skipped = Array.from(new Set([...(cur.skipped ?? []), b.billId]));
+      const paid = (cur.paid ?? []).filter(x => x !== b.billId);
+      update({ fixedBillCycles: { ...prevCycles, [id]: { ...cur, skipped, paid } } });
+      setBillUndo({ text: `${label} skipped for this cycle`, run: () => update({ fixedBillCycles: prevCycles }) });
+      return;
+    }
+    if (b.costId) {
+      const prevPlans = settings.cyclePlans ?? {};
+      const key = cycleKey(cycle);
+      const cur = prevPlans[key] ?? {};
+      const costs = (cur.costs ?? []).filter(c => c.id !== b.costId);
+      update({ cyclePlans: { ...prevPlans, [key]: { ...cur, costs } } });
+      setBillUndo({ text: `${label} removed from upcoming bills`, run: () => update({ cyclePlans: prevPlans }) });
+      return;
+    }
     // Keys from earlier cycles no longer match anything.
     const before = settings.dismissedBills.filter(k => k.startsWith(id + '|'));
     update({ dismissedBills: [...before, billKey(id, b)] });
-    setBillUndo({ text: `${tidyName(b.title)} removed from bills`, run: () => update({ dismissedBills: before }) });
+    setBillUndo({ text: `${label} removed for this cycle`, run: () => update({ dismissedBills: before }) });
   };
   const budget = useMemo(
     () => {

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
-import { Checkbox, DismissBill, DueChip, IconChip, Toast } from '../components/ui';
+import { Checkbox, IconChip, Toast } from '../components/ui';
 import { Logo } from '../components/Logo';
 import { IC, Icon } from '../components/Icon';
 import { CategoryDialog } from '../components/CategoryDialog';
@@ -17,9 +17,10 @@ import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { readReceipt, receiptName, receiptTxId } from '../lib/receipt';
 import { ReceiptPreview } from '../components/ReceiptPreview';
+import { UpcomingBills } from '../components/UpcomingBills';
 import { C } from '../lib/tokens';
 import { CATEGORIES, catFilter, categoryByName, categoryLabel, CC_PAYMENT_CATEGORY, OTHER_CATEGORIES, parseCatFilter } from '../data/categories';
-import { canDismissBill, isCard, merchantKey, type Bill } from '../data/transactions';
+import { isCard, merchantKey, type Bill } from '../data/transactions';
 import { useApplyAll } from './applyScope';
 import { useGuesses, type Guess } from '../lib/guesses';
 import { SortQueue } from './SortQueue';
@@ -562,37 +563,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
           </div>
         )}
 
-        <section className={s.cardFlush} style={{ padding: '4px 0 6px' }}>
-          <h2 className={s.h2Sm} style={{ padding: '14px 18px 4px' }}>
-            Upcoming bills
-          </h2>
-          {bills.length === 0 && <div style={{ padding: '8px 18px 12px', fontSize: 14, color: C.textMuted }}>No more bills due before payday.</div>}
-          {bills.map(b => {
-            const ic = iconChip(b.category);
-            const inDays = cycle.offsetOf(b.date) - cycle.dayIdx;
-            return (
-              <div key={`${b.title}|${b.amount}|${b.date.getTime()}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px' }}>
-                <span className={s.rowIcon}>
-                  <IconChip d={IC.calendar} bg={ic.bg} ink={ic.ink} />
-                </span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginRight: 'auto', minWidth: 0 }}>
-                  <span className={s.ellipsis} style={{ fontSize: 15, fontWeight: 600 }}>
-                    {tidyName(b.title)}
-                  </span>
-                  <span style={{ fontSize: 13, color: C.textMuted }}>
-                    {b.category}
-                    {b.left != null ? (b.left > 0 ? `, ${full(b.left)} left after this` : ', last payment') : ''}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flex: 'none' }}>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>- {full(b.amount)}</span>
-                  <DueChip date={b.date} inDays={inDays} />
-                </div>
-                {canDismissBill(b) && <DismissBill title={tidyName(b.title)} onClick={() => onDismissBill(b)} />}
-              </div>
-            );
-          })}
-        </section>
+        <UpcomingBills cycle={cycle} bills={bills} onDismiss={onDismissBill} />
       </div>
       {phone ? (
         // Phones: folded under one row; the total is already in the line above the list.

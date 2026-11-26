@@ -101,13 +101,17 @@ export type Bill = {
   source: string;
   /** Installments: what's still to pay on the plan after this payment. */
   left?: number;
+  /** Individual fixed bill id (when `source === 'Fixed bill'`), so removing it skips it in this cycle. */
+  billId?: string;
+  /** One-off planned cost id (when `source === 'Planned'`), so removing it deletes it from this cycle's plan. */
+  costId?: string;
 };
 
-/** A predicted bill's identity within one cycle (`cycleId` = the cycle's start as ISO), for dismissing it. */
+/** A bill's identity within one cycle (`cycleId` = the cycle's start as ISO), for dismissing it for this cycle. */
 export const billKey = (cycleId: string, b: Bill) => `${cycleId}|${b.title.toLowerCase()}|${b.amount}`;
 
-/** Installment payments and subscriptions come from your plans; only bills predicted from last cycle can be dismissed. */
-export const canDismissBill = (b: Bill) => b.source !== 'Installment' && b.source !== 'Subscription' && b.source !== 'Planned' && b.source !== 'Fixed bill';
+/** Every upcoming bill can be skipped or removed for the current cycle. */
+export const canDismissBill = (_b: Bill) => true;
 
 /** A row of the `transactions` table, as imported from Gmail. */
 export type TxRow = {

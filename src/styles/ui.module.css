@@ -3973,75 +3973,129 @@ button.sxTile:disabled {
   box-shadow: var(--shadow-sm);
 }
 
-/* Bills to come: grouped dots on a line from today to payday + scannable list. */
-.sxTimeline {
-  position: relative;
-  height: 30px;
+/* Upcoming bills: shared, tidy, minimalistic list used on Summary and Transactions. */
+.ubHeadRight {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
-.sxTimelineLine {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: 2px;
-  margin-top: -1px;
-  border-radius: 1px;
-  background: var(--divider);
+.ubTotal {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
 }
-.sxTimelineDotBtn {
-  position: absolute;
-  top: 50%;
-  width: 28px;
-  height: 28px;
-  margin: -14px 0 0 -14px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-.sxTimelineDotVisual {
-  display: grid;
-  place-items: center;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
+.ubAddBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  border: 2px solid var(--surface);
-  color: var(--on-clay);
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
-  transition: transform 0.12s ease-out, box-shadow 0.12s ease-out;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
-.sxTimelineDotBtn:hover .sxTimelineDotVisual,
-.sxTimelineDotBtn[data-active] .sxTimelineDotVisual {
-  box-shadow: 0 0 0 2px var(--text-soft);
-  transform: scale(1.15);
+.ubAddBtn:hover {
+  background: var(--hover);
+  border-color: var(--border-strong);
+  color: var(--ink);
 }
-.sxBillList {
+.ubAddForm {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
 }
-.sxBillRow {
-  display: flex;
+.ubAddRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
   align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  min-height: 34px;
-  padding: 4px 8px;
-  margin: 0 -8px;
-  border-radius: 8px;
 }
-.sxBillRow[data-active] {
+@media (max-width: 480px) {
+  .ubAddRow {
+    grid-template-columns: 1fr;
+  }
+}
+.ubList {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) max-content max-content 32px;
+  column-gap: 10px;
+  row-gap: 2px;
+  margin: 0 -4px 0 -8px;
+}
+.ubRow {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) 68px minmax(68px, auto) 28px;
+  grid-template-columns: subgrid;
+  align-items: center;
+  min-height: 36px;
+  padding: 2px 4px 2px 8px;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: background 0.12s ease;
+}
+.ubRow:hover {
   background: var(--hover);
 }
-.sxBillDate {
+.ubTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--ink);
+}
+.ubDate {
   font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ubDate[data-overdue] {
+  color: var(--red-ink);
+  font-weight: 600;
+}
+.ubAmt {
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ubRemove {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: 0.48;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.ubRow:hover .ubRemove,
+.ubRemove:focus-visible {
+  opacity: 1;
+}
+.ubRemove:hover {
+  background: var(--border);
+  color: var(--ink);
+  opacity: 1;
 }
 .sxRecentList {
   display: flex;

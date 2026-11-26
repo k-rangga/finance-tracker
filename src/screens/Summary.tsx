@@ -14,7 +14,8 @@ import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
 import { categoryByName, SAVINGS_CATEGORY, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY } from '../data/categories';
-import { canDismissBill, type Bill } from '../data/transactions';
+import type { Bill } from '../data/transactions';
+import { UpcomingBills } from '../components/UpcomingBills';
 import type { ActivityFilter } from './Activity';
 
 type TxPatch = Pick<ActivityFilter, 'range'> & Partial<ActivityFilter>;
@@ -24,7 +25,7 @@ type SummaryProps = {
   budget: Budget;
   onOpenCategory: (name: string) => void;
   onOpenCategories: () => void;
-  /** Hide a predicted bill for this cycle. */
+  /** Skip or remove an upcoming bill for this cycle. */
   onDismissBill: (b: Bill) => void;
   /** Open Transactions with a range/category/date filter. */
   onShowTransactions: (patch: TxPatch) => void;
@@ -65,7 +66,7 @@ export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, on
       />
       <DailyBars cycle={cycle} budget={b} onOpenDay={iso => onShowTransactions({ range: 'custom', from: iso, to: iso })} />
       <WhereMap cycle={cycle} budget={b} onOpenCategory={onOpenCategory} onOpenCategories={onOpenCategories} />
-      <BillsTimeline cycle={cycle} budget={b} onDismissBill={onDismissBill} />
+      <UpcomingBills id="summary-bills" cycle={cycle} bills={b.bills} limit={5} compact onDismiss={onDismissBill} />
       <Recent
         budget={b}
         cycle={cycle}
@@ -866,95 +867,6 @@ function useWidth(el: HTMLElement | null) {
     return () => ro.disconnect();
   }, [el]);
   return w;
-}
-
-// ---- bills to come ----
-
-function BillsTimeline({ cycle, budget: b, onDismissBill }: { cycle: Cycle; budget: Budget; onDismissBill: (b: Bill) => void }) {
-  const { short, full } = useSettings();
-  const bills = b.bills.filter(x => x.date > cycle.today);
-  const [pickedDay, setPickedDay] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
-  const from = cycle.today.getTime();
-  const to = cycle.end.getTime() + 864e5;
-  const at = (d: Date) => Math.min(96, Math.max(4, ((d.getTime() - from) / Math.max(1, to - from)) * 100));
-
-  // Group bills sharing the same date into one dot so dots never stack on top of each other.
-  const groups: { iso: string; date: Date; items: Bill[]; color: string }[] = [];
-  for (const x of bills) {
-    const iso = toISO(x.date);
-    const existing = groups.find(g => g.iso === iso);
-    if (existing) existing.items.push(x);
-    else groups.push({ iso, date: x.date, items: [x], color: categoryByName(x.category)?.color ?? C.textSoft });
-  }
-  const activeDay = pickedDay && groups.some(g => g.iso === pickedDay) ? pickedDay : null;
-  const visible = showAll || activeDay ? bills : bills.slice(0, 4);
-
-  return (
-    <ChartCard
-      id="summary-bills"
-      title="Bills to come"
-      right={bills.length ? short(sum(bills.map(x => x.amount))) : undefined}
-    >
-      {bills.length === 0 ? (
-        <div className={s.mxEmptyInline}>
-          <Logo size={28} mood="happy" />
-          <span>Clear skies until payday. No bills left.</span>
-        </div>
-      ) : (
-        <>
-          <div className={s.sxTimeline}>
-            <span className={s.sxTimelineLine} />
-            {groups.map(g => (
-              <button
-                key={g.iso}
-                type="button"
-                className={s.sxTimelineDotBtn}
-                data-active={g.iso === activeDay || undefined}
-                style={{ left: at(g.date) + '%' }}
-                onClick={() => setPickedDay(d => (d === g.iso ? null : g.iso))}
-                aria-label={`${dayMonth(g.date)}: ${g.items.map(i => `${tidyName(i.title)} ${full(i.amount)}`).join(', ')}`}
-                aria-pressed={g.iso === activeDay}
-              >
-                <span className={s.sxTimelineDotVisual} style={{ background: g.color }}>
-                  {g.items.length > 1 ? g.items.length : null}
-                </span>
-              </button>
-            ))}
-          </div>
-          <div className={s.sxDayAxis} aria-hidden="true">
-            <span>Today</span>
-            <span>{dayMonth(cycle.next)}</span>
-          </div>
-          <div className={s.sxBillList}>
-            {visible.map((x, idx) => {
-              const iso = toISO(x.date);
-              return (
-                <div key={`${iso}-${x.title}-${x.amount}-${idx}`} className={s.sxBillRow} data-active={iso === activeDay || undefined}>
-                  <span className={s.sxLegendDot} style={{ background: categoryByName(x.category)?.color ?? C.textSoft }} />
-                  <span className={s.ellipsis} style={{ marginRight: 'auto', minWidth: 0 }}>
-                    {tidyName(x.title)}
-                  </span>
-                  <span className={s.sxBillDate}>{dayMonth(x.date)}</span>
-                  <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{short(x.amount)}</span>
-                  {canDismissBill(x) && (
-                    <button type="button" className={s.iconBtnSm} aria-label={`Not a bill this cycle: ${tidyName(x.title)}`} title="Not a bill this cycle" onClick={() => onDismissBill(x)}>
-                      <Icon d={IC.close} size={14} />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          {bills.length > 4 && !activeDay && (
-            <button type="button" className={s.textBtnSm} style={{ alignSelf: 'flex-start', padding: 0 }} onClick={() => setShowAll(v => !v)}>
-              {showAll ? 'Show fewer' : `Show all ${bills.length} bills`}
-            </button>
-          )}
-        </>
-      )}
-    </ChartCard>
-  );
 }
 
 // ---- today / recent activity ----

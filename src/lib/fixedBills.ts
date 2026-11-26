@@ -281,6 +281,7 @@ export function fixedBillDueItems(statuses: FixedBillStatus[], cycle: Cycle): Bi
       category: x.bill.category,
       amount: x.expected,
       source: 'Fixed bill',
+      billId: x.bill.id,
     }));
 }
 

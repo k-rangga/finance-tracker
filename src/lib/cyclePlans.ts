@@ -53,7 +53,7 @@ export function matchCosts(costs: PlannedCost[], txs: { id: string; date: Date; 
 export function plannedCostBills(costs: PlannedCost[], cycle: Cycle, paid: Map<string, unknown>): Bill[] {
   return costs
     .filter(c => !paid.has(c.id))
-    .map(c => ({ date: new Date(c.date + 'T00:00:00'), title: c.name, category: c.category, amount: c.amount, source: 'Planned' }))
+    .map(c => ({ date: new Date(c.date + 'T00:00:00'), title: c.name, category: c.category, amount: c.amount, source: 'Planned', costId: c.id }))
     .filter(b => b.date >= cycle.start && b.date <= cycle.end)
     .map(b => (b.date <= cycle.today ? { ...b, date: new Date(cycle.today.getTime() + DAY) } : b));
 }
