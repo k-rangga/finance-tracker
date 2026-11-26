@@ -1,4 +1,4 @@
-import { StrictMode, type ReactNode } from 'react';
+import { StrictMode, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles/global.css';
 import s from './styles/ui.module.css';
@@ -10,6 +10,7 @@ import { Logo } from './components/Logo';
 import { applyTheme, getTheme } from './lib/theme';
 import { onVercel } from './lib/supabase';
 import { AuthGate } from './components/SignIn';
+import { pickBootReflection, readBootHint } from './lib/bootHint';
 
 // Before the first paint, so the page never flashes the other theme.
 applyTheme(getTheme());
@@ -25,25 +26,60 @@ function Centered({ children }: { children: ReactNode }) {
   );
 }
 
-/** While your data loads: the page's shapes in grey, so it settles into place instead of popping in. */
-function LoadingSkeleton() {
-  const block = (w: string | number, h: number) => <div className={s.skeleton} style={{ width: w, height: h }} />;
+/**
+ * Editorial Sanctuary loader: warm breathing Maxie portrait, time-aware greeting using locally cached name,
+ * whisper-thin clay shimmer line, staged calm status messages, and a personalized behavioral reflection.
+ */
+function EditorialLoader() {
+  const hint = useMemo(() => readBootHint(), []);
+  const reflection = useMemo(() => pickBootReflection(hint), [hint]);
+  const [stage, setStage] = useState(0);
+
+  useEffect(() => {
+    const timers = [
+      setTimeout(() => setStage(1), 1600),
+      setTimeout(() => setStage(2), 3800),
+      setTimeout(() => setStage(3), 7000),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  const id = hint?.lang === 'id';
+  const hr = new Date().getHours();
+  const baseHi = id
+    ? hr < 11
+      ? 'Selamat pagi'
+      : hr < 15
+        ? 'Selamat siang'
+        : hr < 19
+          ? 'Selamat sore'
+          : 'Selamat malam'
+    : hr < 12
+      ? 'Good morning'
+      : hr < 18
+        ? 'Good afternoon'
+        : 'Good evening';
+  const greeting = `${baseHi}${hint?.name ? `, ${hint.name}` : ''}.`;
+
+  const stages = id
+    ? ['Membuka catatanmu…', 'Menyiapkan siklus terbaru…', 'Menyusun tagihan dan ritme…', 'Sebentar lagi siap…']
+    : ['Opening your ledger…', 'Gathering your latest cycle…', 'Lining up bills and pace…', 'Almost ready — waking up the server…'];
+
   return (
-    <div
-      role="status"
-      aria-label="Loading your data"
-      style={{ maxWidth: 1240, margin: '0 auto', padding: '40px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Logo size={36} mood="curious" />
-        <span className={s.loadingWarm}>Maxie is fetching your latest cycle…</span>
+    <div className={s.bootScreen} role="status" aria-label={stages[stage]}>
+      <div className={s.bootCard}>
+        <span className={s.bootHalo} aria-hidden="true">
+          <Logo size={52} mood="calm" />
+        </span>
+        <div className={s.bootText}>
+          <h1 className={s.bootGreeting}>{greeting}</h1>
+          <span className={s.bootStatus}>{stages[stage]}</span>
+        </div>
+        <div className={s.bootTrack} aria-hidden="true">
+          <span className={s.bootSweep} />
+        </div>
+        {!hint?.quiet && <p className={s.bootReflection}>{reflection}</p>}
       </div>
-      {block('60%', 18)}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 20 }}>
-        {block('100%', 260)}
-        {block('100%', 260)}
-      </div>
-      {block('100%', 180)}
     </div>
   );
 }
@@ -52,7 +88,7 @@ function LoadingSkeleton() {
 const app = (
   <DataProvider
     backend={backend}
-    loading={<LoadingSkeleton />}
+    loading={<EditorialLoader />}
     failed={(msg, retry) => (
       <Centered>
         <h1 style={{ fontSize: 22 }}>Couldn't load your data</h1>
@@ -68,4 +104,4 @@ const app = (
     </SettingsProvider>
   </DataProvider>
 );
-createRoot(document.getElementById('root')!).render(<StrictMode>{onVercel ? <AuthGate loading={<LoadingSkeleton />}>{app}</AuthGate> : app}</StrictMode>);
+createRoot(document.getElementById('root')!).render(<StrictMode>{onVercel ? <AuthGate loading={<EditorialLoader />}>{app}</AuthGate> : app}</StrictMode>);

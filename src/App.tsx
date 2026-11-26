@@ -30,6 +30,7 @@ import { Chat } from './components/Chat';
 import { useIsPhone } from './lib/media';
 import { PULL_TO_SYNC, usePageGestures } from './lib/gestures';
 import { syncNow } from './lib/gmail';
+import { buildBootHint, writeBootHint } from './lib/bootHint';
 
 export type Tab = 'summary' | 'categories' | 'tx' | 'plan' | 'invest';
 
@@ -256,6 +257,10 @@ export default function App() {
     },
     [transactions, prevTransactions, prevCycle, bills, fixedBillStatuses, recat, links, shares, subs, cycle, settings.income, settings.warnAt, settings.cyclePlans, settings.savingsPct, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
   );
+  // Keep personalized calm loading reflections fresh locally so the next initial load greets with real context.
+  useEffect(() => {
+    writeBootHint(buildBootHint({ cycle, budget, settings, plans }));
+  }, [cycle, budget, settings, plans]);
   /** Every synced transaction, for the Transactions screen's own date range. */
   const allTxs = useMemo(() => txViews(all, all, { recat, links, shares, cycle, subs }).txs, [all, recat, links, shares, cycle, subs]);
   const removedTxs = useMemo(
@@ -509,7 +514,7 @@ export default function App() {
                 onAskMaxie={ask => setChat({ ask })}
               />
             )}
-            {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} onDismissBill={dismissBill} onMarkBillPaid={markBillPaid} />}
+            {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} onDismissBill={dismissBill} onMarkBillPaid={markBillPaid} fixedBillStatuses={fixedBillStatuses} subscriptions={subscriptions} plans={plans} />}
             {tab === 'plan' && (
               <SavingsPlan
                 cycle={cycle}

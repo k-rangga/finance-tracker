@@ -8,7 +8,8 @@ import { DateRangePicker } from '../components/DateRangePicker';
 import { Select } from '../components/Select';
 import { InstallmentDialog } from '../components/InstallmentDialog';
 import { planOf, planSummary, usePlans } from '../components/Plans';
-import { leftAfter } from '../lib/installments';
+import { leftAfter, type PlanView } from '../lib/installments';
+import type { FixedBillStatus } from '../lib/fixedBills';
 import { useData } from '../lib/data';
 import { dayAmount, dayTotalLabel, iconChip, inDayTotal, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
@@ -21,9 +22,11 @@ import { UpcomingBills } from '../components/UpcomingBills';
 import { C } from '../lib/tokens';
 import { CATEGORIES, catFilter, categoryByName, categoryLabel, CC_PAYMENT_CATEGORY, OTHER_CATEGORIES, parseCatFilter } from '../data/categories';
 import { isCard, merchantKey, type Bill } from '../data/transactions';
+import type { Subscription } from '../lib/subscriptions';
 import { useApplyAll } from './applyScope';
 import { useGuesses, type Guess } from '../lib/guesses';
 import { SortQueue } from './SortQueue';
+import { CalendarMain, CalendarSide, useCalendarMonth } from './CalendarView';
 
 export type Range = 'today' | 'week' | 'last' | 'cycle' | 'custom';
 export type TxSort = 'newest' | 'oldest' | 'highest' | 'lowest';
@@ -57,6 +60,12 @@ type Props = {
   onDismissBill: (b: Bill) => void;
   /** 1-tap mark a fixed bill as paid for this cycle. */
   onMarkBillPaid?: (b: Bill) => void;
+  /** Tracked fixed bills and their status this cycle, for the integrated Calendar view. */
+  fixedBillStatuses?: FixedBillStatus[];
+  /** Active subscriptions, for the integrated Calendar view. */
+  subscriptions?: Record<string, Subscription>;
+  /** Installment schedules, for the integrated Calendar view. */
+  plans?: PlanView[];
 };
 
 type Popover = 'link' | 'share' | 'cat' | 'more' | 'note';
@@ -82,8 +91,25 @@ function useFlipUp<T extends HTMLElement>(style?: CSSProperties) {
   return { ref, style: up ? { ...style, top: 'auto', bottom: '100%', marginTop: 0, marginBottom: 6 } : style };
 }
 
-export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, setFilter, onRecat, onLink, onShare, onDismissBill, onMarkBillPaid }: Props) {
+export function Activity({
+  cycle,
+  budget,
+  allTxs,
+  removedTxs,
+  onRemove,
+  filter,
+  setFilter,
+  onRecat,
+  onLink,
+  onShare,
+  onDismissBill,
+  onMarkBillPaid,
+  fixedBillStatuses = [],
+  subscriptions = {},
+  plans = [],
+}: Props) {
   const { full, settings } = useSettings();
+  const [view, setView] = useState<'list' | 'calendar'>('list');
   /** The row with an open popover: an income's "paid back for" picker or an expense's "my share" editor. */
   const [open, setOpen] = useState<{ id: string; kind: Popover } | null>(null);
   /** "New category" dialog, opened from a row's category menu; the new category is applied to that row. */
@@ -343,40 +369,67 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
     />
   );
 
+  const cal = useCalendarMonth({
+    cycle,
+    allTxs,
+    fixedBillStatuses,
+    subscriptions,
+    plans,
+    filterCat: pick,
+    hideTransfers: filter.hideTransfers,
+    searchQ: q,
+  });
+
+  const openDateInList = (iso: string) => {
+    setFilter({ ...filter, range: 'custom', from: iso, to: iso });
+    setView('list');
+  };
+
   return (
     <div className={s.splitGrid} style={{ ['--bar-h' as string]: barH + 'px' }}>
       <div className={s.splitMain}>
-        {/* Maxie Toolbar: date chip, Filter, Sort on the left; Search on the right. */}
+        {/* Maxie Toolbar: view switcher, date chip, Filter, Sort on the left; Search on the right. */}
         <div ref={bar} className={s.stickyBar}>
           <div ref={toolbarRef} className={s.mxToolbar} role="toolbar" aria-label="Transaction view controls">
             <div className={s.mxToolbarLeft}>
-              <div className={s.mxPopWrap}>
-                <button
-                  type="button"
-                  className={s.mxTbtn}
-                  data-open={panel === 'cal' || undefined}
-                  aria-label={`Date range: ${rangeLabel}. Change dates`}
-                  title={rangeLabel}
-                  aria-haspopup="dialog"
-                  aria-expanded={panel === 'cal'}
-                  onClick={() => setPanel(panel === 'cal' ? null : 'cal')}
-                >
-                  <Icon d={IC.calendar} size={15} />
-                  <span>{dateChipLabel}</span>
-                  <Icon d={IC.chevDown} size={14} style={{ transform: panel === 'cal' ? 'rotate(180deg)' : undefined, transition: 'transform 160ms ease' }} />
+              <div className={s.sxMiniSeg} role="group" aria-label="View mode">
+                <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}>
+                  List
                 </button>
-                {panel === 'cal' && (
-                  <DateRangePicker
-                    from={from}
-                    to={to}
-                    min={earliestISO}
-                    max={todayISO}
-                    cycleStart={toISO(cycle.start)}
-                    onChange={(a, b) => setFilter({ ...filter, range: 'custom', from: a, to: b })}
-                    onClose={() => setPanel(null)}
-                  />
-                )}
+                <button type="button" aria-pressed={view === 'calendar'} onClick={() => { setPanel(null); setView('calendar'); }}>
+                  Calendar
+                </button>
               </div>
+
+              {view === 'list' && (
+                <div className={s.mxPopWrap}>
+                  <button
+                    type="button"
+                    className={s.mxTbtn}
+                    data-open={panel === 'cal' || undefined}
+                    aria-label={`Date range: ${rangeLabel}. Change dates`}
+                    title={rangeLabel}
+                    aria-haspopup="dialog"
+                    aria-expanded={panel === 'cal'}
+                    onClick={() => setPanel(panel === 'cal' ? null : 'cal')}
+                  >
+                    <Icon d={IC.calendar} size={15} />
+                    <span>{dateChipLabel}</span>
+                    <Icon d={IC.chevDown} size={14} style={{ transform: panel === 'cal' ? 'rotate(180deg)' : undefined, transition: 'transform 160ms ease' }} />
+                  </button>
+                  {panel === 'cal' && (
+                    <DateRangePicker
+                      from={from}
+                      to={to}
+                      min={earliestISO}
+                      max={todayISO}
+                      cycleStart={toISO(cycle.start)}
+                      onChange={(a, b) => setFilter({ ...filter, range: 'custom', from: a, to: b })}
+                      onClose={() => setPanel(null)}
+                    />
+                  )}
+                </div>
+              )}
 
               <div className={s.mxPopWrap}>
                 <button
@@ -426,45 +479,47 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
                 )}
               </div>
 
-              <div className={s.mxPopWrap}>
-                <button
-                  type="button"
-                  className={s.mxTbtn}
-                  data-open={panel === 'sort' || undefined}
-                  data-active={sort !== 'newest' || undefined}
-                  aria-haspopup="dialog"
-                  aria-expanded={panel === 'sort'}
-                  onClick={() => setPanel(panel === 'sort' ? null : 'sort')}
-                >
-                  <Icon d={IC.sort} size={15} />
-                  <span>{sort === 'newest' ? 'Sort' : `Sort: ${SORT_LABELS[sort]}`}</span>
-                </button>
-                {panel === 'sort' && (
-                  <div className={`${s.mxPop} ${s.mxPopSort}`} role="dialog" aria-label="Sort transactions">
-                    <div className={s.mxPopHead}>
-                      <span className={s.mxPopTitle}>Sort by</span>
+              {view === 'list' && (
+                <div className={s.mxPopWrap}>
+                  <button
+                    type="button"
+                    className={s.mxTbtn}
+                    data-open={panel === 'sort' || undefined}
+                    data-active={sort !== 'newest' || undefined}
+                    aria-haspopup="dialog"
+                    aria-expanded={panel === 'sort'}
+                    onClick={() => setPanel(panel === 'sort' ? null : 'sort')}
+                  >
+                    <Icon d={IC.sort} size={15} />
+                    <span>{sort === 'newest' ? 'Sort' : `Sort: ${SORT_LABELS[sort]}`}</span>
+                  </button>
+                  {panel === 'sort' && (
+                    <div className={`${s.mxPop} ${s.mxPopSort}`} role="dialog" aria-label="Sort transactions">
+                      <div className={s.mxPopHead}>
+                        <span className={s.mxPopTitle}>Sort by</span>
+                      </div>
+                      <div className={s.mxSortList} role="listbox" aria-label="Sort order">
+                        {(Object.keys(SORT_LABELS) as TxSort[]).map(k => (
+                          <button
+                            key={k}
+                            type="button"
+                            role="option"
+                            aria-selected={sort === k}
+                            className={s.mxSortOpt}
+                            data-selected={sort === k || undefined}
+                            onClick={() => {
+                              setFilter({ ...filter, sort: k });
+                              setPanel(null);
+                            }}
+                          >
+                            {SORT_LABELS[k]}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className={s.mxSortList} role="listbox" aria-label="Sort order">
-                      {(Object.keys(SORT_LABELS) as TxSort[]).map(k => (
-                        <button
-                          key={k}
-                          type="button"
-                          role="option"
-                          aria-selected={sort === k}
-                          className={s.mxSortOpt}
-                          data-selected={sort === k || undefined}
-                          onClick={() => {
-                            setFilter({ ...filter, sort: k });
-                            setPanel(null);
-                          }}
-                        >
-                          {SORT_LABELS[k]}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className={s.mxToolbarRight}>
@@ -487,117 +542,143 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
           </div>
 
           {/* Narrow screens: the recap as one short line (wide screens have the recap panel instead). */}
-          <div className={s.txSummaryLine} aria-live="polite">
-            <strong style={{ color: C.text, fontWeight: 600 }}>{full(out)} spent</strong>
-            {`, ${rangeLabel}`}, {inRange.length} {inRange.length === 1 ? 'transaction' : 'transactions'}
-            {cat ? `, ${cat}` : ''}
-            {filter.hideTransfers ? ', transfers hidden' : ''}
-            {guesses.toSort.length > 0 && (
-              <>
-                {', '}
-                <button type="button" className={s.sortLink} onClick={() => setSorting(guesses.toSort.map(t => t.id))}>
-                  {guesses.toSort.length} to sort →
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {guesses.toSort.length > 0 && (
-          <div className={s.sortBanner}>
-            <Logo size={32} mood="curious" interactive cheer="Let's give every rupiah a home!" />
-            <span style={{ display: 'flex', flexDirection: 'column', gap: 1, marginRight: 'auto', minWidth: 0 }}>
-              <strong style={{ fontSize: 14, fontWeight: 600 }}>
-                {guesses.toSort.length} {guesses.toSort.length === 1 ? 'item' : 'items'} in Buffer ready to sort
-              </strong>
-              <span style={{ fontSize: 12.5, color: C.textMuted }}>
-                {guesses.status === 'asking' ? 'Maxie is guessing the best categories…' : 'Quick 1-tap cards with Maxie’s guesses — takes seconds.'}
-              </span>
-            </span>
-            <button type="button" className={s.btnPrimarySm} onClick={() => setSorting(guesses.toSort.map(t => t.id))}>
-              Start sorting
-            </button>
-          </div>
-        )}
-
-        {/* overflow visible: the "paid back for" picker floats past the card's edge. */}
-        <div className={s.cardFlush} style={{ padding: '4px 0 6px', overflow: 'visible' }}>
-          {groups.length === 0 && (
-            <div style={{ padding: '40px 24px', textAlign: 'center', fontSize: 14, color: C.textMuted, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-              <Logo size={44} mood={!cat && !needle && range === 'today' ? 'happy' : 'curious'} interactive cheer="Nice and quiet!" />
-              <span>
-                {!cat && !needle && range === 'today' ? 'Quiet day so far — nothing spent today.' : !cat && !needle ? 'Nothing here for these dates.' : 'No transactions match these filters.'}
-              </span>
-              {(cat || needle || lo !== 0 || hi !== cycle.dayIdx) && (
-                <button type="button" className={s.btnOutline} onClick={() => setFilter({ range: 'cycle', cat: '', q: '', sort: 'newest' })}>
-                  Show the whole cycle
-                </button>
+          {view === 'list' && (
+            <div className={s.txSummaryLine} aria-live="polite">
+              <strong style={{ color: C.text, fontWeight: 600 }}>{full(out)} spent</strong>
+              {`, ${rangeLabel}`}, {inRange.length} {inRange.length === 1 ? 'transaction' : 'transactions'}
+              {cat ? `, ${cat}` : ''}
+              {filter.hideTransfers ? ', transfers hidden' : ''}
+              {guesses.toSort.length > 0 && (
+                <>
+                  {', '}
+                  <button type="button" className={s.sortLink} onClick={() => setSorting(guesses.toSort.map(t => t.id))}>
+                    {guesses.toSort.length} to sort →
+                  </button>
+                </>
               )}
             </div>
           )}
-          {groups.map(g => (
-            <div key={g.label} style={{ display: 'flex', flexDirection: 'column' }}>
-              <h2 className={s.dayHead}>
-                <span>{g.label}</span>
-                {g.items.some(inDayTotal) && <span>{dayTotalLabel(g.items.reduce((a, t) => a + dayAmount(t), 0), full)}</span>}
-              </h2>
-              {g.items.map(t => (
-                <TxRow
-                  key={t.id}
-                  t={t}
-                  sameMerchant={(merchantCount.get(merchantKey(t.title)) ?? 1) - 1}
-                  suggested={guesses.suggest(t).filter(o => o.category !== t.cat || (o.sub ?? undefined) !== t.sub).slice(0, 3)}
-                  guess={t.cat === 'Buffer' ? guesses.guesses[t.id] : undefined}
-                  onRecat={recategorise}
-                  onLink={onLink}
-                  onShare={onShare}
-                  onRemove={() => remove(t)}
-                  onPlan={setPlanFor}
-                  onUnplan={unplan}
-                  expenses={expenses}
-                  compact={phone}
-                  usualAccount={usualAccount}
-                  onNotice={text => setToast({ text })}
-                  onNewCategory={name => {
-                    setOpen(null);
-                    setCreating({ name, tx: t });
-                  }}
-                  popover={open?.id === t.id ? open.kind : null}
-                  setPopover={kind => setOpen(kind ? { id: t.id, kind } : null)}
-                />
-              ))}
-            </div>
-          ))}
         </div>
 
-        {removedHere.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <button type="button" className={s.textBtnSm} aria-expanded={showRemoved} onClick={() => setShowRemoved(!showRemoved)} style={{ alignSelf: 'flex-start' }}>
-              {showRemoved ? 'Hide' : 'Show'} {removedHere.length} removed {removedHere.length === 1 ? 'transaction' : 'transactions'} in these dates
-            </button>
-            {showRemoved && (
-              <div className={s.cardFlush} style={{ padding: '4px 0' }}>
-                {removedHere.map(t => (
-                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px', color: C.textMuted }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
-                      <span style={{ fontSize: 14, fontWeight: 600, textDecoration: 'line-through' }}>{t.title}</span>
-                      <span style={{ fontSize: 13 }}>
-                        {dayLabel(t.date)}, {t.cat}, {full(t.amount)}
-                      </span>
-                    </div>
-                    <button type="button" className={s.btnOutline} onClick={() => onRemove(t.id, false)} style={{ flex: 'none' }}>
-                      Restore
-                    </button>
-                  </div>
-                ))}
+        {view === 'calendar' ? (
+          <CalendarMain
+            data={cal.data}
+            layer={cal.layer}
+            setLayer={cal.setLayer}
+            selectedISO={cal.selectedISO}
+            onSelectDay={cal.setSelectedISO}
+            onShiftMonth={cal.shiftMonth}
+            onJumpToday={cal.jumpToday}
+            todayISO={todayISO}
+          />
+        ) : (
+          <>
+            {guesses.toSort.length > 0 && (
+              <div className={s.sortBanner}>
+                <Logo size={32} mood="curious" interactive cheer="Let's give every rupiah a calm home." />
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 1, marginRight: 'auto', minWidth: 0 }}>
+                  <strong style={{ fontSize: 14, fontWeight: 600 }}>
+                    {guesses.toSort.length} {guesses.toSort.length === 1 ? 'item' : 'items'} in Buffer ready to sort
+                  </strong>
+                  <span style={{ fontSize: 12.5, color: C.textMuted }}>
+                    {guesses.status === 'asking' ? 'Maxie is guessing the best categories…' : 'Quick 1-tap cards with Maxie’s guesses — takes seconds.'}
+                  </span>
+                </span>
+                <button type="button" className={s.btnPrimarySm} onClick={() => setSorting(guesses.toSort.map(t => t.id))}>
+                  Start sorting
+                </button>
               </div>
             )}
-          </div>
-        )}
 
-        <UpcomingBills cycle={cycle} bills={bills} onDismiss={onDismissBill} onMarkPaid={onMarkBillPaid} />
+            {/* overflow visible: the "paid back for" picker floats past the card's edge. */}
+            <div className={s.cardFlush} style={{ padding: '4px 0 6px', overflow: 'visible' }}>
+              {groups.length === 0 && (
+                <div style={{ padding: '40px 24px', textAlign: 'center', fontSize: 14, color: C.textMuted, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                  <Logo size={44} mood={!cat && !needle && range === 'today' ? 'happy' : 'curious'} interactive cheer="Nice and quiet." />
+                  <span>
+                    {!cat && !needle && range === 'today' ? 'Quiet day so far — nothing spent today.' : !cat && !needle ? 'Nothing here for these dates.' : 'No transactions match these filters.'}
+                  </span>
+                  {(cat || needle || lo !== 0 || hi !== cycle.dayIdx) && (
+                    <button type="button" className={s.btnOutline} onClick={() => setFilter({ range: 'cycle', cat: '', q: '', sort: 'newest' })}>
+                      Show the whole cycle
+                    </button>
+                  )}
+                </div>
+              )}
+              {groups.map(g => (
+                <div key={g.label} style={{ display: 'flex', flexDirection: 'column' }}>
+                  <h2 className={s.dayHead}>
+                    <span>{g.label}</span>
+                    {g.items.some(inDayTotal) && <span>{dayTotalLabel(g.items.reduce((a, t) => a + dayAmount(t), 0), full)}</span>}
+                  </h2>
+                  {g.items.map(t => (
+                    <TxRow
+                      key={t.id}
+                      t={t}
+                      sameMerchant={(merchantCount.get(merchantKey(t.title)) ?? 1) - 1}
+                      suggested={guesses.suggest(t).filter(o => o.category !== t.cat || (o.sub ?? undefined) !== t.sub).slice(0, 3)}
+                      guess={t.cat === 'Buffer' ? guesses.guesses[t.id] : undefined}
+                      onRecat={recategorise}
+                      onLink={onLink}
+                      onShare={onShare}
+                      onRemove={() => remove(t)}
+                      onPlan={setPlanFor}
+                      onUnplan={unplan}
+                      expenses={expenses}
+                      compact={phone}
+                      usualAccount={usualAccount}
+                      onNotice={text => setToast({ text })}
+                      onNewCategory={name => {
+                        setOpen(null);
+                        setCreating({ name, tx: t });
+                      }}
+                      popover={open?.id === t.id ? open.kind : null}
+                      setPopover={kind => setOpen(kind ? { id: t.id, kind } : null)}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            {removedHere.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <button type="button" className={s.textBtnSm} aria-expanded={showRemoved} onClick={() => setShowRemoved(!showRemoved)} style={{ alignSelf: 'flex-start' }}>
+                  {showRemoved ? 'Hide' : 'Show'} {removedHere.length} removed {removedHere.length === 1 ? 'transaction' : 'transactions'} in these dates
+                </button>
+                {showRemoved && (
+                  <div className={s.cardFlush} style={{ padding: '4px 0' }}>
+                    {removedHere.map(t => (
+                      <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px', color: C.textMuted }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, textDecoration: 'line-through' }}>{t.title}</span>
+                          <span style={{ fontSize: 13 }}>
+                            {dayLabel(t.date)}, {t.cat}, {full(t.amount)}
+                          </span>
+                        </div>
+                        <button type="button" className={s.btnOutline} onClick={() => onRemove(t.id, false)} style={{ flex: 'none' }}>
+                          Restore
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <UpcomingBills cycle={cycle} bills={bills} onDismiss={onDismissBill} onMarkPaid={onMarkBillPaid} />
+          </>
+        )}
       </div>
-      {phone ? (
+      {view === 'calendar' ? (
+        <CalendarSide
+          data={cal.data}
+          day={cal.selectedDay}
+          onSelectDay={cal.setSelectedISO}
+          onViewInList={openDateInList}
+          onMarkBillPaid={onMarkBillPaid}
+          onDismissBill={onDismissBill}
+        />
+      ) : phone ? (
         // Phones: folded under one row; the total is already in the line above the list.
         <section className={s.splitSide}>
           <button type="button" className={s.rowBtn} aria-expanded={recapOpen} onClick={() => setRecapOpen(!recapOpen)} style={{ padding: '14px 16px', minHeight: 48 }}>
