@@ -42,8 +42,9 @@ export function modelLabel(id?: string): string {
   return id.replace(/^gemini-/, '');
 }
 
-/** Newest transactions sent along; enough for a cycle, small enough to keep each question quick. */
-const MAX_TXS = 120;
+/** Compact transaction slice: all Buffer items (so sorting works) plus newest 45 others, keeping prompts fast. */
+const MAX_BUFFER_TXS = 30;
+const MAX_OTHER_TXS = 45;
 
 /**
  * What Gemini sees with each question: this cycle's numbers, savings & card bills, pre-aggregated top merchants,
@@ -54,7 +55,7 @@ export function chatContext({ cycle, budget: b, settings, notes, withNotes }: { 
   const r = Math.round;
   const name = settings.name.trim();
 
-  // Pre-aggregate spending by merchant across the whole cycle so Maxie never has to sum 120+ rows mentally.
+  // Pre-aggregate spending by merchant across the whole cycle so Maxie never has to sum raw rows mentally.
   const merch = new Map<string, { merchant: string; category: string; count: number; total: number }>();
   let bufferCount = 0;
   for (const t of b.txs) {
@@ -71,7 +72,7 @@ export function chatContext({ cycle, budget: b, settings, notes, withNotes }: { 
   }
   const topMerchants = [...merch.values()]
     .sort((a, z) => z.total - a.total)
-    .slice(0, 15)
+    .slice(0, 12)
     .map(m => ({ ...m, total: r(m.total) }));
 
   const cards = b.cards
@@ -83,6 +84,10 @@ export function chatContext({ cycle, budget: b, settings, notes, withNotes }: { 
       carriedOver: r(c.carriedOver),
       installments: r(c.installments),
     }));
+
+  const bufferTxs = b.txs.filter(t => t.cat === 'Buffer' && !t.isIncome && !t.isTransfer).slice(0, MAX_BUFFER_TXS);
+  const bufferIds = new Set(bufferTxs.map(t => t.id));
+  const recentTxs = [...bufferTxs, ...b.txs.filter(t => !bufferIds.has(t.id)).slice(0, MAX_OTHER_TXS)];
 
   return {
     today: toISO(cycle.today),
@@ -113,11 +118,10 @@ export function chatContext({ cycle, budget: b, settings, notes, withNotes }: { 
       limit: r(c.limit),
       spent: r(c.spent),
       lastCycleBySameDay: r(c.lastSameDays),
-      subs: settings.subcategories[c.name] ?? [],
+      ...(settings.subcategories[c.name]?.length ? { subs: settings.subcategories[c.name] } : {}),
     })),
     bills: b.bills.map(x => ({ title: tidyName(x.title), category: x.category, amount: r(x.amount), date: toISO(x.date) })),
-    // Only what's needed to explain spending: no account, and empty fields left out (a smaller request answers faster).
-    transactions: b.txs.slice(0, MAX_TXS).map(t => ({
+    transactions: recentTxs.map(t => ({
       id: t.id,
       date: toISO(t.date).slice(5),
       merchant: tidyName(t.title),
@@ -126,12 +130,12 @@ export function chatContext({ cycle, budget: b, settings, notes, withNotes }: { 
       amount: r(t.isIncome || t.isTransfer ? t.amount : t.net),
       ...(withNotes && notes[t.id] ? { note: notes[t.id] } : {}),
     })),
-    // Answers you rated: write more like the liked ones, avoid what the disliked ones did.
+    // Compact feedback memory: enough to steer tone without inflating every request.
     ...(settings.chatFeedback?.length
       ? {
           answerFeedback: {
-            liked: settings.chatFeedback.filter(f => f.good).slice(-8).map(f => ({ question: f.q, answer: f.a })),
-            disliked: settings.chatFeedback.filter(f => !f.good).slice(-8).map(f => ({ question: f.q, answer: f.a })),
+            liked: settings.chatFeedback.filter(f => f.good).slice(-4).map(f => ({ q: f.q.slice(0, 80), a: f.a.slice(0, 140) })),
+            disliked: settings.chatFeedback.filter(f => !f.good).slice(-4).map(f => ({ q: f.q.slice(0, 80), a: f.a.slice(0, 140) })),
           },
         }
       : {}),

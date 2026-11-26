@@ -14,8 +14,8 @@ import { CATEGORIES, categoryByName, categoryLabel, OTHER_CATEGORIES } from '../
 import { merchantKey } from '../data/transactions';
 import { sum, tidyName, toISO } from '../lib/format';
 
-/** Stop waiting after this long; Apps Script would still finish, but the answer is dropped. */
-const TIMEOUT_MS = 75_000;
+/** Stop waiting after this long; per-model fetches abort at 22s and fall back automatically. */
+const TIMEOUT_MS = 45_000;
 
 /** What Maxie is doing, by how long it's been working: the thinking label follows the loading. */
 export const thinkingLabel = (secs: number, deep = false) =>
@@ -237,9 +237,9 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
           </span>
           <span style={{ display: 'flex', flexDirection: 'column', marginRight: 'auto', minWidth: 0 }}>
             <strong style={{ fontFamily: 'var(--font-serif)', fontSize: 20, fontWeight: 500, lineHeight: '22px' }}>Maxie</strong>
-            <span style={{ fontSize: 12, color: C.textMuted }}>{deep ? 'Deep reasoning + local prices' : 'Quick cycle assistant'}</span>
+            <span style={{ fontSize: 12, color: C.textMuted }}>{deep ? 'Deeper reasoning · free tier' : 'Fast cycle assistant'}</span>
           </span>
-          <div className={s.sxMiniSeg} role="group" aria-label="Answer speed and depth" title="Quick: fast answers · Deep: Gemini 4 Hydrogen + local price search">
+          <div className={s.sxMiniSeg} role="group" aria-label="Answer speed and depth" title="Quick: instant 3.5 Flash-Lite · Deep: smarter 3.6 Flash (free tier)">
             <button type="button" aria-pressed={!deep} onClick={() => setDeep(false)}>
               Quick
             </button>

@@ -14,10 +14,21 @@ parentPort.on('message', async ({ reqs, port, signal }) => {
   const out = await Promise.all(reqs.map(async r => {
     try {
       const body = r.body == null ? undefined : r.bodyIsBase64 ? Buffer.from(r.body, 'base64') : r.body;
-      const res = await fetch(r.url, { method: r.method || 'GET', headers: r.headers, body });
+      const isGemini = String(r.url || '').includes('generativelanguage.googleapis.com');
+      const res = await fetch(r.url, {
+        method: r.method || 'GET',
+        headers: r.headers,
+        body,
+        signal: AbortSignal.timeout(isGemini ? 22_000 : 60_000),
+      });
       const buf = Buffer.from(await res.arrayBuffer());
       return { status: res.status, headers: Object.fromEntries(res.headers), body: buf.toString('base64') };
     } catch (e) {
+      const name = e && e.name ? String(e.name) : '';
+      if (name === 'TimeoutError' || name === 'AbortError') {
+        const msg = JSON.stringify({ error: { message: 'Model request timed out' } });
+        return { status: 504, headers: {}, body: Buffer.from(msg).toString('base64') };
+      }
       return { status: 0, headers: {}, body: '', error: String((e && e.message) || e) };
     }
   }));
