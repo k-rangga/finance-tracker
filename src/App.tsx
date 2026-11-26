@@ -103,10 +103,18 @@ export default function App() {
   const subCharges = useMemo(() => chargesBySub(subscriptions, all), [subscriptions, all]);
   const subStates = useMemo(() => Object.fromEntries(Object.entries(subscriptions).map(([id, x]) => [id, subState(x, subCharges.get(id) ?? [], today)])), [subscriptions, subCharges, today]);
   const catOf = useCallback((t: { id: string; category: string }) => recat[t.id] ?? t.category, [recat]);
+  /** Names printed on the user's own bank accounts, for auto-recognizing transfers to self. */
+  const ownNames = useMemo(
+    () =>
+      [settings.name, ...(settings.ownAccountNames ?? '').split(/[,;\n]+/)]
+        .map(x => x.trim())
+        .filter(Boolean),
+    [settings.name, settings.ownAccountNames],
+  );
   /** This cycle's transaction views (before budget), used to verify individual fixed bills cleanly. */
   const cycleTxViews = useMemo(
-    () => txViews(transactions, [...transactions, ...prevTransactions], { recat, links, shares, cycle, subs }).txs,
-    [transactions, prevTransactions, recat, links, shares, cycle, subs],
+    () => txViews(transactions, [...transactions, ...prevTransactions], { recat, links, shares, cycle, subs, ownNames }).txs,
+    [transactions, prevTransactions, recat, links, shares, cycle, subs, ownNames],
   );
   /** Verification status of each individual fixed bill against actual transactions in this cycle. */
   const fixedBillStatuses = useMemo(
@@ -253,16 +261,16 @@ export default function App() {
       const plannedCosts: Record<string, number> = {};
       for (const c of settings.cyclePlans?.[cycleKey(cycle)]?.costs ?? []) plannedCosts[c.category] = (plannedCosts[c.category] ?? 0) + c.amount;
       const fixedBillLimits = fixedBillCategoryLimits(fixedBillStatuses);
-      return computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, cycle, income: settings.income, warnAt: settings.warnAt, plannedCosts, fixedBillLimits });
+      return computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, ownNames, cycle, income: settings.income, warnAt: settings.warnAt, plannedCosts, fixedBillLimits });
     },
-    [transactions, prevTransactions, prevCycle, bills, fixedBillStatuses, recat, links, shares, subs, cycle, settings.income, settings.warnAt, settings.cyclePlans, settings.savingsPct, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
+    [transactions, prevTransactions, prevCycle, bills, fixedBillStatuses, recat, links, shares, subs, ownNames, cycle, settings.income, settings.warnAt, settings.cyclePlans, settings.savingsPct, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
   );
   // Keep personalized calm loading reflections fresh locally so the next initial load greets with real context.
   useEffect(() => {
     writeBootHint(buildBootHint({ cycle, budget, settings, plans }));
   }, [cycle, budget, settings, plans]);
   /** Every synced transaction, for the Transactions screen's own date range. */
-  const allTxs = useMemo(() => txViews(all, all, { recat, links, shares, cycle, subs }).txs, [all, recat, links, shares, cycle, subs]);
+  const allTxs = useMemo(() => txViews(all, all, { recat, links, shares, cycle, subs, ownNames }).txs, [all, recat, links, shares, cycle, subs, ownNames]);
   const removedTxs = useMemo(
     () => txViews(imported.filter(t => removedIds.has(t.id)), imported, { recat, links, shares, cycle }).txs,
     [imported, removedIds, recat, links, shares, cycle],

@@ -60,9 +60,10 @@ function parseReceipt(e) {
   const subject = fwd.subject;
   const from = fwd.from;
   const text = fwd.text;
+  const ownerNames = Array.isArray(e && e.ownerNames) ? e.ownerNames : [];
   const hay = subject + '\n' + from + '\n' + text;
-  const specific = parseBcaJournal_(subject, text) || parseBcaCard_(subject, text) || parseBlu_(subject, text) || parseGrab_(subject, from, text) || parseTokopedia_(subject, from, text);
-  const p = specific || parseGeneric_(subject, from, text);
+  const specific = parseBcaJournal_(subject, text, ownerNames) || parseBcaCard_(subject, text) || parseBlu_(subject, text, ownerNames) || parseGrab_(subject, from, text) || parseTokopedia_(subject, from, text);
+  const p = specific || parseGeneric_(subject, from, text, ownerNames);
   if (!p || !(p.amount > 0)) return null;
   const source = p.source || sourceOf_(hay);
   const category = p.category || categoryOf_(p.kind, hay);
@@ -142,25 +143,75 @@ function holder_(text) {
 }
 
 const letters_ = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+const digits_ = s => String(s || '').replace(/\D/g, '');
+const NAME_NOISE_ = /^(mr|mrs|ms|bp|bpk|ibu|sdr|sdri|pt|cv|tbk|bank|bca|blu|mandiri|bni|bri|cimb|permata|jenius|jago|seabank|superbank|danamon|ocbc|uob|hsbc|gopay|ovo|dana|shopeepay|linkaja|rekening|account|tabungan|bluaccount)$/;
+const nameTokens_ = s =>
+  String(s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(w => w && !NAME_NOISE_.test(w));
 
-/** True when a counterparty name looks like the account holder (e.g. "KALAKA RANGGAS" vs "Kalaka Rangga, S"). */
-function isSelf_(name, holderNames) {
+/**
+ * True when a counterparty name (or destination account number) looks like the account holder:
+ * - exact / prefix letter match ("KALAKA RANGGAS" vs "Kalaka Rangga, S")
+ * - whole-word match for a single 4+ letter name ("Rangga" inside "KALAKA RANGGA S")
+ * - multi-word overlap (2+ words ≥ 3 letters in any order, or first 4+ letter word + matching initial)
+ * - optional 4+ digit account alias matched against `accountRef`
+ */
+function isSelf_(name, holderNames, accountRef) {
   const n = letters_(name);
-  if (n.length < 4) return false;
-  return holderNames.some(h => {
-    const x = letters_(h);
-    return x.length >= 4 && (n === x || n.indexOf(x) === 0 || x.indexOf(n) === 0);
+  const nt = nameTokens_(name).filter(w => /^[a-z]+$/.test(w));
+  const accDigits = digits_(accountRef || '');
+  return (holderNames || []).some(h => {
+    const raw = String(h || '').trim();
+    if (!raw) return false;
+    // Account number / last-4+ digit alias match when provided in Settings.
+    const hd = digits_(raw);
+    if (hd.length >= 4 && !/[a-z]/i.test(raw)) {
+      return accDigits.length >= 4 && accDigits.indexOf(hd) >= 0;
+    }
+    if (n.length < 4) return false;
+    const x = letters_(raw);
+    if (x.length >= 4 && (n === x || n.indexOf(x) === 0 || x.indexOf(n) === 0)) return true;
+    const ht = nameTokens_(raw).filter(w => /^[a-z]+$/.test(w));
+    if (!ht.length || !nt.length) return false;
+    // Single-word holder (e.g. "Rangga" from greeting or Settings): must match a whole token ≥ 4 letters.
+    if (ht.length === 1) return ht[0].length >= 4 && nt.indexOf(ht[0]) >= 0;
+    // Multi-word holder: either 2+ significant words match (any order) or a 4+ letter name + initial matches.
+    const shared = ht.filter(w => w.length >= 3 && nt.indexOf(w) >= 0);
+    if (shared.length >= 2) return true;
+    if (shared.length === 1 && shared[0].length >= 4) {
+      const restH = ht.filter(w => w !== shared[0]);
+      const restN = nt.filter(w => w !== shared[0]);
+      if (restH.some(w => restN.some(t => w[0] === t[0] && (w.length === 1 || t.length === 1 || t.indexOf(w) === 0 || w.indexOf(t) === 0)))) return true;
+    }
+    return false;
   });
 }
 
-function parseBcaJournal_(subject, text) {
-  if (!/internet transaction journal|mybca|klikbca/i.test(subject + text.slice(0, 600)) || !/(transaction|transfer) type\s*:|type of transaction\s*:/i.test(text)) return null;
+function parseBcaJournal_(subject, text, ownerNames) {
+  if (!/internet transaction journal|mybca|klikbca/i.test(subject + text.slice(0, 600)) || !/(transaction|transfer) type\s*:|type of transaction\s*:|jenis transaksi\s*:/i.test(text)) return null;
   const f = fields_(text);
-  const type = f['transaction type'] || f['transfer type'] || f['type of transaction'] || '';
-  const amt = money_(f['total payment'] || f['top up amount'] || f['transfer amount'] || f['amount'] || f['total'] || f['nominal'] || '');
+  const type = f['transaction type'] || f['transfer type'] || f['type of transaction'] || f['jenis transaksi'] || '';
+  const amt = money_(f['total payment'] || f['top up amount'] || f['transfer amount'] || f['amount'] || f['total'] || f['nominal'] || f['jumlah'] || '');
   if (!amt) return null;
-  const to = f['payment to'] || f['beneficiary name'] || f['receiver name'] || f['recipient name'] || f['to account name'] || f['account name'] || f['merchant name'] || '';
-  const ref = f['reference no.'] || f['reference no'] || f['rrn'] || '';
+  const to =
+    f['payment to'] ||
+    f['beneficiary name'] ||
+    f['receiver name'] ||
+    f['recipient name'] ||
+    f['to account name'] ||
+    f['account name'] ||
+    f['nama penerima'] ||
+    f['penerima'] ||
+    f['nama tujuan'] ||
+    f['merchant name'] ||
+    '';
+  const toAcc = f['beneficiary account'] || f['to account'] || f['rekening tujuan'] || f['nomor rekening tujuan'] || f['account number'] || '';
+  const ref = f['reference no.'] || f['reference no'] || f['rrn'] || f['no. referensi'] || '';
+  const holders = [holder_(text)].concat(ownerNames || []);
   const base = { amount: amt.amount, currency: amt.currency, source: 'Bank email', ref: 'bca:' + ref };
   if (/flazz|e-?money|tapcash|brizzi/i.test(type)) return Object.assign(base, { title: 'Flazz top-up', category: 'Transport' });
   if (/top ?up/i.test(type)) return Object.assign(base, { kind: 'transfer', title: (to || type).trim() });
@@ -169,11 +220,11 @@ function parseBcaJournal_(subject, text) {
     // investment or e-wallet account, not spending. A VA in someone else's name is a bill.
     const company = f['company/product name'] || f['company name'] || f['product name'] || '';
     // Marketplaces put your own name on the VA too, but paying one is a purchase (or a bill), not a transfer.
-    const self = !MARKETPLACES.test(company) && (isSelf_(f['name'] || '', [holder_(text)]) || INVESTING.test(company));
+    const self = !MARKETPLACES.test(company) && (isSelf_(f['name'] || f['nama'] || '', holders, toAcc) || INVESTING.test(company));
     return Object.assign(base, { kind: self ? 'transfer' : 'spend', title: vaTitle_(company) || type, category: self ? TRANSFER : categoryOfName_(company) });
   }
-  if (/transfer/i.test(type)) {
-    const self = isSelf_(to, [holder_(text)]);
+  if (/transfer|bi-?fast|skn|llg|rtgs|overbooking|pindah buku|pemindahbukuan/i.test(type)) {
+    const self = isSelf_(to, holders, toAcc);
     return Object.assign(base, { kind: self ? 'transfer' : 'spend', title: to || type, category: self ? TRANSFER : categoryOfName_(to) });
   }
   if (/credit card|kartu kredit/i.test(type + to))
@@ -224,7 +275,7 @@ function parseBcaCard_(subject, text) {
   };
 }
 
-function parseBlu_(subject, text) {
+function parseBlu_(subject, text, ownerNames) {
   if (!/blu/i.test(subject) || !/bcadigital|#teamblu|bluaccount/i.test(text)) return null;
   const incoming = /incoming transaction/i.test(subject);
   const lines = text.split('\n').map(l => l.trim()).filter(l => l && !/^\[.*\]$/.test(l) && !/^</.test(l));
@@ -244,12 +295,12 @@ function parseBlu_(subject, text) {
     // "KALAKA RANGGA S / SUPERBANK → Kalaka Rangga, S / bluAccount": sender is the first name before the arrow.
     const senderName = before.filter(l => !/^(hi|there|transfer amount|rp)/i.test(l)).slice(-2)[0] || '';
     const accountName = after[0] || greet;
-    const self = isSelf_(senderName, [accountName, greet]);
+    const self = isSelf_(senderName, [accountName, greet].concat(ownerNames || []));
     return Object.assign(base, { kind: self ? 'transfer' : 'income', title: senderName || 'Incoming transfer' });
   }
   const own = before.filter(l => !/^(hi|thank|total|amount|rp)/i.test(l)).slice(-2)[0] || greet;
   const to = after[0] || '';
-  const self = isSelf_(to, [own, greet]);
+  const self = isSelf_(to, [own, greet].concat(ownerNames || []));
   void lines;
   return Object.assign(base, { kind: self ? 'transfer' : 'spend', title: merchantName_(to) || type || 'blu payment', category: self ? TRANSFER : categoryOfName_(to) });
 }
@@ -341,7 +392,10 @@ function parseTokopedia_(subject, from, text) {
 
 // ---------------------------------------------------------------- generic fallback
 
-function parseGeneric_(subject, from, text) {
+const TRANSFER_MAIL = /\b(transfer|bi-?fast|skn|llg|rtgs|overbooking|pemindahbukuan|pindah buku|kirim uang|kirim dana|dana masuk|transfer masuk|uang masuk|incoming transfer|top ?up)\b/i;
+const INCOMING_MAIL = /\b(incoming|dana masuk|transfer masuk|uang masuk|menerima transfer|received a transfer|telah diterima|kredit masuk)\b/i;
+
+function parseGeneric_(subject, from, text, ownerNames) {
   const hits = findAmounts_(subject + '\n' + text);
   if (!hits.length) return null;
   // Prefer an amount labelled "total"/"jumlah"/"nominal"; the last labelled one is usually the grand total.
@@ -350,6 +404,64 @@ function parseGeneric_(subject, from, text) {
   const hay = subject + '\n' + from + '\n' + text;
   if (/\b(credit card payment|pembayaran kartu kredit|bayar kartu kredit|payment to credit card)\b/i.test(hay))
     return { kind: 'transfer', amount: pick.amount, currency: pick.currency, title: 'Credit card payment', category: CC_PAYMENT, source: 'Bank email', account: 'Bank', to_account: cardAccount_(subject + ' ' + from) };
+
+  const source = sourceOf_(hay);
+  if ((source === 'Bank email' || source === 'E-wallet email') && TRANSFER_MAIL.test(hay)) {
+    const incoming = INCOMING_MAIL.test(subject + '\n' + text.slice(0, 600));
+    const holders = [holder_(text)].concat(ownerNames || []);
+    const sender = labelled_(text, ['sender name', 'nama pengirim', 'pengirim', 'dari rekening', 'sumber dana', 'from account']);
+    const recipient = labelled_(text, [
+      'beneficiary name',
+      'nama penerima',
+      'penerima',
+      'recipient name',
+      'receiver name',
+      'nama tujuan',
+      'tujuan transfer',
+      'transfer ke',
+      'tujuan',
+      'payment to',
+      'to account name',
+      'ke rekening',
+    ]);
+    const toAcc = labelled_(text, ['beneficiary account', 'rekening tujuan', 'nomor rekening tujuan', 'no. rekening tujuan', 'to account', 'account number', 'no. rekening', 'nomor rekening']);
+    // If sender is known on an outgoing transfer, include it as an extra holder cue (e.g. Livin' by Mandiri).
+    if (!incoming && sender) holders.push(sender);
+    const counterparty = incoming ? sender : recipient;
+    const isTopUpSelf = /\btop ?up\b/i.test(subject + '\n' + text.slice(0, 400)) && !MARKETPLACES.test(hay) && (isSelf_(counterparty, holders, toAcc) || INVESTING.test(counterparty || hay));
+    const self = isTopUpSelf || (!MARKETPLACES.test(counterparty) && isSelf_(counterparty, holders, toAcc));
+    if (self) {
+      return {
+        kind: 'transfer',
+        amount: pick.amount,
+        currency: pick.currency,
+        title: (INVESTING.test(counterparty) ? vaTitle_(counterparty) : merchantName_(counterparty)) || titleFrom_(subject, from),
+        category: TRANSFER,
+        source: source,
+      };
+    }
+    if (incoming) {
+      return {
+        kind: 'income',
+        amount: pick.amount,
+        currency: pick.currency,
+        title: merchantName_(counterparty) || titleFrom_(subject, from),
+        category: INCOME,
+        source: source,
+      };
+    }
+    if (counterparty) {
+      return {
+        kind: 'spend',
+        amount: pick.amount,
+        currency: pick.currency,
+        title: merchantName_(counterparty),
+        category: categoryOfName_(counterparty),
+        source: source,
+      };
+    }
+  }
+
   const kind = /\b(gaji|salary|payroll|payslip|slip gaji|thr)\b/i.test(hay) ? 'income' : 'spend';
   return { kind: kind, amount: pick.amount, currency: pick.currency, title: titleFrom_(subject, from) };
 }

@@ -167,6 +167,58 @@ function reimbursements(all: Transaction[], recat: Record<string, string>, links
   return { valid, back };
 }
 
+const OWN_NAME_NOISE = /^(mr|mrs|ms|bp|bpk|ibu|sdr|sdri|pt|cv|tbk|bank|bca|blu|mandiri|bni|bri|cimb|permata|jenius|jago|seabank|superbank|danamon|ocbc|uob|hsbc|gopay|ovo|dana|shopeepay|linkaja|rekening|account|tabungan|bluaccount)$/;
+const MERCHANT_HINT = /\b(warung|toko|cafe|caf[eé]|kopi|coffee|resto|restoran|restaurant|mart|shop|store|bakery|pt|cv|tbk|grab|gojek|tokopedia|shopee|lazada|blibli|klinik|apotek|hotel|salon|barber|laundry|spbu|pertamina|shell|parkir|tol)\b/i;
+
+/** True when a bank/e-wallet counterparty title clearly matches one of the user's own account names. */
+export function isOwnAccountName(title: string, ownNames: string[]): boolean {
+  if (!ownNames.length || !title || MERCHANT_HINT.test(title)) return false;
+  const letters = (s: string) => s.toLowerCase().replace(/[^a-z]/g, '');
+  const tokens = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter(w => w && /^[a-z]+$/.test(w) && !OWN_NAME_NOISE.test(w));
+  const n = letters(title);
+  if (n.length < 4) return false;
+  const nt = tokens(title);
+  if (!nt.length) return false;
+  return ownNames.some(raw => {
+    const h = raw.trim();
+    if (!h || !/[a-z]/i.test(h)) return false;
+    const x = letters(h);
+    if (x.length >= 4 && (n === x || n.startsWith(x) || x.startsWith(n))) return true;
+    const ht = tokens(h);
+    if (!ht.length) return false;
+    if (ht.length === 1) return ht[0].length >= 4 && nt.includes(ht[0]);
+    const shared = ht.filter(w => w.length >= 3 && nt.includes(w));
+    if (shared.length >= 2) return true;
+    if (shared.length === 1 && shared[0].length >= 4) {
+      const restH = ht.filter(w => w !== shared[0]);
+      const restN = nt.filter(w => w !== shared[0]);
+      if (restH.some(w => restN.some(t => w[0] === t[0] && (w.length === 1 || t.length === 1 || t.startsWith(w) || w.startsWith(t))))) return true;
+    }
+    return false;
+  });
+}
+
+function effectiveCategory(t: Transaction, recat: Record<string, string>, ownNames: string[]): string {
+  if (t.category === CC_PAYMENT_CATEGORY) return t.category;
+  if (t.id in recat) return recat[t.id];
+  if (
+    ownNames.length > 0 &&
+    (t.source === 'Bank email' || t.source === 'E-wallet email') &&
+    (t.category === 'Buffer' || t.category === INCOME_CATEGORY) &&
+    !isSalary(t) &&
+    isOwnAccountName(t.title, ownNames)
+  ) {
+    return TRANSFER_CATEGORY;
+  }
+  return t.category;
+}
+
 /**
  * Transactions as the screens show them: effective category, reimbursements and your share applied.
  * `context` is every transaction a reimbursement may link across (at least `transactions` itself).
@@ -174,7 +226,7 @@ function reimbursements(all: Transaction[], recat: Record<string, string>, links
 export function txViews(
   transactions: Transaction[],
   context: Transaction[],
-  { recat, links, shares, cycle, subs = {} }: { recat: Record<string, string>; links: Record<string, string>; shares: Record<string, number>; cycle: Cycle; subs?: Record<string, string> },
+  { recat, links, shares, cycle, subs = {}, ownNames = [] }: { recat: Record<string, string>; links: Record<string, string>; shares: Record<string, number>; cycle: Cycle; subs?: Record<string, string>; ownNames?: string[] },
 ) {
   const { valid, back } = reimbursements(context, recat, links);
   const shareOf = (t: Transaction) => (shares[t.id] == null ? undefined : Math.round(shares[t.id] * t.amount * 100) / 100);
@@ -185,7 +237,7 @@ export function txViews(
     .map(t => {
       // Card bill payments can't be re-categorised: they'd count the card's purchases twice.
       const isCcPayment = t.category === CC_PAYMENT_CATEGORY;
-      const cat = isCcPayment ? t.category : (recat[t.id] ?? t.category);
+      const cat = effectiveCategory(t, recat, ownNames);
       const offset = cycle.offsetOf(t.date);
       return {
         ...t,
@@ -226,6 +278,8 @@ export function computeBudget(args: {
   shares: Record<string, number>;
   /** Each transaction's sub-category (see resolveSubs). */
   subs?: Record<string, string>;
+  /** Names on the user's own bank accounts, used to treat already-imported self-transfers as Transfer. */
+  ownNames?: string[];
   cycle: Cycle;
   income: number;
   warnAt: number;
@@ -234,15 +288,15 @@ export function computeBudget(args: {
   /** Exact totals from individual fixed bills per category (fixed currency amount, immune to income % drift). */
   fixedBillLimits?: Record<string, number>;
 }): Budget {
-  const { transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, cycle, income, warnAt, plannedCosts = {}, fixedBillLimits = {} } = args;
+  const { transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, ownNames = [], cycle, income, warnAt, plannedCosts = {}, fixedBillLimits = {} } = args;
   const ofIncome = (p: number) => (p / 100) * income;
-  const { txs, netOf } = txViews(transactions, [...transactions, ...prevTransactions], { recat, links, shares, cycle, subs });
+  const { txs, netOf } = txViews(transactions, [...transactions, ...prevTransactions], { recat, links, shares, cycle, subs, ownNames });
 
   const weekFrac = Math.min(1, (cycle.dayIdx - cycle.weekIdx * 7 + 1) / 7);
   const cats: CatView[] = CATEGORIES.map(c => {
     const mine = txs.filter(t => t.cat === c.name);
     const cur = [0, 1, 2, 3].map(w => sum(mine.filter(t => t.week === w).map(t => t.net)));
-    const prevMine = prevTransactions.filter(t => (recat[t.id] ?? t.category) === c.name);
+    const prevMine = prevTransactions.filter(t => effectiveCategory(t, recat, ownNames) === c.name);
     const prev = [0, 1, 2, 3].map(w => sum(prevMine.filter(t => weekOf(prevCycle.offsetOf(t.date)) === w).map(netOf)));
     const spent = sum(cur);
     // Installment payments count in their own category, and its plan grows by them (paid so far plus still due),

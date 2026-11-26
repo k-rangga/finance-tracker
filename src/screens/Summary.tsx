@@ -17,8 +17,8 @@ import { categoryByName, SAVINGS_CATEGORY, SAVINGS_TARGET_PCT, TRANSFER_CATEGORY
 import type { Bill } from '../data/transactions';
 import { UpcomingBills } from '../components/UpcomingBills';
 import type { ActivityFilter } from './Activity';
-import { FlameIcon, TargetIcon, TrophyIcon } from './categoriesExtras';
-import { CycleStoryModal, DailyRitualCard, resolveVignetteScene, VignetteSvg } from './SummaryRituals';
+import { TargetIcon } from './categoriesExtras';
+import { CycleStoryModal, resolveVignetteScene, VignetteSvg } from './SummaryRituals';
 
 type TxPatch = Pick<ActivityFilter, 'range'> & Partial<ActivityFilter>;
 
@@ -40,9 +40,9 @@ type SummaryProps = {
 };
 
 /**
- * The cycle at a glance, charts first: one unified Maxie companion bar (vignette, greeting, inline wins, and Cycle Story),
- * gentle alerts, what's left, three interactive tiles, spending by day, where the money went (treemap),
- * a calm mid-page daily check-in, upcoming bills, and recent activity.
+ * The cycle at a glance, charts first: one unified Maxie companion bar (vignette, greeting, and Cycle Story),
+ * gentle alerts, what's left, three warm interactive tiles, spending by day, where the money went (treemap),
+ * upcoming bills, and recent activity.
  */
 export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, onDismissBill, onMarkBillPaid, onShowTransactions, onPlanNext, onAskMaxie }: SummaryProps) {
   const { ofIncome, settings } = useSettings();
@@ -51,7 +51,7 @@ export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, on
   const storyKey = `moneyTracker.storySeen.${todayISO}`;
   const [storyOpen, setStoryOpen] = useState(false);
 
-  // Open the 3-card Cycle Story pop-up gently on first visit of the day (skipped in Quiet mode or empty cycles).
+  // Open the 4-card Cycle Story pop-up gently on first visit of the day (skipped in Quiet mode or empty cycles).
   useEffect(() => {
     if (settings.quietMode || b.txs.length === 0) return;
     if (storage.getRaw(storyKey)) return;
@@ -92,7 +92,6 @@ export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, on
       />
       <DailyBars cycle={cycle} budget={b} onOpenDay={iso => onShowTransactions({ range: 'custom', from: iso, to: iso })} />
       <WhereMap cycle={cycle} budget={b} onOpenCategory={onOpenCategory} onOpenCategories={onOpenCategories} />
-      <DailyRitualCard cycle={cycle} budget={b} />
       <UpcomingBills id="summary-bills" cycle={cycle} bills={b.bills} limit={5} compact onDismiss={onDismissBill} onMarkPaid={onMarkBillPaid} />
       <Recent
         budget={b}
@@ -126,7 +125,7 @@ function smoothStreakDays(cycle: Cycle, b: Budget): number {
 
 /**
  * Unified Maxie Companion Bar: combines Maxie's living Husky window scene, personalized daily greeting,
- * inline milestone win badges, optional zero-spend pledge, and the Cycle Story replay trigger into one calm strip.
+ * optional zero-spend pledge, and the Cycle Story replay trigger into one clean strip.
  */
 function MaxieGreeting({
   cycle,
@@ -146,7 +145,6 @@ function MaxieGreeting({
   const name = settings.name.trim();
   const pledgeKey = `moneyTracker.zeroPledge.${toISO(cycle.today)}`;
   const [pledged, setPledged] = useState(() => storage.get<boolean>(pledgeKey, false));
-  const [pickedWin, setPickedWin] = useState<string | null>(null);
   useEffect(() => {
     setPledged(storage.get<boolean>(pledgeKey, false));
   }, [pledgeKey]);
@@ -210,6 +208,11 @@ function MaxieGreeting({
     line = id
       ? `${salutation} Target tabungan ${SAVINGS_TARGET_PCT}% siklus ini sudah tercapai — langkah yang mantap.`
       : `${salutation} Savings goal reached — ${Math.round(b.savedPct)}% already set aside this cycle.`;
+  } else if (streak >= 4) {
+    mood = 'happy';
+    line = id
+      ? `${salutation} ${streak} hari berturut-turut berjalan mulus — ruang lega masih ${short(b.safeDay)} per hari.`
+      : `${salutation} ${streak} calm days in a row — steady room ahead at ${short(b.safeDay)} a day.`;
   } else if (yesterdaySpend === 0 && cycle.dayN >= 2) {
     mood = 'happy';
     line = id
@@ -244,63 +247,7 @@ function MaxieGreeting({
             ? `Masih ada ${short(left)} ruang lega.`
             : `${short(left)} of breathing room.`;
 
-  // Inline milestone wins (hidden in Quiet mode).
-  const bufferCount = b.txs.filter(t => t.cat === 'Buffer' && !t.isIncome && !t.isTransfer).length;
-  const wins: { id: string; icon: ReactNode; label: string; detail: string }[] = [];
-  if (!settings.quietMode) {
-    if (streak >= 3 && left >= 0) {
-      wins.push({
-        id: 'streak',
-        icon: <FlameIcon size={13} />,
-        label: id ? `${streak} hari mulus` : `${streak}-day smooth streak`,
-        detail: id
-          ? `Pengeluaran harian tetap rapi di dalam target selama ${streak} hari berturut-turut.`
-          : `Everyday spending stayed within your daily target for ${streak} days in a row.`,
-      });
-    }
-    if (target > 0 && b.saved >= target) {
-      wins.push({
-        id: 'saved',
-        icon: <TrophyIcon size={13} />,
-        label: id ? 'Target tabungan tercapai' : 'Savings goal reached',
-        detail: id
-          ? `Sudah menyisihkan ${short(b.saved)} (${Math.round(b.savedPct)}%) siklus ini.`
-          : `You set aside ${short(b.saved)} (${Math.round(b.savedPct)}%) this cycle.`,
-      });
-    }
-    if (b.txs.length > 0 && bufferCount === 0) {
-      wins.push({
-        id: 'buffer',
-        icon: <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} />,
-        label: id ? 'Buffer rapi' : 'Buffer zero',
-        detail: id
-          ? 'Semua transaksi siklus ini sudah masuk kategori masing-masing.'
-          : 'Every transaction this cycle has a calm category home.',
-      });
-    }
-    if (cycle.dayN >= 4 && b.paceToday > 0 && b.spent <= b.paceToday) {
-      wins.push({
-        id: 'pace',
-        icon: <TargetIcon size={13} />,
-        label: id ? 'Di bawah pace' : 'Under pace',
-        detail: id
-          ? `Masih ${short(b.paceToday - b.spent)} di bawah ritme normal hari ke-${cycle.dayN}.`
-          : `Currently ${short(b.paceToday - b.spent)} ahead of your usual day-${cycle.dayN} pace.`,
-      });
-    }
-    if (b.txs.length > 0 && b.bills.length === 0) {
-      wins.push({
-        id: 'bills',
-        icon: <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} />,
-        label: id ? 'Tagihan beres' : 'All bills clear',
-        detail: id
-          ? 'Tidak ada tagihan terjadwal tersisa sampai gajian berikutnya.'
-          : 'No scheduled bills left before payday — smooth sailing from here.',
-      });
-    }
-  }
-  const activeWin = wins.find(w => w.id === pickedWin);
-  const hasMetaRow = wins.length > 0 || todaySpend === 0 || !!quickAsk;
+  const hasActions = todaySpend === 0 || !!quickAsk;
 
   return (
     <section className={s.vigCard} data-wide data-scene={sceneInfo.scene} aria-label={`Maxie: ${sceneInfo.label}`}>
@@ -320,21 +267,8 @@ function MaxieGreeting({
       <div className={s.vigBody}>
         {!settings.quietMode && <span className={s.vigTag}>{sceneInfo.label}</span>}
         <p className={s.mxGreetingText}>{line}</p>
-        {hasMetaRow && (
+        {hasActions && (
           <div className={s.vigMetaRow}>
-            {wins.map(w => (
-              <button
-                key={w.id}
-                type="button"
-                className={s.winBadge}
-                data-active={pickedWin === w.id || undefined}
-                aria-pressed={pickedWin === w.id}
-                onClick={() => setPickedWin(p => (p === w.id ? null : w.id))}
-              >
-                {w.icon}
-                <span>{w.label}</span>
-              </button>
-            ))}
             {todaySpend === 0 && (
               <button
                 type="button"
@@ -360,7 +294,6 @@ function MaxieGreeting({
             )}
           </div>
         )}
-        {activeWin && <p className={s.winDetail}>{activeWin.detail}</p>}
       </div>
       {b.txs.length > 0 && (
         <button type="button" className={s.btnOutlineSm} onClick={onOpenStory}>
@@ -466,9 +399,9 @@ function NeedsAttention({
 // ---- shared bits ----
 
 /** A chart card: serif title, optional right header figure and subtitle, and the chart. */
-function ChartCard({ id, title, right, sub, children, wide }: { id?: string; title: string; right?: ReactNode; sub?: ReactNode; children: ReactNode; wide?: boolean }) {
+function ChartCard({ id, title, right, sub, children, wide, hero }: { id?: string; title: string; right?: ReactNode; sub?: ReactNode; children: ReactNode; wide?: boolean; hero?: boolean }) {
   return (
-    <section id={id} className={s.sxChartCard} data-wide={wide || undefined} aria-label={title}>
+    <section id={id} className={s.sxChartCard} data-wide={wide || undefined} data-hero={hero || undefined} aria-label={title}>
       <div className={s.sxChartHead}>
         <h2 className={s.sxChartTitle}>{title}</h2>
         {right != null && <span className={s.sxChartRight}>{right}</span>}
@@ -515,8 +448,10 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
   const y = (v: number) => CH - (v / top) * CH;
   const actual = cum.slice(0, today + 1).map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
   const area = `${actual} L${x(today).toFixed(1)} ${CH} L0 ${CH} Z`;
+  const earlyCycle = cycle.dayN <= 3;
   const overPlan = b.budget > 0 && end > b.budget;
-  const projInk = overPlan ? C.redInk : C.textMuted;
+  const warnOver = overPlan && !earlyCycle;
+  const projInk = warnOver ? C.redInk : C.textMuted;
   const shownPast = hover != null && hover >= 0 && hover <= today ? hover : null;
   const shownFuture = hover != null && hover > today && hover < days ? hover : null;
   const activeDay = shownPast ?? shownFuture;
@@ -531,7 +466,7 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
     setHover(Math.round(frac * (days - 1)));
   };
   return (
-    <ChartCard title="This cycle" right={`${cycle.daysLeft + 1} ${cycle.daysLeft === 0 ? 'day' : 'days'} to payday`}>
+    <ChartCard hero title="This cycle" right={`${cycle.daysLeft + 1} ${cycle.daysLeft === 0 ? 'day' : 'days'} to payday`}>
       <div className={s.sxLeftHead}>
         <span className={s.sxLeftBig} style={{ color: left < 0 ? C.redInk : C.text }}>
           {short(shownLeft)}
@@ -560,8 +495,26 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
       )}
       <div className={s.sxLine} onPointerMove={pick} onPointerDown={pick} onPointerLeave={() => setHover(null)} onPointerCancel={() => setHover(null)}>
         <svg viewBox={`0 0 ${CW} ${CH}`} preserveAspectRatio="none" role="img" aria-label={`Spent ${full(cum[today])} so far; heading for ${full(end)} by payday, plan ${full(b.budget)}`}>
-          <path d={area} fill="var(--category-1)" opacity={0.1} />
-          {b.budget > 0 && <line x1={0} x2={CW} y1={y(b.budget)} y2={y(b.budget)} stroke="var(--line-strong)" strokeWidth={1} vectorEffect="non-scaling-stroke" />}
+          <defs>
+            <linearGradient id="sxCycleFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--clay)" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="var(--clay)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d={area} fill="url(#sxCycleFill)" />
+          {b.budget > 0 && (
+            <line
+              x1={0}
+              x2={CW}
+              y1={y(b.budget)}
+              y2={y(b.budget)}
+              stroke="var(--line-strong)"
+              strokeWidth={1}
+              strokeDasharray="3 4"
+              opacity={0.6}
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
           {b.budget > 0 && (
             <line
               x1={0}
@@ -571,20 +524,30 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
               stroke="var(--line-strong)"
               strokeWidth={1}
               strokeDasharray="2 4"
-              opacity={0.7}
+              opacity={0.45}
               vectorEffect="non-scaling-stroke"
             />
           )}
           {today < days - 1 && (
-            <line x1={x(today)} y1={y(cum[today])} x2={CW} y2={y(end)} stroke={overPlan ? 'var(--danger)' : 'var(--ink-muted)'} strokeWidth={2} strokeDasharray="5 4" vectorEffect="non-scaling-stroke" />
+            <line
+              x1={x(today)}
+              y1={y(cum[today])}
+              x2={CW}
+              y2={y(end)}
+              stroke={warnOver ? 'var(--danger)' : 'var(--clay-ink)'}
+              strokeWidth={1.8}
+              strokeDasharray="5 4"
+              opacity={warnOver ? 0.9 : 0.65}
+              vectorEffect="non-scaling-stroke"
+            />
           )}
-          <path d={actual} fill="none" stroke="var(--category-1)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          <path d={actual} fill="none" stroke="var(--clay)" strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           {activeDay != null && <line x1={x(activeDay)} x2={x(activeDay)} y1={0} y2={CH} stroke="var(--line-strong)" strokeWidth={1} vectorEffect="non-scaling-stroke" />}
         </svg>
         <span
           className={s.sxLineDot}
           data-future={shownFuture != null || undefined}
-          data-over={shownFuture != null && overPlan ? true : undefined}
+          data-over={shownFuture != null && warnOver ? true : undefined}
           style={{ left: `${(x(dotDay) / CW) * 100}%`, top: `${(y(dotVal) / CH) * 100}%` }}
         />
         {b.budget > 0 && (
@@ -623,7 +586,15 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
         ) : (
           <span className={s.sxLineFootRow}>
             <span>
-              Spent <strong style={{ color: C.text }}>{short(b.spent)}</strong> · Heading for <strong style={{ color: projInk }}>{short(end)}</strong>
+              Spent <strong style={{ color: C.text }}>{short(b.spent)}</strong>
+              {earlyCycle && overPlan ? (
+                <> · Early pace — settles over the next few days</>
+              ) : (
+                <>
+                  {' · Heading for '}
+                  <strong style={{ color: projInk }}>{short(end)}</strong>
+                </>
+              )}
             </span>
             {vsLast && (
               <span className={s.sxDeltaBadge} style={{ background: vsLast.bg, color: vsLast.ink }} title="Compared to the same point last cycle">
@@ -643,6 +614,7 @@ function Tiles({ budget: b, onSavings, onBills }: { budget: Budget; onSavings: (
   const [cardsOpen, setCardsOpen] = useState(false);
   const bills = b.bills;
   const billTotal = sum(bills.map(x => x.amount));
+  const nextBill = [...bills].sort((a, z) => a.date.getTime() - z.date.getTime())[0];
   const owed = sum(b.cards.map(c => Math.max(0, c.owed)));
   const cardInstallments = sum(b.cards.map(c => c.installments));
   const target = ofIncome(SAVINGS_TARGET_PCT);
@@ -650,19 +622,40 @@ function Tiles({ budget: b, onSavings, onBills }: { budget: Budget; onSavings: (
   const savedNote =
     target > 0
       ? savedShare >= 1
-        ? `Goal met · ${short(b.saved)}`
+        ? `Goal reached · ${short(b.saved)} set aside`
         : `${short(b.saved)} of ${short(target)} goal`
       : b.saved > 0
         ? `${short(b.saved)} set aside`
         : 'No savings goal set';
   const activeCards = b.cards.filter(c => c.owed > 0 || c.spent > 0 || c.lastBill > 0);
+  const billsNote =
+    bills.length === 0
+      ? 'All clear until payday'
+      : bills.length === 1 && nextBill
+        ? `${tidyName(nextBill.title)} · ${dayMonth(nextBill.date)}`
+        : nextBill
+          ? `${bills.length} scheduled · next ${dayMonth(nextBill.date)}`
+          : `${bills.length} scheduled before payday`;
+  const cardsNote =
+    owed <= 0
+      ? 'All settled'
+      : cardInstallments > 0
+        ? `Includes ${short(cardInstallments)} in installments`
+        : activeCards.length > 1
+          ? `Across ${activeCards.length} cards this cycle`
+          : activeCards[0]
+            ? `On ${activeCards[0].account} this cycle`
+            : 'On your cards this cycle';
 
   return (
     <div className={s.sxTilesWrap}>
       <div className={s.sxTiles}>
-        <button type="button" className={s.sxTile} onClick={onSavings}>
+        <button type="button" className={s.sxTile} data-tone="saved" onClick={onSavings}>
           <span className={s.sxTileLabel}>
-            <Icon d={IC.piggy} size={16} /> Saved
+            <span className={s.sxTileIcon} data-tone="saved" aria-hidden="true">
+              <Icon d={IC.piggy} size={14} />
+            </span>
+            Saved
           </span>
           <span className={s.sxTileValue}>{Math.round(b.savedPct)}%</span>
           <span className={s.sxTileMeter}>
@@ -670,28 +663,33 @@ function Tiles({ budget: b, onSavings, onBills }: { budget: Budget; onSavings: (
           </span>
           <span className={s.sxTileNote}>{savedNote}</span>
         </button>
-        <button type="button" className={s.sxTile} onClick={onBills}>
+        <button type="button" className={s.sxTile} data-tone="bills" onClick={onBills}>
           <span className={s.sxTileLabel}>
-            <Icon d={IC.calendar} size={16} /> Bills to come
+            <span className={s.sxTileIcon} data-tone="bills" aria-hidden="true">
+              <Icon d={IC.calendar} size={14} />
+            </span>
+            Bills to come
           </span>
           <span className={s.sxTileValue}>{short(billTotal)}</span>
-          <span className={s.sxTileNote}>{bills.length === 0 ? 'Clear until payday' : bills.length === 1 ? '1 bill before payday' : `${bills.length} bills before payday`}</span>
+          <span className={s.sxTileNote}>{billsNote}</span>
         </button>
         <button
           type="button"
           className={s.sxTile}
+          data-tone="cards"
           aria-expanded={activeCards.length > 0 ? cardsOpen : undefined}
           disabled={activeCards.length === 0}
           onClick={() => activeCards.length > 0 && setCardsOpen(o => !o)}
         >
           <span className={s.sxTileLabel}>
-            <Icon d={IC.card} size={16} /> Card bill
+            <span className={s.sxTileIcon} data-tone="cards" aria-hidden="true">
+              <Icon d={IC.card} size={14} />
+            </span>
+            Card bill
             {activeCards.length > 0 && <Icon d={IC.chevDown} size={13} style={{ marginLeft: 'auto', transform: cardsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />}
           </span>
           <span className={s.sxTileValue}>{short(owed)}</span>
-          <span className={s.sxTileNote}>
-            {owed > 0 ? (cardInstallments > 0 ? `Includes ${short(cardInstallments)} installments` : 'Owed on your cards') : 'Nothing owed'}
-          </span>
+          <span className={s.sxTileNote}>{cardsNote}</span>
         </button>
       </div>
       {cardsOpen && activeCards.length > 0 && (

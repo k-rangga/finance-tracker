@@ -114,6 +114,7 @@ function syncGmail_(opts) {
     readColumn_('skipped', 'id').forEach(id => (have[id] = true));
     const todo = ids.filter(id => !have[id]);
 
+    const ownerNames = ownerNames_();
     let done = 0;
     let paused = false;
     while (done < todo.length && Date.now() - started < TIME_BUDGET_MS) {
@@ -127,7 +128,7 @@ function syncGmail_(opts) {
         paused = true; // Gmail asked us to slow down: keep what we have and continue later.
         break;
       }
-      msgs.forEach(m => parsed.push({ m: m, p: parseReceipt({ subject: m.subject, from: m.from, text: m.text.slice(0, 20000) }) }));
+      msgs.forEach(m => parsed.push({ m: m, p: parseReceipt({ subject: m.subject, from: m.from, text: m.text.slice(0, 20000), ownerNames: ownerNames }) }));
       done += batch.length;
       const wait = batch.length * MS_PER_MESSAGE - (Date.now() - t0);
       if (wait > 0 && done < todo.length) Utilities.sleep(wait);
@@ -363,31 +364,61 @@ function dropDuplicates_(pairs) {
 
 // ---- both sides of one move between your own accounts ----
 
+/** Names/aliases the user configured in Settings (`name` + comma-separated `ownAccountNames`). */
+function ownerNames_() {
+  let s = null;
+  try {
+    if (typeof PropertiesService !== 'undefined' && typeof props_ === 'function') s = props_('settings', null);
+  } catch (_) {}
+  if (!s) return [];
+  const out = [];
+  if (s.name) out.push(String(s.name).trim());
+  if (s.ownAccountNames) {
+    String(s.ownAccountNames)
+      .split(/[,;\n]+/)
+      .map(x => x.trim())
+      .filter(Boolean)
+      .forEach(x => out.push(x));
+  }
+  return out;
+}
+
 /** The sending and receiving banks' emails for one transfer arrive this close together. */
 const TRANSFER_MATCH_MS = 15 * 60e3;
 /** A name with punctuation and spacing ignored: "KALAKA RANGGA, S" and "Kalaka Rangga S" match. */
 const nameKey_ = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-/** Which parser read the email ("bca", "blu", …): the two sides of a transfer come from different ones. */
-const refSource_ = r => String(r.ref || '').split(':')[0];
+/** Which bank/parser produced the email ("bca", "blu", or sender domain like "bankmandiri.co.id"): the two sides of a transfer come from different ones. */
+function refSource_(r) {
+  const prefix = String(r.ref || '').split(':')[0];
+  if (prefix) return prefix;
+  const dom = String(r.sender || '').toLowerCase().match(/@([a-z0-9.-]+)/);
+  return dom ? dom[1] : '';
+}
 
 /** A card bill payment and the same money told again as a transfer arrive this close together. */
 const CC_MATCH_MS = 10 * 60e3;
 
 /**
- * Pairs of { keep, drop } rows that are one transfer told twice:
- * - the bank it left and the bank it reached: same amount and name (punctuation ignored), minutes apart,
- *   read by different parsers (two BCA journals are two transfers, never merged); the earlier one is kept;
+ * Pairs of { keep, drop, markTransfer? } rows that are one transfer told twice:
+ * - the bank it left and the bank it reached: same amount and matching/self name, minutes apart,
+ *   from different banks/parsers (two BCA journals are two transfers, never merged); the earlier one is kept;
+ * - an outgoing bank/e-wallet spend or transfer paired with an incoming bank/e-wallet credit of the exact same
+ *   amount minutes apart from a different bank: auto-detected as one own-account move (kept row becomes Transfer);
  * - a card bill payment and a transfer of the same amount minutes apart (e.g. "Credit card payment" and a
  *   "Tokopedia" journal for paying the card): the card payment is kept, since it's what moves the card's bill.
  * A row counts as a transfer when it was imported as one or you moved it to Transfer (`cats`: your fixes).
  * Nearest pairs win; each row pairs once.
  */
-function pairTransferDuplicates_(rows, cats) {
+function pairTransferDuplicates_(rows, cats, ownerNames) {
   const at = r => new Date(r.occurred_at).getTime();
   const catOf = r => (cats && cats[r.id]) || r.category;
   const isCc = r => catOf(r) === CC_PAYMENT;
   const isMove = r => r.kind === 'transfer' || catOf(r) === TRANSFER || isCc(r);
-  const xs = rows.filter(isMove).sort((a, b) => at(a) - at(b));
+  const isBankEmail = r => r.source === 'Bank email' || r.source === 'E-wallet email';
+  const owners = ownerNames || [];
+  const xs = rows
+    .filter(r => isMove(r) || isBankEmail(r))
+    .sort((a, b) => at(a) - at(b));
   const pairs = [];
   xs.forEach((a, i) => {
     for (let j = i + 1; j < xs.length; j++) {
@@ -396,13 +427,46 @@ function pairTransferDuplicates_(rows, cats) {
       if (gap > Math.max(TRANSFER_MATCH_MS, CC_MATCH_MS)) break;
       if (Math.abs(Number(a.amount) - Number(b.amount)) > 0.005 || a.currency !== b.currency) continue;
       if (isCc(a) !== isCc(b)) {
-        // A card payment's category is fixed, so the other row's category fix isn't carried over.
-        if (gap <= CC_MATCH_MS) pairs.push(Object.assign(isCc(a) ? { keep: a, drop: b } : { keep: b, drop: a }, { gap: gap, keepCategory: true }));
+        // Only pair a card payment with a transfer/move row (never an unrelated store purchase).
+        if ((isMove(a) && isMove(b)) && gap <= CC_MATCH_MS) {
+          pairs.push(Object.assign(isCc(a) ? { keep: a, drop: b } : { keep: b, drop: a }, { gap: gap, keepCategory: true }));
+        }
         continue;
       }
-      if (gap > TRANSFER_MATCH_MS || isCc(a) || nameKey_(a.title).length < 3) continue;
-      if (nameKey_(a.title) !== nameKey_(b.title) || refSource_(a) === refSource_(b)) continue;
-      pairs.push({ keep: a, drop: b, gap: gap });
+      if (gap > TRANSFER_MATCH_MS || isCc(a)) continue;
+      const srcA = refSource_(a);
+      const srcB = refSource_(b);
+      if (!srcA || !srcB || srcA === srcB) continue;
+
+      if (isMove(a) && isMove(b)) {
+        const na = nameKey_(a.title);
+        const nb = nameKey_(b.title);
+        const sameName = na.length >= 3 && na === nb;
+        const fuzzySelf =
+          (na.length >= 4 && isSelf_(a.title, [b.title].concat(owners))) ||
+          (nb.length >= 4 && isSelf_(b.title, [a.title].concat(owners)));
+        if (sameName || fuzzySelf) pairs.push({ keep: a, drop: b, gap: gap });
+        continue;
+      }
+
+      // Opposing-side auto-detection: one bank sent it out (spend/transfer) and another bank received it (income/transfer)
+      // within 15 minutes for the exact same amount → money moved between your own accounts.
+      if (isBankEmail(a) && isBankEmail(b)) {
+        const aOut = a.kind === 'spend' || isMove(a);
+        const aIn = a.kind === 'income' || isMove(a);
+        const bOut = b.kind === 'spend' || isMove(b);
+        const bIn = b.kind === 'income' || isMove(b);
+        const opposite = (a.kind === 'spend' && b.kind === 'income') || (a.kind === 'income' && b.kind === 'spend');
+        const halfDetected =
+          (isMove(a) && (b.kind === 'spend' || b.kind === 'income')) ||
+          (isMove(b) && (a.kind === 'spend' || a.kind === 'income'));
+        if (opposite || (halfDetected && ((aOut && bIn) || (aIn && bOut)))) {
+          // Prefer keeping the row already marked as transfer if one of them is.
+          const keep = isMove(b) && !isMove(a) ? b : a;
+          const drop = keep === a ? b : a;
+          pairs.push({ keep: keep, drop: drop, gap: gap, markTransfer: true });
+        }
+      }
     }
   });
   pairs.sort((x, y) => x.gap - y.gap);
@@ -420,7 +484,13 @@ function mergeTransferDuplicates_() {
   readTable_('overrides').forEach(o => {
     cats[o.tx_id] = o.category;
   });
-  return dropDuplicates_(pairTransferDuplicates_(readTable_('transactions'), cats));
+  const pairs = pairTransferDuplicates_(readTable_('transactions'), cats, ownerNames_());
+  pairs.forEach(p => {
+    if (p.markTransfer && (p.keep.kind !== 'transfer' || p.keep.category !== TRANSFER)) {
+      upsertRow_('transactions', 'id', Object.assign({}, p.keep, { kind: 'transfer', category: TRANSFER }));
+    }
+  });
+  return dropDuplicates_(pairs);
 }
 
 /**

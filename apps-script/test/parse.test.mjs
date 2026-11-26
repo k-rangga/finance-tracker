@@ -335,6 +335,80 @@ try {
   console.log('FAIL restore card accounts —', e.message, JSON.stringify(sheets.transactions));
 }
 
+// Enhanced own-account transfer detection: Mandiri/Superbank/Jago generic emails, BI-FAST, Settings ownerNames, and opposing-side merge.
+{
+  const parseWith = (subject, from, text, ownerNames) => vm.runInContext('parseReceipt', ctx)({ subject, from, text, ownerNames });
+  try {
+    // 1. Greeting with middle/nickname ("Hi Rangga,") matches full beneficiary ("KALAKA RANGGA S")
+    const r1 = parseWith(
+      'Internet Transaction Journal',
+      'BCA <bca@bca.co.id>',
+      'Hi Rangga,\nJenis Transaksi : BI-FAST\nNama Penerima : KALAKA RANGGA S\nNominal : IDR 1,500,000.00\nNo. Referensi : BF123',
+      [],
+    );
+    assert.equal(r1.kind, 'transfer');
+    assert.equal(r1.category, 'Transfer');
+
+    // 2. Livin' by Mandiri outgoing transfer to own account via Settings ownerNames (no greeting in email)
+    const r2 = parseWith(
+      'Bukti Transaksi Transfer Livin by Mandiri',
+      'Mandiri <noreply@bankmandiri.co.id>',
+      'Transfer Berhasil\nNama Penerima\nKALAKA RANGGA SAPUTRA\nNominal\nRp 2.000.000',
+      ['Rangga'],
+    );
+    assert.equal(r2.kind, 'transfer');
+    assert.equal(r2.category, 'Transfer');
+
+    // 3. Superbank incoming transfer from own account via account alias digits or Settings name
+    const r3 = parseWith(
+      'Dana Masuk ke Rekening Superbank',
+      'Superbank <info@superbank.id>',
+      'Transfer Masuk Berhasil\nNama Pengirim : KALAKA RANGGA S\nJumlah : Rp 750.000',
+      ['Kalaka Rangga'],
+    );
+    assert.equal(r3.kind, 'transfer');
+    assert.equal(r3.category, 'Transfer');
+
+    // 4. Transfer to someone else on Mandiri stays spend (no false positive!)
+    const r4 = parseWith(
+      'Bukti Transaksi Transfer Livin by Mandiri',
+      'Mandiri <noreply@bankmandiri.co.id>',
+      'Transfer Berhasil\nNama Penerima\nSITI AMINAH\nNominal\nRp 350.000',
+      ['Kalaka Rangga', 'Rangga'],
+    );
+    assert.equal(r4.kind, 'spend');
+    assert.equal(r4.title, 'Siti Aminah');
+
+    // 5. Account number last-4 alias match on BCA journal
+    const r5 = parseWith(
+      'Internet Transaction Journal',
+      'BCA <bca@bca.co.id>',
+      'Hello Nasabah,\nTransfer Type : Transfer to Other Bank\nBeneficiary Name : REKENING TABUNGAN\nBeneficiary Account : 8801005210\nAmount : IDR 500,000.00\nReference No. : ACC9',
+      ['5210'],
+    );
+    assert.equal(r5.kind, 'transfer');
+    assert.equal(r5.category, 'Transfer');
+
+    // 6. Opposing-side auto-merge: Bank A outgoing spend + Bank B incoming income of exact same amount within 15 min → 1 Transfer row
+    for (const k of Object.keys(sheets)) delete sheets[k];
+    sheets.transactions = [
+      { id: 'm1', occurred_at: '2026-10-20T04:00:00Z', amount: 1200000, currency: 'IDR', kind: 'spend', category: 'Buffer', source: 'Bank email', sender: 'noreply@bankmandiri.co.id', title: 'Transfer Keluar', ref: '' },
+      { id: 's1', occurred_at: '2026-10-20T04:02:00Z', amount: 1200000, currency: 'IDR', kind: 'income', category: 'Income', source: 'Bank email', sender: 'info@superbank.id', title: 'Dana Masuk', ref: '' },
+    ];
+    sheets.overrides = [];
+    sheets.skipped = [];
+    const merged = vm.runInContext('mergeTransferDuplicates_', ctx)();
+    assert.equal(merged, 1);
+    assert.equal(sheets.transactions.length, 1);
+    assert.equal(sheets.transactions[0].kind, 'transfer');
+    assert.equal(sheets.transactions[0].category, 'Transfer');
+    console.log('ok   own-account transfers auto-detected across banks, BI-FAST, Settings aliases, and opposing-side merge');
+  } catch (e) {
+    failed++;
+    console.log('FAIL enhanced own-transfer detection —', e.message);
+  }
+}
+
 if (failed) {
   console.log(`\n${failed} failed`);
   process.exit(1);

@@ -114,7 +114,19 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
             <input className={s.input} value={d.city ?? ''} onChange={e => setD(p => ({ ...p, city: e.target.value }))} placeholder="e.g. Jakarta Selatan" maxLength={60} />
           </label>
         </div>
-        <span className={s.setHint}>Your name is for greetings. Your city lets Maxie compare your spending with local prices when it plans.</span>
+        <label className={s.field} style={{ marginTop: 10 }}>
+          <span>Names on your bank accounts</span>
+          <input
+            className={s.input}
+            value={d.ownAccountNames ?? ''}
+            onChange={e => setD(p => ({ ...p, ownAccountNames: e.target.value }))}
+            placeholder="e.g. Kalaka Rangga, Kalaka Rangga S, 5210"
+            maxLength={140}
+          />
+        </label>
+        <span className={s.setHint}>
+          Comma-separated full names or last 4 digits on your bank accounts — transfers to yourself are automatically marked as Transfer (Rp 0 spending) so you don&apos;t have to remove them.
+        </span>
         <Row label="Maxie speaks">
           <Options
             label="Maxie speaks"

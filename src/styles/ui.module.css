@@ -3538,10 +3538,16 @@ textarea.input {
   gap: 14px;
   padding: 20px 22px;
   border-radius: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background-color: var(--surface);
+  background-image: radial-gradient(480px 180px at 10% -20%, color-mix(in srgb, var(--clay) 5.5%, transparent), transparent 70%);
+  border: 1px solid color-mix(in srgb, var(--clay) 11%, var(--border));
   box-shadow: var(--card-glow);
   min-width: 0;
+}
+.sxChartCard[data-hero] {
+  background-image: radial-gradient(460px 230px at 6% -12%, color-mix(in srgb, var(--clay) 12%, transparent), transparent 68%),
+    radial-gradient(360px 200px at 96% 108%, color-mix(in srgb, var(--amber) 6%, transparent), transparent 65%);
+  border-color: color-mix(in srgb, var(--clay) 24%, var(--border));
 }
 @media (max-width: 759px) {
   .sxChartCard {
@@ -3672,19 +3678,34 @@ textarea.input {
   gap: 6px;
   padding: 16px 20px;
   border-radius: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background-color: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--clay) 11%, var(--border));
+  box-shadow: var(--card-glow);
   font: inherit;
   color: inherit;
   text-align: left;
   min-width: 0;
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.sxTile[data-tone='saved'] {
+  background-image: radial-gradient(280px 150px at 94% -10%, color-mix(in srgb, var(--good) 11%, transparent), transparent 72%);
+  border-color: color-mix(in srgb, var(--good) 18%, var(--border));
+}
+.sxTile[data-tone='bills'] {
+  background-image: radial-gradient(280px 150px at 94% -10%, color-mix(in srgb, var(--amber) 11%, transparent), transparent 72%);
+  border-color: color-mix(in srgb, var(--amber) 18%, var(--border));
+}
+.sxTile[data-tone='cards'] {
+  background-image: radial-gradient(280px 150px at 94% -10%, color-mix(in srgb, var(--clay) 11%, transparent), transparent 72%);
+  border-color: color-mix(in srgb, var(--clay) 18%, var(--border));
 }
 button.sxTile {
   cursor: pointer;
 }
 button.sxTile:hover:not(:disabled) {
-  box-shadow: var(--shadow-sm);
-  border-color: var(--border-strong);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm), var(--card-glow);
+  border-color: color-mix(in srgb, var(--clay) 32%, var(--border-strong));
 }
 button.sxTile:disabled {
   cursor: default;
@@ -3696,7 +3717,7 @@ button.sxTile:disabled {
   padding: 12px 16px;
   border-radius: 12px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--clay) 15%, var(--border));
   font-size: 13px;
 }
 .sxCardBreakRow {
@@ -3713,13 +3734,35 @@ button.sxTile:disabled {
 .sxTileLabel {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--ink-muted);
+  color: var(--text-soft);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.sxTileIcon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--hover);
+  color: var(--ink-muted);
+}
+.sxTileIcon[data-tone='saved'] {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.sxTileIcon[data-tone='bills'] {
+  background: var(--amber-tint);
+  color: var(--amber-ink);
+}
+.sxTileIcon[data-tone='cards'] {
+  background: var(--clay-soft);
+  color: var(--clay-ink);
 }
 .sxTileValue {
   font-family: var(--font-serif);
@@ -3729,12 +3772,13 @@ button.sxTile:disabled {
   font-optical-sizing: auto;
   letter-spacing: -0.015em;
   font-variant-numeric: proportional-nums;
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .sxTileNote {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--ink-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -3749,7 +3793,7 @@ button.sxTile:disabled {
     font-size: 18px;
     line-height: 24px;
   }
-  .sxTileLabel svg {
+  .sxTileIcon {
     display: none;
   }
   .sxTileNote {
@@ -3760,15 +3804,16 @@ button.sxTile:disabled {
 .sxTileMeter {
   grid-area: meter;
   display: block;
-  height: 4px;
+  height: 5px;
   border-radius: 999px;
-  background: var(--divider);
+  background: color-mix(in srgb, var(--ink) 8%, var(--divider));
   overflow: hidden;
 }
 .sxTileMeter > span {
   display: block;
   height: 100%;
   border-radius: 999px;
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Spending by day. */
@@ -4215,15 +4260,20 @@ button.sxTile:disabled {
   height: 10px;
   margin: -5px 0 0 -5px;
   border-radius: 50%;
-  background: var(--category-1);
-  box-shadow: 0 0 0 2px var(--surface);
+  background: var(--clay);
+  box-shadow: 0 0 0 2.5px var(--surface), 0 0 0 6px color-mix(in srgb, var(--clay) 24%, transparent);
   pointer-events: none;
 }
 .sxLinePlan {
   position: absolute;
   left: 0;
-  transform: translateY(-120%);
-  font-size: 12px;
+  transform: translateY(-130%);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 75%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--clay) 14%, var(--divider));
+  font-size: 11.5px;
+  font-weight: 500;
   color: var(--ink-muted);
   pointer-events: none;
 }
@@ -7272,7 +7322,7 @@ button.sxTile:active:not(:disabled),
   }
 }
 
-/* ---- Summary Rituals: Living Maxie Vignette, Daily Check-In & Cycle Story ---- */
+/* ---- Summary Rituals: Living Maxie Companion Bar & 4-Card Cycle Story ---- */
 .vigCard {
   display: flex;
   align-items: center;
@@ -7280,8 +7330,9 @@ button.sxTile:active:not(:disabled),
   flex-wrap: wrap;
   padding: 12px 16px;
   border-radius: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background-color: var(--surface);
+  background-image: radial-gradient(420px 180px at 6% 10%, color-mix(in srgb, var(--clay) 9%, transparent), transparent 70%);
+  border: 1px solid color-mix(in srgb, var(--clay) 18%, var(--border));
   box-shadow: var(--card-glow);
 }
 .vigArtBtn {
@@ -7290,14 +7341,14 @@ button.sxTile:active:not(:disabled),
   padding: 0;
   border-radius: 12px;
   overflow: hidden;
-  border: 1px solid var(--divider);
+  border: 1px solid color-mix(in srgb, var(--clay) 16%, var(--divider));
   background: none;
   cursor: pointer;
   transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease;
 }
 .vigArtBtn:hover {
   transform: translateY(-1px);
-  border-color: var(--border-strong);
+  border-color: color-mix(in srgb, var(--clay) 36%, var(--border-strong));
 }
 .vigSvg {
   display: block;
@@ -7309,7 +7360,7 @@ button.sxTile:active:not(:disabled),
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 .vigTag {
   font-size: 11px;
@@ -7339,52 +7390,6 @@ button.sxTile:active:not(:disabled),
   0% { opacity: 0.35; transform: translate(0, -1px); }
   50% { opacity: 0.85; transform: translate(-1.5px, 2px); }
   100% { opacity: 0.35; transform: translate(0, -1px); }
-}
-.ritualCard {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 18px;
-  border-radius: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  box-shadow: var(--card-glow);
-}
-.ritualHead {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.ritualBody {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.ritualPrompt {
-  margin: 0;
-  font-size: 14.5px;
-  line-height: 1.5;
-  color: var(--ink);
-}
-.ritualPills {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-wrap: wrap;
-}
-.ritualNote {
-  font-size: 12.5px;
-  color: var(--text-muted);
-}
-.ritualReveal {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--bg);
-  border: 1px solid var(--divider);
-  animation: sortCardSlide 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .storyOverlay {
   position: fixed;
@@ -7436,11 +7441,11 @@ button.sxTile:active:not(:disabled),
 }
 .storyDots {
   flex: 1;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
   gap: 6px;
 }
 .storyDot {
+  flex: 1;
   height: 3.5px;
   border: none;
   border-radius: 999px;
@@ -7494,12 +7499,32 @@ button.sxTile:active:not(:disabled),
   gap: 8px;
   animation: sortCardSlide 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
+.storyKickerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
 .storyKicker {
   font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: rgba(244, 214, 184, 0.92);
+}
+.storyPromptSwitch {
+  border: none;
+  background: none;
+  padding: 2px 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  color: rgba(244, 214, 184, 0.85);
+  cursor: pointer;
+  transition: color 0.16s ease;
+}
+.storyPromptSwitch:hover {
+  color: #ffffff;
 }
 .storyTitle {
   font-family: var(--font-serif);
@@ -7514,7 +7539,55 @@ button.sxTile:active:not(:disabled),
   margin: 0;
   font-size: 14.5px;
   line-height: 1.56;
-  color: rgba(242, 237, 228, 0.82);
+  color: rgba(242, 237, 228, 0.84);
+}
+.storyPillRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.storyPill {
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 250, 242, 0.2);
+  background: rgba(255, 250, 242, 0.08);
+  color: rgba(248, 244, 237, 0.92);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+.storyPill:hover {
+  background: rgba(255, 250, 242, 0.16);
+  border-color: rgba(255, 250, 242, 0.34);
+}
+.storyPill[data-active] {
+  background: #f5ede2;
+  border-color: #f5ede2;
+  color: #1c2224;
+  font-weight: 650;
+}
+.storyNote {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: rgba(244, 214, 184, 0.86);
+  margin-top: 2px;
+}
+.storyReveal {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 13px;
+  border-radius: 14px;
+  background: rgba(255, 250, 242, 0.08);
+  border: 1px solid rgba(255, 250, 242, 0.13);
+  backdrop-filter: blur(8px);
+  animation: sortCardSlide 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .storyChips {
   display: grid;
@@ -7602,9 +7675,9 @@ button.sxTile:active:not(:disabled),
   .vigDrift,
   .vigRain,
   .storyMaxieRun,
-  .ritualReveal,
   .storyBg,
-  .storyCopy {
+  .storyCopy,
+  .storyReveal {
     animation: none;
   }
 }

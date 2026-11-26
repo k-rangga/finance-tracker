@@ -70,6 +70,8 @@ export type Settings = {
   notFixedBills?: string[];
   /** Quiet mode: hides confetti, streaks, and win badges for a minimal, unhurried view. */
   quietMode?: boolean;
+  /** Comma-separated names (or last-4+ account digits) printed on your own bank accounts, for auto-detecting own transfers. */
+  ownAccountNames?: string;
 };
 
 export type ChatFeedback = { q: string; a: string; good: boolean; at: string };

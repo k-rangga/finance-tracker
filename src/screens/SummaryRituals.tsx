@@ -145,12 +145,23 @@ export function VignetteSvg({ scene }: { scene: VignetteScene }) {
 type JoyVote = 'worth' | 'everyday' | 'skip';
 
 /**
- * Daily 10-Second Micro-Ritual Card: invites one calm interaction per visit —
- * rate yesterday's highlight spend (Joy-per-Rupiah), flip the Weekend vs Weekday mystery stat,
- * or check today's gentle target.
+ * "Story of Your Cycle" — a calm, 4-card full-bleed interactive pop-up deck with unique Siberian Husky illustrations
+ * (mountain ridge run, serene alpine lake trot, twilight camp lantern, and golden-hour meadow daily check-in).
+ * Auto-opens once on first visit of the day (outside Quiet mode) and can be replayed anytime from Summary.
  */
-export function DailyRitualCard({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
-  const { short, full, settings } = useSettings();
+export function CycleStoryModal({
+  cycle,
+  budget: b,
+  open,
+  onClose,
+}: {
+  cycle: Cycle;
+  budget: Budget;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { short, full } = useSettings();
+  const [idx, setIdx] = useState(0);
   const [slot, setSlot] = useState(() => cycle.today.getDate() % 3);
   const [revealed, setRevealed] = useState(false);
 
@@ -174,172 +185,13 @@ export function DailyRitualCard({ cycle, budget: b }: { cycle: Cycle; budget: Bu
     setVote(v);
   };
 
-  // Weekend vs. Weekday real average this cycle.
-  const rhythm = useMemo(() => {
-    let wdSum = 0, wdDays = 0, weSum = 0, weDays = 0;
-    const daysSoFar = Math.min(cycle.dayIdx + 1, cycle.cycleDays);
-    const byDay = new Array<number>(daysSoFar).fill(0);
-    for (const t of b.txs) {
-      if (t.offset >= 0 && t.offset < daysSoFar && !t.isIncome && !t.isTransfer && categoryByName(t.cat)?.type === 'variable') {
-        byDay[t.offset] += t.net;
-      }
-    }
-    for (let i = 0; i < daysSoFar; i++) {
-      const dow = cycle.dateOf(i).getDay();
-      if (dow === 0 || dow === 6) {
-        weSum += byDay[i];
-        weDays++;
-      } else {
-        wdSum += byDay[i];
-        wdDays++;
-      }
-    }
-    const wdAvg = wdDays > 0 ? wdSum / wdDays : 0;
-    const weAvg = weDays > 0 ? weSum / weDays : 0;
-    return { wdAvg, weAvg, hasBoth: wdDays >= 2 && weDays >= 1 && (wdAvg > 0 || weAvg > 0) };
-  }, [b.txs, cycle]);
-
-  if (settings.quietMode || b.txs.length === 0) return null;
-
-  // Build available ritual cards so empty ones are skipped cleanly.
-  const cards: ('joy' | 'curiosity' | 'target')[] = [];
-  if (targetTx) cards.push('joy');
-  if (rhythm.hasBoth) cards.push('curiosity');
-  cards.push('target');
-  const active = cards[slot % cards.length];
-
-  const left = b.budget - b.spent - b.fixedDue;
-  const gentleTarget = b.safeDay > 0 ? Math.round(b.safeDay * 0.85) : 0;
-  const voteReply: Record<JoyVote, string> = {
-    worth: 'Noted — spending on things you truly enjoy is money well spent.',
-    everyday: 'Got it — part of your normal rhythm.',
-    skip: 'Good catch — small awareness like this quietly saves a lot next cycle.',
-  };
-
-  return (
-    <section className={s.ritualCard} data-wide aria-label="Daily check-in">
-      <div className={s.ritualHead}>
-        <span className={s.winsLabel}>Daily check-in</span>
-        {cards.length > 1 && (
-          <button
-            type="button"
-            className={s.modelMicroLink}
-            style={{ fontSize: 12, marginLeft: 'auto' }}
-            onClick={() => {
-              setRevealed(false);
-              setSlot(n => n + 1);
-            }}
-          >
-            Another prompt
-          </button>
-        )}
-      </div>
-
-      {active === 'joy' && targetTx && (
-        <div className={s.ritualBody}>
-          <p className={s.ritualPrompt}>
-            How did <strong>{tidyName(targetTx.title)}</strong> ({full(targetTx.net)} · {targetTx.cat}) feel?
-          </p>
-          <div className={s.ritualPills} role="group" aria-label="Rate how this spend felt">
-            {(
-              [
-                ['worth', 'Worth it'],
-                ['everyday', 'Everyday'],
-                ['skip', 'Could skip next time'],
-              ] as [JoyVote, string][]
-            ).map(([k, label]) => (
-              <button
-                key={k}
-                type="button"
-                className={s.winBadge}
-                data-active={vote === k || undefined}
-                aria-pressed={vote === k}
-                onClick={() => castVote(k)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {vote && <span className={s.ritualNote}>{voteReply[vote]}</span>}
-        </div>
-      )}
-
-      {active === 'curiosity' && (
-        <div className={s.ritualBody}>
-          {!revealed ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-              <p className={s.ritualPrompt}>Curious how your weekend spending compares to your weekdays this cycle?</p>
-              <button type="button" className={s.btnOutlineSm} onClick={() => setRevealed(true)}>
-                Tap to reveal
-              </button>
-            </div>
-          ) : (
-            <div className={s.ritualReveal}>
-              <p className={s.ritualPrompt}>
-                {rhythm.weAvg > rhythm.wdAvg * 1.15 ? (
-                  <>
-                    Weekends average <strong>{(rhythm.weAvg / Math.max(1, rhythm.wdAvg)).toFixed(1)}×</strong> your weekdays —{' '}
-                    <strong>{short(rhythm.weAvg)}/day</strong> vs. <strong>{short(rhythm.wdAvg)}/day</strong>.
-                  </>
-                ) : rhythm.wdAvg > rhythm.weAvg * 1.15 ? (
-                  <>
-                    Weekdays run higher than weekends — <strong>{short(rhythm.wdAvg)}/day</strong> vs. <strong>{short(rhythm.weAvg)}/day</strong>.
-                  </>
-                ) : (
-                  <>
-                    Super balanced rhythm — weekdays (<strong>{short(rhythm.wdAvg)}/day</strong>) and weekends (<strong>{short(rhythm.weAvg)}/day</strong>) are nearly identical.
-                  </>
-                )}
-              </p>
-              <span className={s.ritualNote}>Knowing your natural tempo makes planning effortless.</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {active === 'target' && (
-        <div className={s.ritualBody}>
-          <p className={s.ritualPrompt}>
-            {left >= 0 && gentleTarget > 0 ? (
-              <>
-                Keeping today under <strong>{short(gentleTarget)}</strong> adds an extra <strong>{short(b.safeDay - gentleTarget)}</strong> to your cushion before payday.
-              </>
-            ) : (
-              <>One quiet low-spend day today softens your cycle pace and eases you gently back toward plan.</>
-            )}
-          </p>
-          <span className={s.ritualNote}>No pressure — small calm days carry the whole month.</span>
-        </div>
-      )}
-    </section>
-  );
-}
-
-/**
- * "Story of Your Cycle" — a calm, 3-card interactive pop-up deck with unique nature illustrations
- * (Maxie running along a mountain ridge, trotting by a tranquil lake, and resting by a camp lantern under twilight peaks).
- * Auto-opens once on first visit of the day (outside Quiet mode) and can be replayed anytime from Summary.
- */
-export function CycleStoryModal({
-  cycle,
-  budget: b,
-  open,
-  onClose,
-}: {
-  cycle: Cycle;
-  budget: Budget;
-  open: boolean;
-  onClose: () => void;
-}) {
-  const { short, full } = useSettings();
-  const [idx, setIdx] = useState(0);
-
   useEffect(() => {
     if (!open) return;
     setIdx(0);
+    setRevealed(false);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
-      else if (e.key === 'ArrowRight') setIdx(i => Math.min(2, i + 1));
+      else if (e.key === 'ArrowRight') setIdx(i => Math.min(3, i + 1));
       else if (e.key === 'ArrowLeft') setIdx(i => Math.max(0, i - 1));
     };
     document.addEventListener('keydown', onKey);
@@ -349,10 +201,14 @@ export function CycleStoryModal({
   const stats = useMemo(() => {
     const daysSoFar = Math.min(cycle.dayIdx + 1, cycle.cycleDays);
     const byDay = new Array<number>(daysSoFar).fill(0);
+    const varByDay = new Array<number>(daysSoFar).fill(0);
     const merch = new Map<string, { name: string; count: number; total: number }>();
     for (const t of b.txs) {
       if (t.isIncome || t.isTransfer || t.net <= 0) continue;
-      if (t.offset >= 0 && t.offset < daysSoFar && categoryByName(t.cat)) byDay[t.offset] += t.net;
+      if (t.offset >= 0 && t.offset < daysSoFar && categoryByName(t.cat)) {
+        byDay[t.offset] += t.net;
+        if (categoryByName(t.cat)?.type === 'variable') varByDay[t.offset] += t.net;
+      }
       const nm = tidyName(t.title);
       const cur = merch.get(nm);
       if (cur) {
@@ -362,6 +218,19 @@ export function CycleStoryModal({
         merch.set(nm, { name: nm, count: 1, total: t.net });
       }
     }
+    let wdSum = 0, wdDays = 0, weSum = 0, weDays = 0;
+    for (let i = 0; i < daysSoFar; i++) {
+      const dow = cycle.dateOf(i).getDay();
+      if (dow === 0 || dow === 6) {
+        weSum += varByDay[i];
+        weDays++;
+      } else {
+        wdSum += varByDay[i];
+        wdDays++;
+      }
+    }
+    const wdAvg = wdDays > 0 ? wdSum / wdDays : 0;
+    const weAvg = weDays > 0 ? weSum / weDays : 0;
     const zeroDays = byDay.filter(v => v <= 0).length;
     const peakIdx = byDay.reduce((m, v, i) => (v > byDay[m] ? i : m), 0);
     const favSpot = [...merch.values()].sort((a, z) => z.count - a.count || z.total - a.total)[0];
@@ -371,10 +240,31 @@ export function CycleStoryModal({
       .map(c => ({ name: c.name, pct: Math.round(((c.lastSameDays - c.spent) / c.lastSameDays) * 100) }))
       .sort((a, z) => z.pct - a.pct)[0];
     const left = b.budget - b.spent - b.fixedDue;
-    return { zeroDays, peakIdx, peakVal: byDay[peakIdx] ?? 0, favSpot, topVar, improved, left };
+    return {
+      zeroDays,
+      peakIdx,
+      peakVal: byDay[peakIdx] ?? 0,
+      favSpot,
+      topVar,
+      improved,
+      left,
+      rhythm: { wdAvg, weAvg, hasBoth: wdDays >= 2 && weDays >= 1 && (wdAvg > 0 || weAvg > 0) },
+    };
   }, [b, cycle]);
 
   if (!open) return null;
+
+  const prompts: ('joy' | 'curiosity' | 'target')[] = [];
+  if (targetTx) prompts.push('joy');
+  if (stats.rhythm.hasBoth) prompts.push('curiosity');
+  prompts.push('target');
+  const activePrompt = prompts[slot % prompts.length];
+  const gentleTarget = b.safeDay > 0 ? Math.round(b.safeDay * 0.85) : 0;
+  const voteReply: Record<JoyVote, string> = {
+    worth: 'Noted — spending on things you truly enjoy is money well spent.',
+    everyday: 'Got it — part of your normal rhythm.',
+    skip: 'Good catch — small awareness like this quietly saves a lot next cycle.',
+  };
 
   const cards = [
     {
@@ -389,6 +279,7 @@ export function CycleStoryModal({
         { label: 'Zero-spend days', val: String(stats.zeroDays) },
         { label: 'Daily pace', val: `${short(b.velDay)}/day` },
       ],
+      interactive: false,
     },
     {
       kicker: 'Your Signatures',
@@ -403,6 +294,7 @@ export function CycleStoryModal({
         ...(stats.favSpot ? [{ label: 'Most visited', val: `${stats.favSpot.count}× · ${short(stats.favSpot.total)}` }] : []),
         ...(stats.topVar ? [{ label: 'Top everyday', val: stats.topVar.name }] : []),
       ],
+      interactive: false,
     },
     {
       kicker: `${cycle.daysLeft + 1} ${cycle.daysLeft === 0 ? 'day' : 'days'} to payday · Your Trajectory`,
@@ -418,6 +310,20 @@ export function CycleStoryModal({
         { label: 'Saved so far', val: `${Math.round(b.savedPct)}%` },
         { label: 'Safe daily pace', val: short(b.safeDay) },
       ],
+      interactive: false,
+    },
+    {
+      kicker: 'Daily Check-In',
+      title:
+        activePrompt === 'joy' && targetTx
+          ? `How did ${tidyName(targetTx.title)} feel?`
+          : activePrompt === 'curiosity'
+            ? 'Weekends vs. weekdays'
+            : 'A gentle target for today',
+      art: <GoldenMeadowSvg />,
+      body: '',
+      chips: [] as { label: string; val: string }[],
+      interactive: true,
     },
   ];
 
@@ -440,7 +346,7 @@ export function CycleStoryModal({
                 type="button"
                 role="tab"
                 aria-selected={i === idx}
-                aria-label={`Card ${i + 1} of 3`}
+                aria-label={`Card ${i + 1} of ${cards.length}`}
                 className={s.storyDot}
                 data-active={i === idx || undefined}
                 data-past={i < idx || undefined}
@@ -455,24 +361,114 @@ export function CycleStoryModal({
 
         {/* Lower seamless editorial overlay floating over the landscape's atmospheric fade */}
         <div className={s.storyContent}>
-          <div key={`copy-${idx}`} className={s.storyCopy}>
-            <span className={s.storyKicker}>{card.kicker}</span>
+          <div key={`copy-${idx}-${card.interactive ? activePrompt : 'static'}`} className={s.storyCopy}>
+            <div className={s.storyKickerRow}>
+              <span className={s.storyKicker}>{card.kicker}</span>
+              {card.interactive && prompts.length > 1 && (
+                <button
+                  type="button"
+                  className={s.storyPromptSwitch}
+                  onClick={() => {
+                    setRevealed(false);
+                    setSlot(n => n + 1);
+                  }}
+                >
+                  Another prompt
+                </button>
+              )}
+            </div>
             <h2 className={s.storyTitle}>{card.title}</h2>
-            <p className={s.storyText}>{card.body}</p>
-            {card.chips.length > 0 && (
-              <div className={s.storyChips}>
-                {card.chips.map(ch => (
-                  <div key={ch.label} className={s.storyChip}>
-                    <span className={s.storyChipLabel}>{ch.label}</span>
-                    <strong className={s.storyChipVal}>{ch.val}</strong>
+
+            {!card.interactive ? (
+              <>
+                <p className={s.storyText}>{card.body}</p>
+                {card.chips.length > 0 && (
+                  <div className={s.storyChips}>
+                    {card.chips.map(ch => (
+                      <div key={ch.label} className={s.storyChip}>
+                        <span className={s.storyChipLabel}>{ch.label}</span>
+                        <strong className={s.storyChipVal}>{ch.val}</strong>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+              </>
+            ) : activePrompt === 'joy' && targetTx ? (
+              <>
+                <p className={s.storyText}>
+                  {full(targetTx.net)} in {targetTx.cat} — quick gut check before heading into today.
+                </p>
+                <div className={s.storyPillRow} role="group" aria-label="Rate how this spend felt">
+                  {(
+                    [
+                      ['worth', 'Worth it'],
+                      ['everyday', 'Everyday'],
+                      ['skip', 'Could skip next time'],
+                    ] as [JoyVote, string][]
+                  ).map(([k, label]) => (
+                    <button
+                      key={k}
+                      type="button"
+                      className={s.storyPill}
+                      data-active={vote === k || undefined}
+                      aria-pressed={vote === k}
+                      onClick={() => castVote(k)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {vote && <span className={s.storyNote}>{voteReply[vote]}</span>}
+              </>
+            ) : activePrompt === 'curiosity' ? (
+              !revealed ? (
+                <>
+                  <p className={s.storyText}>Curious how your weekend spending compares to your weekdays this cycle?</p>
+                  <div className={s.storyPillRow}>
+                    <button type="button" className={s.storyPill} onClick={() => setRevealed(true)}>
+                      Tap to reveal
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className={s.storyReveal}>
+                  <p className={s.storyText}>
+                    {stats.rhythm.weAvg > stats.rhythm.wdAvg * 1.15 ? (
+                      <>
+                        Weekends average <strong>{(stats.rhythm.weAvg / Math.max(1, stats.rhythm.wdAvg)).toFixed(1)}×</strong> your weekdays —{' '}
+                        <strong>{short(stats.rhythm.weAvg)}/day</strong> vs. <strong>{short(stats.rhythm.wdAvg)}/day</strong>.
+                      </>
+                    ) : stats.rhythm.wdAvg > stats.rhythm.weAvg * 1.15 ? (
+                      <>
+                        Weekdays run higher than weekends — <strong>{short(stats.rhythm.wdAvg)}/day</strong> vs. <strong>{short(stats.rhythm.weAvg)}/day</strong>.
+                      </>
+                    ) : (
+                      <>
+                        Super balanced — weekdays (<strong>{short(stats.rhythm.wdAvg)}/day</strong>) and weekends (<strong>{short(stats.rhythm.weAvg)}/day</strong>) are nearly identical.
+                      </>
+                    )}
+                  </p>
+                  <span className={s.storyNote}>Knowing your natural tempo makes planning effortless.</span>
+                </div>
+              )
+            ) : (
+              <>
+                <p className={s.storyText}>
+                  {stats.left >= 0 && gentleTarget > 0 ? (
+                    <>
+                      Keeping today under <strong>{short(gentleTarget)}</strong> adds an extra <strong>{short(b.safeDay - gentleTarget)}</strong> to your cushion before payday.
+                    </>
+                  ) : (
+                    <>One quiet low-spend day today softens your cycle pace and eases you gently back toward plan.</>
+                  )}
+                </p>
+                <span className={s.storyNote}>No pressure — small calm days carry the whole month.</span>
+              </>
             )}
           </div>
 
           <div className={s.storyFoot}>
-            <Logo size={26} mood={idx === 2 ? 'happy' : 'calm'} followCursor />
+            <Logo size={26} mood={idx === 2 ? 'happy' : idx === 3 ? 'curious' : 'calm'} followCursor />
             <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
               {idx > 0 && (
                 <button type="button" className={s.storyBtnGhost} onClick={() => setIdx(i => i - 1)}>
@@ -848,6 +844,111 @@ function TwilightCampSvg() {
 
       {/* Seamless atmospheric veil fading the twilight hill smoothly into the card text canvas */}
       <rect width="420" height="560" fill="url(#stTwFade)" />
+    </svg>
+  );
+}
+
+/** Card 4 Art (Full-Card Seamless): Golden-hour amber meadow where curious Siberian Husky Maxie tilts his head for your daily check-in. */
+function GoldenMeadowSvg() {
+  return (
+    <svg viewBox="0 0 420 560" preserveAspectRatio="xMidYMid slice" className={s.storySvg}>
+      <defs>
+        <linearGradient id="stGoldSky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#3B312B" />
+          <stop offset="32%" stopColor="#7C5E49" />
+          <stop offset="56%" stopColor="#D8AF84" />
+          <stop offset="100%" stopColor="#241E1A" />
+        </linearGradient>
+        <radialGradient id="stGoldGlow" cx="52%" cy="32%" r="42%">
+          <stop offset="0%" stopColor="#FCE0B2" stopOpacity="0.72" />
+          <stop offset="52%" stopColor="#DDA26A" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="#DDA26A" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="stGoldFade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#211C18" stopOpacity="0" />
+          <stop offset="38%" stopColor="#211C18" stopOpacity="0.06" />
+          <stop offset="56%" stopColor="#211C18" stopOpacity="0.76" />
+          <stop offset="73%" stopColor="#211C18" stopOpacity="0.97" />
+          <stop offset="100%" stopColor="#1B1714" stopOpacity="1" />
+        </linearGradient>
+      </defs>
+
+      {/* Warm golden-hour dusk sky */}
+      <rect width="420" height="560" fill="url(#stGoldSky)" />
+      <rect width="420" height="360" fill="url(#stGoldGlow)" />
+
+      {/* Low golden sun sinking behind rolling hills */}
+      <circle cx="212" cy="176" r="32" fill="#FCE7C4" opacity="0.78" />
+
+      {/* Layered soft golden hills */}
+      <path d="M-10 226 Q104 176 218 206 T430 186 V340 H-10 Z" fill="#5D483B" opacity="0.78" />
+      <path d="M-10 252 Q128 216 254 242 T430 226 V370 H-10 Z" fill="#3E3229" />
+
+      {/* Foreground warm meadow knoll */}
+      <path d="M-10 264 Q142 242 276 258 T430 248 V560 H-10 Z" fill="#2F2620" />
+
+      {/* Minimalist wooden meadow fence posts on far edges */}
+      <g stroke="#524236" strokeWidth="2.4" strokeLinecap="round" opacity="0.65">
+        <line x1="38" y1="242" x2="38" y2="270" />
+        <line x1="82" y1="246" x2="82" y2="272" />
+        <line x1="28" y1="252" x2="94" y2="255" />
+        <line x1="344" y1="246" x2="344" y2="270" />
+        <line x1="386" y1="242" x2="386" y2="268" />
+        <line x1="332" y1="254" x2="396" y2="250" />
+      </g>
+
+      {/* Gentle swaying golden grass blades */}
+      <g stroke="#B8946D" strokeWidth="1.5" strokeLinecap="round" opacity="0.45" className={s.vigDrift}>
+        <path d="M126 270 Q124 256 129 246 M134 272 Q137 260 132 252 M296 268 Q299 254 294 244" fill="none" />
+      </g>
+
+      {/* Soft ground shadow */}
+      <ellipse cx="210" cy="268" rx="36" ry="6" fill="#14100D" opacity="0.5" />
+
+      {/* Curious Siberian Husky Maxie sitting with a warm head-tilt looking right at you */}
+      <g transform="translate(170 166)">
+        {/* Fluffy curled tail peeking around the side */}
+        <path d="M60 92 C82 88 86 64 72 56 C64 51 56 60 60 76" fill="#465160" />
+        <path d="M63 88 C76 84 78 68 70 62 C66 59 61 66 63 76" fill="#F5F2EC" />
+
+        {/* Sturdy wolf-grey husky body */}
+        <path d="M18 98 C14 70 21 48 40 46 C59 48 66 70 62 98 Z" fill="#465160" />
+        <path d="M24 54 Q40 46 56 54 Q48 62 32 62 Z" fill="#677587" opacity="0.46" />
+
+        {/* Snow-white fluffy chest bib & paws */}
+        <path d="M27 98 C25 74 30 56 40 55 C50 56 55 74 53 98 Z" fill="#F5F2EC" />
+        <ellipse cx="33" cy="98" rx="6.5" ry="3.8" fill="#F5F2EC" />
+        <ellipse cx="47" cy="98" rx="6.5" ry="3.8" fill="#F5F2EC" />
+
+        {/* Warm terracotta collar + brass tag */}
+        <path d="M26 54 Q40 61 54 54" fill="none" stroke="#D98366" strokeWidth="4" strokeLinecap="round" />
+        <circle cx="40" cy="60.5" r="2.3" fill="#E8C27A" />
+
+        {/* Slightly tilted curious Siberian Husky head with bright ice-blue eyes */}
+        <g transform="translate(11 6) rotate(-5 29 30)">
+          <path d="M10 34 L7 29 L11 25 C10 18 14 13 29 12 C44 13 48 18 47 25 L51 29 L48 34 L50 39 L43 42 C39 47 34 50 29 50 C24 50 19 47 15 42 L8 39 Z" fill="#465160" />
+          <path d="M12 20 L15 3 Q17 0 20 3 L26 14 Z" fill="#465160" />
+          <path d="M46 20 L43 3 Q41 0 38 3 L32 14 Z" fill="#465160" />
+          <path d="M16 17 L17.5 7 L23 15 Z" fill="#F5F2EC" />
+          <path d="M42 17 L40.5 7 L35 15 Z" fill="#F5F2EC" />
+          <path d="M29 15 L30.8 24 C34 22.8 39 23.4 42.5 26 C45.5 28.5 46 34 44.5 39 C42 45 36 48.5 29 48.5 C22 48.5 16 45 13.5 39 C12 34 12.5 28.5 15.5 26 C19 23.4 24 22.8 27.2 24 Z" fill="#F5F2EC" />
+          <ellipse cx="22.5" cy="21" rx="2.7" ry="1.3" transform="rotate(-14 22.5 21)" fill="#F5F2EC" />
+          <ellipse cx="35.5" cy="21" rx="2.7" ry="1.3" transform="rotate(14 35.5 21)" fill="#F5F2EC" />
+          {/* Warm curious ice-blue husky eyes */}
+          <ellipse cx="22.4" cy="29.4" rx="2.6" ry="2.3" fill="#7CC8EE" />
+          <ellipse cx="35.6" cy="29.4" rx="2.6" ry="2.3" fill="#7CC8EE" />
+          <circle cx="22.4" cy="29.4" r="1.2" fill="#1B2128" />
+          <circle cx="35.6" cy="29.4" r="1.2" fill="#1B2128" />
+          <circle cx="23.2" cy="28.6" r="0.6" fill="#FFFFFF" />
+          <circle cx="36.4" cy="28.6" r="0.6" fill="#FFFFFF" />
+          {/* Broad dark dog nose & attentive smile */}
+          <path d="M25 36 Q29 34.8 33 36 Q32.5 39 29 40.4 Q25.5 39 25 36 Z" fill="#1D2229" />
+          <path d="M29 40 V42.5 M24.8 43.2 Q27 45 29 42.6 Q31 45 33.2 43.2" fill="none" stroke="#2E3642" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </g>
+      </g>
+
+      {/* Seamless golden-dusk veil fading cleanly into the check-in card canvas */}
+      <rect width="420" height="560" fill="url(#stGoldFade)" />
     </svg>
   );
 }
