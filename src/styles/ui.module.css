@@ -929,7 +929,9 @@ textarea.input {
   padding: 0 10px;
 }
 .pickSearch:focus-within {
-  border-color: var(--accent-500);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-color: var(--line-strong);
 }
 .pickSearch input {
   flex: 1;
@@ -941,6 +943,9 @@ textarea.input {
   font-size: 14px;
   padding: 9px 0;
   color: var(--text);
+}
+.pickSearch input:focus-visible {
+  outline: none;
 }
 .pickList {
   display: flex;
@@ -2297,8 +2302,13 @@ textarea.input {
   font: inherit;
   color: var(--text);
 }
+.invSearch input:focus-visible {
+  outline: none;
+}
 .invSearch:focus-within {
-  border-color: var(--accent-600);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-color: var(--line-strong);
 }
 .tradeRow {
   composes: rowBtn;
@@ -2834,6 +2844,9 @@ textarea.input {
   outline: none;
   background: transparent;
   color: var(--ink);
+}
+.chatInput:focus-visible {
+  outline: none;
 }
 .chatInput::placeholder {
   color: var(--ink-muted);
@@ -4912,6 +4925,9 @@ button.sxTile:hover {
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 14px;
+}
+.mxSearch input:focus-visible {
+  outline: none;
 }
 .mxSearch input::placeholder {
   color: var(--ink-muted);
