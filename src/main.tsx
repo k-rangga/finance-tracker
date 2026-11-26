@@ -35,8 +35,8 @@ function LoadingSkeleton() {
       style={{ maxWidth: 1240, margin: '0 auto', padding: '40px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Logo size={36} />
-        {block(220, 28)}
+        <Logo size={36} mood="curious" />
+        <span className={s.loadingWarm}>Maxie is fetching your latest cycle…</span>
       </div>
       {block('60%', 18)}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 20 }}>

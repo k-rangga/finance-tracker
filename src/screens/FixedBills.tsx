@@ -372,14 +372,14 @@ function FixedBillRow({
     if (status === 'paid') {
       if (matchedTx) {
         return (
-          <span className={s.mxTag} data-tone="success">
+          <span className={`${s.mxTag} ${s.fbCheckPop}`} data-tone="success">
             <Icon d={IC.check} size={11} strokeWidth={2.6} /> Verified · {dayMonth(matchedTx.date)}
           </span>
         );
       }
       return (
-        <span className={s.mxTag} data-tone="success">
-          Paid (manual)
+        <span className={`${s.mxTag} ${s.fbCheckPop}`} data-tone="success">
+          <Icon d={IC.check} size={11} strokeWidth={2.6} /> Paid (manual)
         </span>
       );
     }

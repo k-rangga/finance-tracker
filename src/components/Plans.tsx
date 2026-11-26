@@ -48,7 +48,7 @@ export function FoundInstallments() {
   return (
     <aside className={s.insightCard} aria-label="Maxie found installments">
       <span className={s.insightHead}>
-        <Logo size={28} /> Maxie noticed
+        <Logo size={28} mood="curious" interactive cheer="Spotted a pattern!" /> Maxie noticed
       </span>
       <p className={s.insightBody} style={{ fontSize: 17, lineHeight: '26px' }}>
         {found.length === 1 ? 'This looks like an installment you pay every month.' : `These ${found.length} look like installments you pay every month.`} Confirm them and I'll

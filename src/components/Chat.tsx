@@ -84,8 +84,8 @@ function writeSession(key: string, data: StoredChat) {
   }
 }
 
-/** Up to 4 cycle-aware starter prompts tuned to your current numbers (English by default). */
-function buildStarters(b: Budget): string[] {
+/** Up to 4 cycle-aware starter prompts tuned to your current numbers and Maxie language setting. */
+function buildStarters(b: Budget, isId: boolean): string[] {
   const left = b.budget - b.spent - b.fixedDue;
   const overCat = b.cats
     .filter(c => c.type === 'variable' && c.status.key === 'over')
@@ -95,24 +95,24 @@ function buildStarters(b: Budget): string[] {
   const out: string[] = [];
 
   if (left < 0) {
-    out.push('Why am I over plan and how do I recover?');
+    out.push(isId ? 'Kenapa siklus ini lewat rencana dan gimana aturnya?' : 'Why am I over plan and how do I recover?');
   } else if (overCat) {
-    out.push(`How do I rein in ${overCat.name}?`);
+    out.push(isId ? `Gimana cara ngerem ${overCat.name}?` : `How do I rein in ${overCat.name}?`);
   } else {
-    out.push('Am I on track this cycle?');
+    out.push(isId ? 'Siklus ini masih aman gak?' : 'Am I on track this cycle?');
   }
 
   if (bufferCount > 0) {
-    out.push(`Sort my ${bufferCount} Buffer ${bufferCount === 1 ? 'transaction' : 'transactions'}`);
+    out.push(isId ? `Bantu rapikan ${bufferCount} transaksi Buffer` : `Sort my ${bufferCount} Buffer ${bufferCount === 1 ? 'transaction' : 'transactions'}`);
   }
   if (b.savingsTarget > 0 && b.saved < b.savingsTarget) {
-    out.push('How do I hit my savings goal?');
+    out.push(isId ? 'Gimana biar target tabungan tercapai?' : 'How do I hit my savings goal?');
   } else if (owed > 0) {
-    out.push('Break down my card bill this cycle');
+    out.push(isId ? 'Cek rincian tagihan kartu siklus ini' : 'Break down my card bill this cycle');
   }
 
-  out.push('Which merchants take the most?');
-  out.push('Where can I trim without feeling it?');
+  out.push(isId ? 'Merchant mana yang paling besar?' : 'Which merchants take the most?');
+  out.push(isId ? 'Di mana aku bisa hemat tanpa kerasa?' : 'Where can I trim without feeling it?');
   return out.slice(0, 4);
 }
 
@@ -152,7 +152,8 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
   const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
 
-  const starters = useMemo(() => buildStarters(budget), [budget]);
+  const isId = settings.maxieLanguage === 'id';
+  const starters = useMemo(() => buildStarters(budget, isId), [budget, isId]);
   const left = budget.budget - budget.spent - budget.fixedDue;
   const bufferCount = useMemo(() => budget.txs.filter(t => t.cat === 'Buffer' && !t.isIncome && !t.isTransfer).length, [budget.txs]);
 
@@ -308,13 +309,27 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
           {messages.length === 0 && !busy && (() => {
             const who = settings.name.trim();
             const hr = new Date().getHours();
-            const hi = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
+            const hi = isId
+              ? hr < 11
+                ? 'Selamat pagi'
+                : hr < 15
+                  ? 'Selamat siang'
+                  : hr < 19
+                    ? 'Selamat sore'
+                    : 'Selamat malam'
+              : hr < 12
+                ? 'Good morning'
+                : hr < 18
+                  ? 'Good afternoon'
+                  : 'Good evening';
             const headline = `${hi}${who ? `, ${who}` : ''}!`;
-            const sub = "I'm Maxie — ready to check this cycle's spending, tidy up categories, or find room to save. What's on your mind?";
+            const sub = isId
+              ? 'Aku Maxie — siap cek pengeluaran siklus ini, rapikan kategori, atau cari ruang buat nabung. Mau cek apa hari ini?'
+              : "I'm Maxie — ready to check this cycle's spending, tidy up categories, or find room to save. What's on your mind?";
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '8px 0' }}>
                 <div className={s.chatTheirsRow}>
-                  <Logo size={36} mood="happy" interactive />
+                  <Logo size={36} mood="happy" interactive cheer={isId ? 'Yuk ngobrol!' : 'Ready when you are!'} />
                   <div className={s.chatTheirs}>
                     <span className={s.chatName}>Maxie</span>
                     <p style={{ margin: 0 }}>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import s from '../../styles/ui.module.css';
 import { Card } from '../../components/ui';
+import { Logo } from '../../components/Logo';
 import { Select } from '../../components/Select';
 import { IC, Icon } from '../../components/Icon';
 import { draftJournalMonth, getJournalMonths, setJournalMonth } from '../../lib/perps';
@@ -195,9 +196,12 @@ export function JournalFeed({ account, items, dS, onReview }: Props) {
 
       {weeks.length === 0 ? (
         <Card>
-          <span style={{ color: C.textMuted, fontSize: 14 }}>
-            {tag ? `No reviewed trades tagged ${tag} in ${monthName(month)}.` : `No reviewed trades in ${monthName(month)} yet. Reviews you write appear here.`}
-          </span>
+          <div className={s.mxEmptyInline} style={{ padding: 0 }}>
+            <Logo size={28} mood="curious" interactive cheer="Ready for your reflections!" />
+            <span>
+              {tag ? `No reviewed trades tagged ${tag} in ${monthName(month)}.` : `No reviewed trades in ${monthName(month)} yet. Reviews you write appear here.`}
+            </span>
+          </div>
         </Card>
       ) : (
         weeks.map(w => (

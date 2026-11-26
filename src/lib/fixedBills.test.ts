@@ -12,6 +12,7 @@ import {
   dueDateInCycle,
   fixedBillCategoryLimits,
   fixedBillDueItems,
+  fixedBillsForNextCycle,
   matchFixedBills,
   type FixedBill,
 } from './fixedBills';
@@ -106,6 +107,28 @@ test('one transaction cannot verify two bills simultaneously', () => {
   const res = matchFixedBills([bA, bB], views, cycle);
   assert.equal(res.filter(x => x.status === 'paid').length, 1);
   assert.equal(res.filter(x => x.status === 'overdue').length, 1);
+});
+
+test('keeps due-today and overdue bills on today instead of shifting to tomorrow', () => {
+  const dueToday: FixedBill = { id: 'dt', name: 'Gym', category: 'Utilities', amount: 500_000, dueDay: 12 };
+  const res = matchFixedBills([dueToday, rent], [], cycle);
+  const due = fixedBillDueItems(res, cycle);
+  assert.equal(due.length, 2);
+  assert.equal(toISO(due[0].date), '2026-11-12');
+  assert.equal(due[0].title, 'Gym');
+  assert.equal(toISO(due[1].date), '2026-11-12');
+  assert.equal(due[1].title, 'Rent (overdue)');
+});
+
+test('schedules active individual fixed bills for next cycle', () => {
+  const nextCycle = getCycle(day(2026, 10, 26));
+  const paused: FixedBill = { ...wifi, id: 'paused', paused: true };
+  const items = fixedBillsForNextCycle([rent, pln, paused, yearly], nextCycle);
+  assert.equal(items.length, 2);
+  assert.equal(items[0].title, 'Rent');
+  assert.equal(toISO(items[0].date), '2026-12-01');
+  assert.equal(items[1].title, 'Electricity (PLN)');
+  assert.equal(toISO(items[1].date), '2026-12-05');
 });
 
 console.log(`\nall passed (${passed})`);

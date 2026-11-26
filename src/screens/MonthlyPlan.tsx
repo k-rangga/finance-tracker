@@ -159,32 +159,58 @@ export function MonthlyPlan({ budget: b, onOpenInvest }: { budget: Budget; onOpe
     );
   };
 
+  const [hoverSeg, setHoverSeg] = useState<string | null>(null);
+  const segs: { key: string; label: string; group?: string; ink: string; pct: number }[] = [
+    { key: 'Savings', label: 'Savings', group: 'Savings', ink: SAVE_INK, pct: SAVINGS_TARGET_PCT },
+    { key: 'Fixed bills', label: 'Fixed bills', group: 'Fixed bills', ink: FIXED_INK, pct: fixedPct },
+    { key: 'Everyday', label: 'Everyday', group: 'Everyday spending', ink: VAR_INK, pct: varPct },
+    ...(notPlanned > 0.05 ? [{ key: 'Not planned', label: 'Not planned', ink: C.divider, pct: notPlanned }] : []),
+  ].filter(x => x.pct > 0);
+  const activeSeg = segs.find(x => x.key === hoverSeg);
+
   return (
     <Card style={{ gap: 14 }}>
       <div className={s.cardHead}>
         <h2 className={s.h2}>Monthly plan</h2>
-        <span className={s.caption}>{full(b.income)} income, vs last compares this cycle with last cycle by the same day</span>
+        <span className={s.caption}>
+          {activeSeg
+            ? `${activeSeg.label}: ${full(ofIncome(activeSeg.pct))} (${pct(activeSeg.pct)}% of income)`
+            : `${full(b.income)} income, vs last compares this cycle with last cycle by the same day`}
+        </span>
       </div>
 
-      <div style={{ display: 'flex', height: 14, borderRadius: 999, overflow: 'hidden', gap: 3 }} aria-hidden="true">
-        <div style={{ flex: SAVINGS_TARGET_PCT, background: SAVE_INK }} />
-        <div style={{ flex: fixedPct, background: FIXED_INK }} />
-        <div style={{ flex: varPct, background: VAR_INK }} />
-        {notPlanned > 0.05 && <div style={{ flex: notPlanned, background: C.divider }} />}
+      <div className={s.mpBar} role="group" aria-label="Income allocation">
+        {segs.map(seg => (
+          <button
+            key={seg.key}
+            type="button"
+            className={s.mpBarSeg}
+            data-dim={hoverSeg && hoverSeg !== seg.key ? true : undefined}
+            style={{ flex: seg.pct, background: seg.ink }}
+            title={`${seg.label}: ${full(ofIncome(seg.pct))} (${pct(seg.pct)}%)`}
+            aria-label={`${seg.label}: ${full(ofIncome(seg.pct))} (${pct(seg.pct)}%)`}
+            onMouseEnter={() => setHoverSeg(seg.key)}
+            onMouseLeave={() => setHoverSeg(null)}
+            onFocus={() => setHoverSeg(seg.key)}
+            onBlur={() => setHoverSeg(null)}
+            onClick={() => seg.group && toggle(seg.group)}
+          />
+        ))}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: 13 }}>
-        {(
-          [
-            [SAVE_INK, 'Savings', SAVINGS_TARGET_PCT],
-            [FIXED_INK, 'Fixed bills', fixedPct],
-            [VAR_INK, 'Everyday', varPct],
-            ...(notPlanned > 0.05 ? [[C.divider, 'Not planned', notPlanned] as const] : []),
-          ] as const
-        ).map(([ink, label, p]) => (
-          <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Dot color={ink} />
-            {label} {pct(p)}%
-          </span>
+        {segs.map(seg => (
+          <button
+            key={seg.key}
+            type="button"
+            className={s.mpLegendBtn}
+            data-active={hoverSeg === seg.key || undefined}
+            onMouseEnter={() => setHoverSeg(seg.key)}
+            onMouseLeave={() => setHoverSeg(null)}
+            onClick={() => seg.group && toggle(seg.group)}
+          >
+            <Dot color={seg.ink} />
+            {seg.label} {pct(seg.pct)}%
+          </button>
         ))}
       </div>
 

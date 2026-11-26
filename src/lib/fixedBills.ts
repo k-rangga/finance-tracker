@@ -1,6 +1,6 @@
 import type { TxView } from './budget';
 import type { Cycle } from './cycle';
-import { addDays, sum, tidyName } from './format';
+import { sum, tidyName } from './format';
 import { merchantKey, type Bill, type Transaction } from '../data/transactions';
 import { CATEGORIES, categoryByName } from '../data/categories';
 import type { Subscription } from './subscriptions';
@@ -270,13 +270,14 @@ export function matchFixedBills(
 
 /**
  * Unpaid fixed bills as `Bill[]` for `computeBudget` (`fixedDue`, `safeDay`) and Summary's `Bills to come`.
- * Overdue unpaid bills are kept due tomorrow so their money stays reserved until linked, marked paid, or skipped.
+ * Overdue unpaid bills are kept on today so their money stays reserved until linked, marked paid, or skipped,
+ * and due-today bills show as "Today" instead of "Tomorrow".
  */
 export function fixedBillDueItems(statuses: FixedBillStatus[], cycle: Cycle): Bill[] {
   return statuses
     .filter(x => (x.status === 'due' || x.status === 'overdue') && x.dueDate && x.expected > 0)
     .map(x => ({
-      date: x.dueDate! <= cycle.today ? addDays(cycle.today, 1) : x.dueDate!,
+      date: x.dueDate! < cycle.today ? cycle.today : x.dueDate!,
       title: x.status === 'overdue' ? `${x.bill.name} (overdue)` : x.bill.name,
       category: x.bill.category,
       amount: x.expected,

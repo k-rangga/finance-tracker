@@ -20,13 +20,15 @@ type Props = {
   /** Compact currency (e.g. Summary) vs exact currency (e.g. Transactions). */
   compact?: boolean;
   onDismiss: (b: Bill) => void;
+  /** Optional 1-tap mark paid for individual fixed bills right from the list. */
+  onMarkPaid?: (b: Bill) => void;
 };
 
 /**
  * Clean, consistent, minimalistic Upcoming bills card shared by Summary and Transactions:
- * vertically aligned rows, 1-tap remove on every bill (with Undo), and a lightweight inline "+ Add" form.
+ * vertically aligned rows, 1-tap pay / remove on bills (with Undo), and a lightweight inline "+ Add" form.
  */
-export function UpcomingBills({ id, cycle, bills, limit, compact, onDismiss }: Props) {
+export function UpcomingBills({ id, cycle, bills, limit, compact, onDismiss, onMarkPaid }: Props) {
   const { settings, update, short, full } = useSettings();
   const [showAll, setShowAll] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -137,7 +139,7 @@ export function UpcomingBills({ id, cycle, bills, limit, compact, onDismiss }: P
 
       {bills.length === 0 ? (
         <div className={s.mxEmptyInline}>
-          <Logo size={26} mood="happy" />
+          <Logo size={26} mood="happy" interactive cheer="Clear skies ahead!" />
           <span>Clear skies until payday — no bills left.</span>
         </div>
       ) : (
@@ -158,11 +160,22 @@ export function UpcomingBills({ id, cycle, bills, limit, compact, onDismiss }: P
                     {dateLabel}
                   </span>
                   <span className={s.ubAmt}>{fmt(x.amount)}</span>
+                  {onMarkPaid && x.billId && (
+                    <button
+                      type="button"
+                      className={s.ubPayBtn}
+                      aria-label={`Mark ${cleanTitle} paid for this cycle`}
+                      title="Mark paid for this cycle"
+                      onClick={() => onMarkPaid(x)}
+                    >
+                      <Icon d={IC.check} size={13} strokeWidth={2.4} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={s.ubRemove}
                     aria-label={`Remove ${cleanTitle} for this cycle`}
-                    title="Remove for this cycle"
+                    title="Skip or remove for this cycle"
                     onClick={() => onDismiss(x)}
                   >
                     <Icon d={IC.close} size={14} />

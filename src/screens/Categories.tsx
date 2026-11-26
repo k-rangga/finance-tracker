@@ -388,9 +388,12 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
                 }
               />
               <Celebrate id={'bills-' + cycleKey} when={allBillsPaid} />
+              {activeChallenges.map(({ ch, st }) => (
+                <Celebrate key={ch.category + ch.start} id={`challenge-${ch.category}-${ch.start}`} when={st.key === 'done'} />
+              ))}
               {allBillsPaid && (
                 <div className={s.mxGreeting}>
-                  <Logo size={32} mood="happy" />
+                  <Logo size={32} mood="happy" interactive cheer="All bills handled!" />
                   <p className={s.mxGreetingText}>Every fixed bill is taken care of this cycle — everything left is yours to spend or save!</p>
                 </div>
               )}

@@ -44,7 +44,7 @@ function useDismissed(key: string): [boolean, () => void] {
 export function MaxieNote({ text, actions }: { text: ReactNode; actions: { label: ReactNode; onClick: () => void; primary?: boolean }[] }) {
   return (
     <div className={s.mxNote}>
-      <Logo size={24} />
+      <Logo size={24} mood="curious" interactive cheer="Just looking out for you!" />
       <div className={s.mxNoteMain}>
         <p>{text}</p>
         {actions.length > 0 && (
@@ -198,7 +198,7 @@ export function BudgetCard({
   else if (over > 0 && src)
     suggestion = (
       <div className={s.mxNote}>
-        <Logo size={24} mood="steady" />
+        <Logo size={24} mood="steady" interactive cheer="Easy tweak — total stays the same!" />
         <div className={s.mxNoteMain}>
           <p>
             {coverAmt < over

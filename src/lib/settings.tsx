@@ -128,6 +128,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const thisCycle = merged.cyclePlans?.[currentCycleKey()]?.limits ?? {};
     applyCategorySettings(merged.customCategories, { ...merged, limitOverrides: { ...merged.limitOverrides, ...thisCycle } });
     setSavingsTarget(merged.savingsPct);
+    if (typeof document !== 'undefined') document.documentElement.dataset.lang = merged.maxieLanguage ?? 'en';
     latest.current = merged;
     return merged;
   }, [stored]);

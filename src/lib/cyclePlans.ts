@@ -55,7 +55,7 @@ export function plannedCostBills(costs: PlannedCost[], cycle: Cycle, paid: Map<s
     .filter(c => !paid.has(c.id))
     .map(c => ({ date: new Date(c.date + 'T00:00:00'), title: c.name, category: c.category, amount: c.amount, source: 'Planned', costId: c.id }))
     .filter(b => b.date >= cycle.start && b.date <= cycle.end)
-    .map(b => (b.date <= cycle.today ? { ...b, date: new Date(cycle.today.getTime() + DAY) } : b));
+    .map(b => (b.date < cycle.today ? { ...b, date: cycle.today } : b));
 }
 
 /** Maxie's check of a plan: one line, and up to three amounts to change. */

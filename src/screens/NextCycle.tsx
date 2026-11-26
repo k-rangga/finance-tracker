@@ -12,6 +12,7 @@ import { MaxieNote } from './categoryCards';
 import type { Budget } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { checkPlan, cycleKey, matchCosts, spendingProfile, type CyclePlan, type PlanCheck, type PlannedCost } from '../lib/cyclePlans';
+import { fixedBillsForNextCycle } from '../lib/fixedBills';
 import { Logo } from '../components/Logo';
 import { ThinkingArcs, thinkingLabel } from '../components/Chat';
 import { dayLabel, dayMonth, sum, tidyName, toISO } from '../lib/format';
@@ -45,9 +46,17 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
   const pctOf = (amount: number) => (income > 0 ? (amount / income) * 100 : 0);
   const amountOf = (pct: number) => (pct / 100) * income;
 
+  /** Individual fixed bills due in the next cycle, grouped by category so exact amounts flow into the plan. */
+  const nextFixedBills = fixedBillsForNextCycle(settings.fixedBills ?? [], next);
+  const managedFixedCats = new Set((settings.fixedBills ?? []).filter(b => !b.paused).map(b => b.category));
+  const fixedBillAmtByCat: Record<string, number> = {};
+  for (const b of nextFixedBills) fixedBillAmtByCat[b.category] = (fixedBillAmtByCat[b.category] ?? 0) + b.amount;
+
   /** A category's regular amount (your plan without any one-cycle changes). */
-  const regularPct = (c: Category) =>
-    settings.customCategories.find(x => x.name === c.name)?.limitPct ?? settings.limitOverrides[c.name] ?? c.defaultLimitPct ?? builtInCategory(c.name)?.limitPct ?? 0;
+  const regularPct = (c: Category) => {
+    if (managedFixedCats.has(c.name)) return pctOf(fixedBillAmtByCat[c.name] ?? 0);
+    return settings.customCategories.find(x => x.name === c.name)?.limitPct ?? settings.limitOverrides[c.name] ?? c.defaultLimitPct ?? builtInCategory(c.name)?.limitPct ?? 0;
+  };
   const nextPct = (c: Category) => plan.limits?.[c.name] ?? regularPct(c);
 
   const save = (p: CyclePlan) => {
@@ -97,6 +106,23 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
         <div className={s.planLines}>
           <Line label="Income" value={full(income)} strong />
           <Line label="Fixed bills" value={'− ' + full(fixedTotal)} />
+          {/* Individual fixed bills due next cycle (part of the Fixed bills total above). */}
+          {nextFixedBills.length > 0 && (
+            <>
+              <span className={s.planSubHead}>Tracked fixed bills</span>
+              {nextFixedBills.map(b => (
+                <div key={b.title + b.date.getTime()} className={s.planSubLine}>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
+                    <span className={s.ellipsis}>{tidyName(b.title)}</span>
+                    <span style={{ fontSize: 13, color: C.textMuted }}>
+                      {b.category}, due {dayMonth(b.date)}
+                    </span>
+                  </span>
+                  <span style={{ whiteSpace: 'nowrap' }}>{full(b.amount)}</span>
+                </div>
+              ))}
+            </>
+          )}
           {/* Subscriptions due in that cycle, one per line (they're part of the fixed bills above). */}
           {known.subscriptions.length > 0 && (
             <>
@@ -213,6 +239,7 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
           bufferPct,
           left,
           promised: { fixedBills: fixedTotal, installments, oneOffs, savings },
+          fixedBills: nextFixedBills.map(b => ({ title: tidyName(b.title), category: b.category, amount: Math.round(b.amount), date: toISO(b.date) })),
           installments: known.installments.map(b => ({ title: tidyName(b.title), amount: Math.round(b.amount), date: toISO(b.date) })),
           subscriptions: known.subscriptions.map(b => ({ title: tidyName(b.title), amount: Math.round(b.amount), date: toISO(b.date) })),
           oneOffs: costs.map(c => ({ name: c.name, amount: c.amount, date: c.date, category: c.category })),
@@ -338,7 +365,7 @@ function PurrCheck({
   return (
     <Card style={{ gap: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Logo size={28} />
+        <Logo size={30} mood={state === 'working' ? 'curious' : 'happy'} interactive cheer="Let's set next cycle up for a win!" />
         <span style={{ fontFamily: 'var(--font-serif)', fontSize: 19, fontWeight: 500, marginRight: 'auto' }}>Maxie</span>
       </div>
       {state === 'working' ? (

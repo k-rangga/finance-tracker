@@ -55,6 +55,8 @@ type Props = {
   onShare: (txId: string, ratio: number | null) => void;
   /** Hide a predicted bill for this cycle. */
   onDismissBill: (b: Bill) => void;
+  /** 1-tap mark a fixed bill as paid for this cycle. */
+  onMarkBillPaid?: (b: Bill) => void;
 };
 
 type Popover = 'link' | 'share' | 'cat' | 'more' | 'note';
@@ -80,7 +82,7 @@ function useFlipUp<T extends HTMLElement>(style?: CSSProperties) {
   return { ref, style: up ? { ...style, top: 'auto', bottom: '100%', marginTop: 0, marginBottom: 6 } : style };
 }
 
-export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, setFilter, onRecat, onLink, onShare, onDismissBill }: Props) {
+export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, setFilter, onRecat, onLink, onShare, onDismissBill, onMarkBillPaid }: Props) {
   const { full, settings } = useSettings();
   /** The row with an open popover: an income's "paid back for" picker or an expense's "my share" editor. */
   const [open, setOpen] = useState<{ id: string; kind: Popover } | null>(null);
@@ -488,11 +490,28 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
           </div>
         </div>
 
+        {guesses.toSort.length > 0 && (
+          <div className={s.sortBanner}>
+            <Logo size={32} mood="curious" interactive cheer="Let's give every rupiah a home!" />
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 1, marginRight: 'auto', minWidth: 0 }}>
+              <strong style={{ fontSize: 14, fontWeight: 600 }}>
+                {guesses.toSort.length} {guesses.toSort.length === 1 ? 'item' : 'items'} in Buffer ready to sort
+              </strong>
+              <span style={{ fontSize: 12.5, color: C.textMuted }}>
+                {guesses.status === 'asking' ? 'Maxie is guessing the best categories…' : 'Quick 1-tap cards with Maxie’s guesses — takes seconds.'}
+              </span>
+            </span>
+            <button type="button" className={s.btnPrimarySm} onClick={() => setSorting(guesses.toSort.map(t => t.id))}>
+              Start sorting
+            </button>
+          </div>
+        )}
+
         {/* overflow visible: the "paid back for" picker floats past the card's edge. */}
         <div className={s.cardFlush} style={{ padding: '4px 0 6px', overflow: 'visible' }}>
           {groups.length === 0 && (
             <div style={{ padding: '40px 24px', textAlign: 'center', fontSize: 14, color: C.textMuted, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-              <Logo size={44} mood={!cat && !needle && range === 'today' ? 'happy' : 'curious'} />
+              <Logo size={44} mood={!cat && !needle && range === 'today' ? 'happy' : 'curious'} interactive cheer="Nice and quiet!" />
               <span>
                 {!cat && !needle && range === 'today' ? 'Quiet day so far — nothing spent today.' : !cat && !needle ? 'Nothing here for these dates.' : 'No transactions match these filters.'}
               </span>
@@ -563,7 +582,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
           </div>
         )}
 
-        <UpcomingBills cycle={cycle} bills={bills} onDismiss={onDismissBill} />
+        <UpcomingBills cycle={cycle} bills={bills} onDismiss={onDismissBill} onMarkPaid={onMarkBillPaid} />
       </div>
       {phone ? (
         // Phones: folded under one row; the total is already in the line above the list.

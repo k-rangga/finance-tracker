@@ -104,7 +104,12 @@ export function ActionPlan({ cycle, budget: b, onShowTransactions }: { cycle: Cy
     <Card style={{ gap: 18 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <Logo size={28} />
+          <Logo
+            size={30}
+            mood={allDone ? 'happy' : b.safeDay <= 0 ? 'steady' : 'calm'}
+            interactive
+            cheer={allDone ? 'Smooth sailing today!' : "Let's take it one step at a time!"}
+          />
           <span style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginRight: 'auto' }}>
             Maxie's plan, day {cycle.dayN} of {cycle.cycleDays}
           </span>
@@ -117,7 +122,7 @@ export function ActionPlan({ cycle, budget: b, onShowTransactions }: { cycle: Cy
           {b.safeDay > 0 ? (
             <>
               You've got <strong style={{ fontWeight: 600 }}>{full(b.safeDay)}</strong> a day until payday on {dayLabel(cycle.next)}.{' '}
-              {allDone ? "You're on track, nothing needs doing today." : "Here's what I'd do:"}
+              {allDone ? "You're on track — nothing needs doing today!" : "Here's what I'd do:"}
             </>
           ) : (
             <>
@@ -127,7 +132,12 @@ export function ActionPlan({ cycle, budget: b, onShowTransactions }: { cycle: Cy
         </p>
       </div>
 
-      {!allDone && (
+      {allDone ? (
+        <div className={s.actionAllDone}>
+          <Icon d={IC.check} size={15} strokeWidth={2.5} color={C.good} />
+          <span>Every step is ticked off — enjoy the smooth groove until payday!</span>
+        </div>
+      ) : (
         <ol className={s.stepList}>
           {shown.map((x, i) => (
             <li key={x.key} className={s.stepRow}>

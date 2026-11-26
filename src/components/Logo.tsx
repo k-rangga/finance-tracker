@@ -5,13 +5,16 @@ import { reducedMotion } from './Delight';
 
 export type MaxieMood = 'calm' | 'happy' | 'curious' | 'steady';
 
-const PET_CHEERS = [
-  'You are doing great!',
-  'High five!',
-  'Cheering you on!',
-  'Got your back!',
-  'Smooth sailing!',
-];
+const PET_CHEERS = {
+  en: ['You are doing great!', 'High five!', 'Cheering you on!', 'Got your back!', 'Smooth sailing!'],
+  id: ['Keren banget hari ini!', 'Tos dulu!', 'Aku dukung terus!', 'Santai, aman kok!', 'Lancar jaya!'],
+};
+const STREAK_CHEERS = {
+  en: ['Okay, you are officially unstoppable!', 'High five x3 — love this energy!'],
+  id: ['Wih, semangatnya luar biasa!', 'Tos tiga kali — mantap banget!'],
+};
+
+const currentLang = (): 'en' | 'id' => (typeof document !== 'undefined' && document.documentElement.dataset.lang === 'id' ? 'id' : 'en');
 
 type BubblePos = { text: string; style: CSSProperties; place: 'right' | 'bottom' | 'top' };
 
@@ -124,7 +127,15 @@ export function Logo({
   if (!interactive) return svg;
   const onPet = () => {
     const idx = tapCount.current++;
-    const text = idx === 0 && cheer ? cheer : PET_CHEERS[idx % PET_CHEERS.length];
+    const lang = currentLang();
+    const list = PET_CHEERS[lang];
+    const streak = STREAK_CHEERS[lang];
+    const text =
+      idx === 0 && cheer
+        ? cheer
+        : idx >= 2 && (idx + 1) % 3 === 0
+          ? streak[Math.floor(idx / 3) % streak.length]
+          : list[idx % list.length];
     setPerked(true);
     const rect = btnRef.current?.getBoundingClientRect();
     if (!rect) return;

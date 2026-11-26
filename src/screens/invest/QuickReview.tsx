@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import s from '../../styles/ui.module.css';
 import { Modal } from '../../components/ui';
+import { Celebrate } from '../../components/Delight';
+import { Logo } from '../../components/Logo';
 import { usd } from '../../lib/perps';
 import { fmtPct } from '../../lib/format';
 import { C, plInk } from '../../lib/tokens';
@@ -29,15 +31,20 @@ export function QuickReview({ queue, hl, onSaveManual, onClose }: Props) {
   const rest = queue.slice(i).filter(x => x.perp);
 
   return createPortal(
-    <Modal title={t ? `Review ${i + 1} of ${queue.length}` : 'All caught up'} onClose={onClose} width={620}>
-      {!t ? (
-        <>
-          <span style={{ fontSize: 15, color: C.textSoft }}>Every trade in this list has a review. Your Journal has them all, month by month.</span>
-          <button type="button" className={s.btnPrimary} style={{ alignSelf: 'flex-start' }} onClick={onClose}>
-            Done
-          </button>
-        </>
-      ) : (
+    <>
+      <Celebrate id={`quickreview-${queue.length}-${queue[0]?.key ?? 'done'}`} when={!t && queue.length > 0} />
+      <Modal title={t ? `Review ${i + 1} of ${queue.length}` : 'All caught up!'} onClose={onClose} width={620}>
+        {!t ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12, padding: '8px 0' }}>
+            <Logo size={52} mood="happy" interactive cheer="Sharp discipline!" />
+            <p style={{ fontFamily: 'var(--font-serif)', fontSize: 18, lineHeight: '26px', color: C.text }}>
+              Nice work — every trade in this list is reviewed! Your Journal has them all, month by month.
+            </p>
+            <button type="button" className={s.btnPrimary} onClick={onClose}>
+              Done
+            </button>
+          </div>
+        ) : (
         <>
           <div className={s.track} style={{ height: 4 }} aria-hidden="true">
             <span className={s.fill} style={{ width: `${(i / queue.length) * 100}%`, background: C.accent600 }} />
@@ -67,7 +74,8 @@ export function QuickReview({ queue, hl, onSaveManual, onClose }: Props) {
           </div>
         </>
       )}
-    </Modal>,
+    </Modal>
+    </>,
     document.body,
   );
 }

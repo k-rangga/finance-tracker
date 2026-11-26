@@ -76,11 +76,12 @@ function SignIn() {
     } else setState('sent');
   };
   const hr = new Date().getHours();
-  const hello = hr < 12 ? 'Good morning. Ready to check in?' : hr < 18 ? 'Good afternoon. Ready to check in?' : 'Good evening. Ready to check in?';
+  const hello = hr < 12 ? 'Good morning! Ready to check in?' : hr < 18 ? 'Good afternoon! Ready to check in?' : 'Good evening! Ready to check in?';
+  const readyToGo = state === 'sent' || /^\S+@\S+\.\S+$/.test(email.trim()) || pin.length === PIN_LENGTH;
   return (
     <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, textAlign: 'center', width: 'min(360px, 100%)' }}>
-        <Logo size={60} mood={state === 'sent' ? 'happy' : 'calm'} interactive />
+        <Logo size={60} mood={readyToGo ? 'happy' : 'calm'} interactive cheer="Welcome back!" />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <h1 style={{ fontSize: 30, fontFamily: 'var(--font-serif)', fontWeight: 500 }}>Maxie</h1>
           <span style={{ fontSize: 15, fontFamily: 'var(--font-serif)', color: 'var(--ink-muted)' }}>{hello}</span>

@@ -224,6 +224,28 @@ export default function App() {
     update({ dismissedBills: [...before, billKey(id, b)] });
     setBillUndo({ text: `${label} removed for this cycle`, run: () => update({ dismissedBills: before }) });
   };
+  const markBillPaid = (b: Bill) => {
+    if (!b.billId) return;
+    const id = toISO(cycle.start);
+    const label = tidyName(b.title.replace(/\s*\(overdue\)$/i, ''));
+    const prevCycles = settings.fixedBillCycles ?? {};
+    const cur = prevCycles[id] ?? {};
+    const paid = Array.from(new Set([...(cur.paid ?? []), b.billId]));
+    const skipped = (cur.skipped ?? []).filter(x => x !== b.billId);
+    update({ fixedBillCycles: { ...prevCycles, [id]: { ...cur, paid, skipped } } });
+    setBillUndo({ text: `${label} marked paid — nice and tidy!`, run: () => update({ fixedBillCycles: prevCycles }) });
+  };
+  // Global ⌘K / Ctrl+K shortcut to summon Ask Maxie from anywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setChat(c => (c ? null : {}));
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
   const budget = useMemo(
     () => {
       // Planned expenses you added for this cycle: money set aside in their category.
@@ -402,7 +424,7 @@ export default function App() {
               {cycle.daysLeft <= 2 && budget.spent <= budget.budget ? ' — finishing strong' : ''}
             </span>
             <div className={s.headerActions}>
-              <button type="button" className={s.chip} onClick={() => setChat({})} aria-label="Ask Maxie" title="Ask Maxie about your spending">
+              <button type="button" className={s.chip} onClick={() => setChat({})} aria-label="Ask Maxie" title="Ask Maxie about your spending (⌘K / Ctrl+K)">
                 <span className={s.purrMark} aria-hidden="true">
                   <Logo size={18} />
                 </span>
@@ -459,6 +481,7 @@ export default function App() {
                   setTab('categories');
                 }}
                 onDismissBill={dismissBill}
+                onMarkBillPaid={markBillPaid}
                 onShowTransactions={patch => {
                   setTxFilter({ cat: '', q: '', ...patch });
                   setTab('tx');
@@ -486,7 +509,7 @@ export default function App() {
                 onAskMaxie={ask => setChat({ ask })}
               />
             )}
-            {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} onDismissBill={dismissBill} />}
+            {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} onDismissBill={dismissBill} onMarkBillPaid={markBillPaid} />}
             {tab === 'plan' && (
               <SavingsPlan
                 cycle={cycle}

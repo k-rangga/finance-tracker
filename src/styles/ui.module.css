@@ -3055,7 +3055,7 @@ textarea.input {
   cursor: pointer;
 }
 .tplOpt:hover {
-  border-color: var(--accent);
+  border-color: var(--clay);
   color: var(--text);
 }
 .tplOpt[aria-pressed='true'] {
@@ -3104,7 +3104,7 @@ textarea.input {
 .sortLink {
   font: inherit;
   font-weight: 600;
-  color: var(--accent-600, var(--accent));
+  color: var(--accent-600, var(--clay));
   background: none;
   border: none;
   padding: 0;
@@ -3145,7 +3145,7 @@ textarea.input {
   min-height: 52px;
   padding: 10px 16px;
   border-radius: 12px;
-  border: 1.5px solid var(--accent);
+  border: 1.5px solid var(--clay);
   background: var(--accent-tint);
   color: var(--text);
   cursor: pointer;
@@ -3759,8 +3759,9 @@ button.sxTile:disabled {
   position: relative;
   display: flex;
   align-items: flex-end;
-  gap: 3px;
+  gap: 4px;
   height: 120px;
+  margin-top: 8px;
 }
 .sxDayBar {
   flex: 1;
@@ -3799,7 +3800,7 @@ button.sxTile:disabled {
 .sxDayAxis {
   display: flex;
   justify-content: space-between;
-  margin-top: -6px;
+  margin-top: 2px;
   font-size: 12px;
   color: var(--text-muted);
 }
@@ -4010,7 +4011,7 @@ button.sxTile:disabled {
 .ubTotal {
   font-size: 13px;
   font-weight: 600;
-  color: var(--ink-soft);
+  color: var(--text-soft);
   font-variant-numeric: tabular-nums;
 }
 .ubAddBtn {
@@ -4966,15 +4967,28 @@ button.sxTile:disabled {
 }
 .sxBarTop {
   position: absolute;
-  bottom: calc(100% + 4px);
+  bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
   font-size: 11px;
   line-height: 14px;
   font-weight: 600;
   color: var(--ink);
   white-space: nowrap;
   pointer-events: none;
+  z-index: 2;
+}
+.sxBarTop[data-align='left'] {
+  left: 0;
+  transform: none;
+}
+.sxBarTop[data-align='right'] {
+  left: auto;
+  right: 0;
+  transform: none;
 }
 .sxDayBar {
   position: relative;
@@ -4986,7 +5000,8 @@ button.sxTile:disabled {
   border: 2px solid var(--category-1);
 }
 .sxChartSub {
-  margin-top: -8px;
+  margin-top: -6px;
+  margin-bottom: 2px;
   font-size: 13px;
   color: var(--ink-muted);
 }
@@ -5371,6 +5386,12 @@ button.sxTile:disabled {
   border-radius: var(--radius-md);
   cursor: pointer;
 }
+.mxLogoBtn:hover svg {
+  transform: translateY(-1px) rotate(-4deg) scale(1.06);
+}
+.mxLogoBtn:active svg {
+  transform: scale(0.95);
+}
 .mxBounce {
   animation: mxBounce 0.45s cubic-bezier(0.22, 1.4, 0.36, 1);
 }
@@ -5425,6 +5446,8 @@ button.sxTile:disabled {
   100% { opacity: 0; transform: translateY(calc(-100% - 3px)) scale(0.97); }
 }
 @media (prefers-reduced-motion: reduce) {
+  .mxLogoBtn:hover svg,
+  .mxLogoBtn:active svg { transform: none; }
   .mxBounce { animation: none; }
   .mxSpeech { animation: none; }
 }
@@ -5458,7 +5481,7 @@ button.sxTile:disabled {
   gap: 5px;
   padding: 2px 9px;
   border-radius: 999px;
-  background: var(--good-tint);
+  background: var(--good-soft);
   color: var(--good);
   font-size: 11.5px;
   font-weight: 600;
@@ -5473,7 +5496,7 @@ button.sxTile:disabled {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
-  background: var(--good-tint);
+  background: var(--good-soft);
   color: var(--good);
 }
 .catMoodPill[data-tone='warn'] {
@@ -5721,7 +5744,7 @@ button.sxTile:disabled {
   gap: 10px;
   font-size: 13.5px;
   line-height: 1.45;
-  color: var(--ink-soft);
+  color: var(--text-soft);
 }
 .catSideWin {
   width: 100%;
@@ -5732,7 +5755,7 @@ button.sxTile:disabled {
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--good) 28%, transparent);
   border-radius: 12px;
-  background: var(--good-tint);
+  background: var(--good-soft);
   color: var(--ink);
   text-align: left;
   cursor: pointer;
@@ -5979,6 +6002,181 @@ button.sxTile:disabled {
   .fbFormGrid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* ---- Warmth, celebrations & interactive micro-feedback ---- */
+.loadingWarm {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  color: var(--text-soft);
+}
+.sxLeftDayBtn {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+.sxLeftDayBtn:hover {
+  background: var(--hover);
+  border-color: var(--border);
+}
+.sxPaceBonus {
+  margin-top: -6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--good-soft);
+  color: var(--good);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.ubPayBtn {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, transform 0.14s ease;
+}
+.ubPayBtn:hover,
+.ubPayBtn:focus-visible {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.ubPayBtn:active {
+  transform: scale(0.92);
+}
+.sortBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-000);
+  border: 1px solid var(--border);
+}
+.sortProgressWrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sortProgressWrap .track {
+  flex: 1;
+}
+.sortProgressLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.sortKeyHint {
+  display: inline-grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 5px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+}
+.actionAllDone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--good-soft);
+  color: var(--good);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.mpBar {
+  display: flex;
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  gap: 3px;
+}
+.mpBarSeg {
+  border: none;
+  padding: 0;
+  height: 100%;
+  cursor: pointer;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.mpBarSeg:hover {
+  filter: brightness(1.06);
+}
+.mpBarSeg[data-dim] {
+  opacity: 0.45;
+}
+.mpLegendBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.mpLegendBtn:hover,
+.mpLegendBtn[data-active] {
+  background: var(--hover);
+}
+.fbCheckPop {
+  animation: fbPop 0.34s cubic-bezier(0.22, 1.4, 0.36, 1);
+}
+@keyframes fbPop {
+  0% { transform: scale(0.86); }
+  60% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+.btnPrimary:active:not(:disabled),
+.btnPrimarySm:active:not(:disabled),
+.btnOutline:active:not(:disabled),
+.btnOutlineSm:active:not(:disabled),
+button.sxTile:active:not(:disabled),
+.sxAttnPill:active:not(:disabled),
+.catFilterPill:active:not(:disabled),
+.chatStarter:active:not(:disabled),
+.chatFollowUp:active:not(:disabled) {
+  transform: scale(0.98);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fbCheckPop { animation: none; }
+  .btnPrimary:active:not(:disabled),
+  .btnPrimarySm:active:not(:disabled),
+  .btnOutline:active:not(:disabled),
+  .btnOutlineSm:active:not(:disabled),
+  button.sxTile:active:not(:disabled),
+  .sxAttnPill:active:not(:disabled),
+  .catFilterPill:active:not(:disabled),
+  .chatStarter:active:not(:disabled),
+  .chatFollowUp:active:not(:disabled),
+  .ubPayBtn:active { transform: none; }
 }
 
 

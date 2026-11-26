@@ -1,5 +1,6 @@
 import s from '../../styles/ui.module.css';
 import { Card, CardHead, Stat } from '../../components/ui';
+import { Logo } from '../../components/Logo';
 import { fullDate } from '../../lib/format';
 import { C, plInk } from '../../lib/tokens';
 import { fmtR } from './model';
@@ -69,7 +70,12 @@ export function Review({ today, items, from, dS }: { today: Date; items: AnyTrad
             ))}
           </div>
         )}
-        {!st.count && <div className={s.note}>No closed trades in this period yet.</div>}
+        {!st.count && (
+          <div className={s.mxEmptyInline} style={{ padding: 0 }}>
+            <Logo size={28} mood="curious" interactive cheer="Patience pays!" />
+            <span>No closed trades in this period yet — insights appear here as soon as you close one.</span>
+          </div>
+        )}
       </Card>
 
       {st.count > 0 && (
