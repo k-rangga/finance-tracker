@@ -39,7 +39,7 @@ export function SortQueue({ ids, allTxs, g, onPick, onClose }: Props) {
     return (
       <Modal title="All sorted" onClose={onClose} width={460}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12, padding: '8px 0' }}>
-          <Logo size={52} mood={skipped.length ? 'calm' : 'happy'} />
+          <Logo size={52} mood={skipped.length ? 'calm' : 'happy'} interactive cheer="Clean slate!" />
           <p style={{ fontFamily: 'var(--font-serif)', fontSize: 18, lineHeight: '26px', color: C.text }}>
             {skipped.length
               ? `Nice work — ${done} sorted, ${skipped.length} left for later.`

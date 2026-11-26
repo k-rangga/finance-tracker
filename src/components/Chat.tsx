@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { IC, Icon } from './Icon';
-import { Logo } from './Logo';
-import { askGemini, chatContext, modelLabel, type ChatAction, type ChatMessage } from '../lib/chat';
+import { Logo, type MaxieMood } from './Logo';
+import { askGemini, chatContext, extractFollowUps, modelLabel, type ChatAction, type ChatMessage } from '../lib/chat';
 import type { Budget, TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import type { FixedBillStatus } from '../lib/fixedBills';
@@ -18,21 +18,30 @@ import { sum, tidyName, toISO } from '../lib/format';
 /** Stop waiting after this long; per-model fetches abort at 22s and fall back automatically. */
 const TIMEOUT_MS = 45_000;
 
-/** What Maxie is doing, by how long it's been working: the thinking label follows the loading. */
+/** What Maxie is doing, by how long it's been working: playful and warm, zero emojis. */
 export const thinkingLabel = (secs: number, deep = false) =>
   secs < 2
     ? deep
-      ? 'Maxie is digging in…'
-      : 'Maxie is thinking…'
+      ? 'Taking a closer look…'
+      : 'Sniffing through your cycle…'
     : secs < 5
-      ? 'Reading this cycle…'
+      ? deep
+        ? 'Comparing your categories…'
+        : 'Checking the numbers…'
       : secs < 10
         ? deep
-          ? 'Weighing your categories and prices…'
-          : 'Checking your categories…'
+          ? 'Double-checking the details…'
+          : 'Putting it together…'
         : secs < 20
-          ? 'Writing an answer…'
-          : 'Still working, deeper questions can take up to a minute…';
+          ? 'Almost there…'
+          : 'Still working — deeper questions can take a little longer…';
+
+/** Fallback husky mood when the model omits an explicit mood field. */
+function inferMood(text: string): MaxieMood {
+  if (/over (?:budget|plan|limit)|tight|lewat rencana|ketat|cut back/i.test(text)) return 'steady';
+  if (/sort|buffer|uncategorized|check|let'?s look|banding/i.test(text)) return 'curious';
+  return 'happy';
+}
 
 /** Three small crescents that blink in turn (Maxie ThinkingIndicator). */
 export function ThinkingArcs() {
@@ -54,7 +63,14 @@ function readSession(key: string): StoredChat {
     const raw = sessionStorage.getItem(key);
     if (!raw) return { messages: [] };
     const parsed = JSON.parse(raw) as StoredChat;
-    return { messages: Array.isArray(parsed.messages) ? parsed.messages : [], deep: !!parsed.deep };
+    const msgs = Array.isArray(parsed.messages)
+      ? parsed.messages.map(m => {
+          if (m.role !== 'model') return m;
+          const clean = extractFollowUps(m.text, m.followUps);
+          return { ...m, text: clean.reply, followUps: clean.followUps };
+        })
+      : [];
+    return { messages: msgs, deep: !!parsed.deep };
   } catch {
     return { messages: [] };
   }
@@ -155,7 +171,10 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
       if (id !== asking.current) return;
       if (a === 'slow') setProblem({ kind: 'slow' });
       else if ('error' in a) setProblem({ kind: a.error, detail: a.detail });
-      else setMessages([...convo, { role: 'model', text: a.reply, actions: a.actions, followUps: a.followUps, model: a.model }]);
+      else {
+        const clean = extractFollowUps(a.reply, a.followUps);
+        setMessages([...convo, { role: 'model', text: clean.reply, actions: a.actions, followUps: clean.followUps, mood: a.mood, model: a.model }]);
+      }
     } catch (e) {
       if (id === asking.current) setProblem({ kind: 'network', detail: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -314,57 +333,64 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
             );
           })()}
 
-          {messages.map((m, i) =>
-            m.role === 'user' ? (
-              <div key={i} className={s.chatMine}>
-                {m.text}
-              </div>
-            ) : (
+          {messages.map((m, i) => {
+            if (m.role === 'user')
+              return (
+                <div key={i} className={s.chatMine}>
+                  {m.text}
+                </div>
+              );
+            const clean = extractFollowUps(m.text, m.followUps);
+            const mood = m.mood ?? inferMood(clean.reply);
+            return (
               <div key={i} className={s.chatTheirsRow}>
-                <Logo size={28} mood="happy" />
-                <div className={s.chatTheirs}>
-                  <span className={s.chatName}>Maxie</span>
-                  <Rich text={m.text} />
-                  {m.actions && m.actions.length > 0 && <ActionGroup actions={m.actions} allTxs={allTxs} />}
-                  <span className={s.chatRate}>
-                    {(['up', 'down'] as const).map(r => (
+                <Logo size={28} mood={mood} interactive cheer="Happy to help!" />
+                <div className={s.chatTheirsCol}>
+                  <div className={s.chatTheirs}>
+                    <span className={s.chatName}>Maxie</span>
+                    <Rich text={clean.reply} />
+                    {m.actions && m.actions.length > 0 && <ActionGroup actions={m.actions} allTxs={allTxs} />}
+                    <span className={s.chatRate}>
+                      {(['up', 'down'] as const).map(r => (
+                        <button
+                          key={r}
+                          type="button"
+                          className={s.chatRateBtn}
+                          aria-pressed={m.rating === r}
+                          aria-label={r === 'up' ? 'Good answer' : 'Not helpful'}
+                          title={r === 'up' ? 'Good answer' : 'Not helpful'}
+                          onClick={() => rate(i, r)}
+                        >
+                          <Icon d={r === 'up' ? IC.thumbUp : IC.thumbDown} size={15} />
+                        </button>
+                      ))}
                       <button
-                        key={r}
                         type="button"
                         className={s.chatRateBtn}
-                        aria-pressed={m.rating === r}
-                        aria-label={r === 'up' ? 'Good answer' : 'Not helpful'}
-                        title={r === 'up' ? 'Good answer' : 'Not helpful'}
-                        onClick={() => rate(i, r)}
+                        aria-label={copied === i ? 'Copied' : 'Copy answer'}
+                        title={copied === i ? 'Copied' : 'Copy answer'}
+                        onClick={() => copyReply(i, clean.reply)}
                       >
-                        <Icon d={r === 'up' ? IC.thumbUp : IC.thumbDown} size={15} />
+                        <Icon d={copied === i ? IC.check : IC.copy} size={15} />
                       </button>
-                    ))}
-                    <button
-                      type="button"
-                      className={s.chatRateBtn}
-                      aria-label={copied === i ? 'Copied' : 'Copy answer'}
-                      title={copied === i ? 'Copied' : 'Copy answer'}
-                      onClick={() => copyReply(i, m.text)}
-                    >
-                      <Icon d={copied === i ? IC.check : IC.copy} size={15} />
-                    </button>
-                    {m.rating && <span className={s.chatRateNote}>{m.rating === 'up' ? 'Thanks, noted!' : "Got it, I'll do better."}</span>}
-                    {!m.rating && m.model && <span className={s.chatModelTag}>{modelLabel(m.model)}</span>}
-                  </span>
-                  {i === lastModelIdx && !busy && m.followUps && m.followUps.length > 0 && (
+                      {m.rating && <span className={s.chatRateNote}>{m.rating === 'up' ? 'Yay, glad that helped!' : "Got it — I'll tune that next time."}</span>}
+                      {!m.rating && m.model && <span className={s.chatModelTag}>{modelLabel(m.model)}</span>}
+                    </span>
+                  </div>
+                  {i === lastModelIdx && !busy && clean.followUps.length > 0 && (
                     <div className={s.chatFollowUps} aria-label="Suggested follow-ups">
-                      {m.followUps.map(q => (
+                      {clean.followUps.map(q => (
                         <button key={q} type="button" className={s.chatFollowUp} onClick={() => send(q)}>
-                          {q}
+                          <span>{q}</span>
+                          <Icon d={IC.arrowUpRight} size={12} />
                         </button>
                       ))}
                     </div>
                   )}
                 </div>
               </div>
-            ),
-          )}
+            );
+          })}
 
           {busy && (
             <div className={s.chatTheirsRow} role="status" aria-live="polite">
@@ -695,7 +721,7 @@ function ActionCardView({ prepared, done, onApply, onUndo }: { prepared: Prepare
         ) : (
           <>
             <span className={s.mxTag} data-tone="success">
-              Applied
+              Done — nice and tidy!
             </span>
             <button type="button" className={s.textBtnSm} onClick={onUndo}>
               Undo

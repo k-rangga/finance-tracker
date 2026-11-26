@@ -13,21 +13,59 @@ export type ChatAction =
   | { type: 'recategorize'; txIds: string[]; category: string; sub?: string | null; why?: string }
   | { type: 'move_limit'; from: string; to: string; amount: number; why?: string };
 
-/** A reply also carries the model that wrote it, suggested next questions, and your thumbs up or down once rated. */
+/** A reply also carries the model that wrote it, suggested next questions, husky mood, and your thumbs up or down once rated. */
 export type ChatMessage = {
   role: 'user' | 'model';
   text: string;
   actions?: ChatAction[];
   followUps?: string[];
+  mood?: 'happy' | 'curious' | 'steady';
   model?: string;
   rating?: 'up' | 'down';
 };
 
 export type ChatAnswer =
-  | { reply: string; actions: ChatAction[]; followUps?: string[]; model?: string }
+  | { reply: string; actions: ChatAction[]; followUps?: string[]; mood?: 'happy' | 'curious' | 'steady'; model?: string }
   | { error: 'no_key' | 'api' | 'blocked' | 'quota'; detail?: string };
 
-/** `deep`: deeper reasoning + Google Search local price checks (Gemini 4 Hydrogen → 3.8 Flash → 3.5 Flash-Lite). */
+/**
+ * Safety net: if a model ever places follow-up questions as trailing bullet lines inside `reply`,
+ * pull them out into `followUps` so they always render as tappable chips instead of plain bullets.
+ */
+export function extractFollowUps(rawReply: string, existing?: string[]): { reply: string; followUps: string[] } {
+  const cleanChip = (s: string) => s.replace(/^[-*•]\s+|\d+[.)]\s+/, '').replace(/^["'“]|["'”]$/g, '').trim();
+  const base = (existing ?? []).map(cleanChip).filter(x => x && x.length <= 75);
+  const lines = String(rawReply || '').replace(/\r\n/g, '\n').split('\n');
+  const pulled: string[] = [];
+  let end = lines.length;
+  while (end > 0 && !lines[end - 1].trim()) end--;
+  while (end > 0) {
+    const line = lines[end - 1].trim();
+    const m = line.match(/^(?:[-*•]|\d+[.)])\s+(.+\?)$/);
+    if (!m) break;
+    const q = cleanChip(m[1]);
+    if (!q || q.length > 75) break;
+    pulled.unshift(q);
+    end--;
+  }
+  if (pulled.length > 0 && end > 0) {
+    // Drop blank lines and optional lead-in lines like "Want to check next:" directly above pulled questions.
+    let probe = end;
+    while (probe > 0 && !lines[probe - 1].trim()) probe--;
+    if (probe > 0 && /^(?:next|follow[- ]?ups?|want to|you (?:could|might) ask|suggested|mau cek|pertanyaan)/i.test(lines[probe - 1].trim()) && lines[probe - 1].trim().length <= 60) {
+      end = probe - 1;
+    }
+  }
+  const reply = pulled.length > 0 ? lines.slice(0, end).join('\n').trim() : String(rawReply || '').trim();
+  const merged: string[] = [];
+  for (const q of [...base, ...pulled]) {
+    if (!merged.some(x => x.toLowerCase() === q.toLowerCase())) merged.push(q);
+    if (merged.length >= 3) break;
+  }
+  return { reply, followUps: merged };
+}
+
+/** `deep`: deeper reasoning + local price context (Free Tier: 3.6 Flash → 3.5 Flash-Lite → 3.8 Flash). */
 export const askGemini = (messages: ChatMessage[], context: object, deep = false) =>
   run<ChatAnswer>('askGemini', { messages: messages.map(m => ({ role: m.role, text: m.text })), context, ...(deep ? { deep: true } : {}) });
 

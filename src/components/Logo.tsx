@@ -1,7 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import s from '../styles/ui.module.css';
 import { reducedMotion } from './Delight';
 
 export type MaxieMood = 'calm' | 'happy' | 'curious' | 'steady';
+
+const PET_CHEERS = [
+  'You are doing great!',
+  'High five!',
+  'Cheering you on!',
+  'Got your back!',
+  'Smooth sailing!',
+];
 
 /**
  * Maxie, the Siberian husky mark: upright closer-set husky ears, double-tuft wolf cheeks, ivory mask with thin
@@ -26,21 +35,31 @@ export function Logo({
   tone = 'clay',
   mood = 'calm',
   interactive = false,
+  cheer,
   label,
 }: {
   size: number;
   tone?: 'clay' | 'ink' | 'on-clay';
   mood?: MaxieMood;
-  /** Clicking Maxie gives a gentle, quiet happy blink/perk (respects reduced motion). */
+  /** Clicking Maxie gives a playful happy perk + brief cheerful speech bubble (respects reduced motion). */
   interactive?: boolean;
+  /** Optional custom short line shown when tapped (falls back to cheerful defaults). */
+  cheer?: string;
   label?: string;
 }) {
   const [perked, setPerked] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const tapCount = useRef(0);
   useEffect(() => {
     if (!perked) return;
-    const t = setTimeout(() => setPerked(false), 700);
+    const t = setTimeout(() => setPerked(false), 750);
     return () => clearTimeout(t);
   }, [perked]);
+  useEffect(() => {
+    if (!note) return;
+    const t = setTimeout(() => setNote(null), 1800);
+    return () => clearTimeout(t);
+  }, [note]);
 
   const small = size <= 24;
   const activeMood: MaxieMood = perked ? 'happy' : mood;
@@ -53,10 +72,10 @@ export function Logo({
       width={size}
       height={size}
       viewBox="0 0 64 64"
+      className={perked && !reducedMotion() ? s.mxBounce : undefined}
       style={{
         flex: 'none',
         display: 'block',
-        transform: perked && !reducedMotion() ? 'translateY(-1.5px) scale(1.04)' : undefined,
         transition: 'transform 180ms ease-out',
       }}
       role={label ? 'img' : undefined}
@@ -98,24 +117,28 @@ export function Logo({
   );
 
   if (!interactive) return svg;
+  const onPet = () => {
+    const idx = tapCount.current++;
+    const line = idx === 0 && cheer ? cheer : PET_CHEERS[idx % PET_CHEERS.length];
+    setPerked(true);
+    setNote(line);
+  };
   return (
-    <button
-      type="button"
-      onClick={() => setPerked(true)}
-      aria-label={label ?? 'Say hi to Maxie'}
-      title="Say hi to Maxie"
-      style={{
-        border: 0,
-        padding: 0,
-        margin: 0,
-        background: 'transparent',
-        display: 'inline-grid',
-        placeItems: 'center',
-        borderRadius: 'var(--radius-md)',
-        cursor: 'pointer',
-      }}
-    >
-      {svg}
-    </button>
+    <span className={s.mxLogoWrap}>
+      <button
+        type="button"
+        onClick={onPet}
+        aria-label={label ?? 'Say hi to Maxie'}
+        title="Say hi to Maxie"
+        className={s.mxLogoBtn}
+      >
+        {svg}
+      </button>
+      {note && (
+        <span className={s.mxSpeech} role="status" aria-live="polite">
+          {note}
+        </span>
+      )}
+    </span>
   );
 }

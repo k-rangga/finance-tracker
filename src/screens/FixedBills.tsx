@@ -126,8 +126,12 @@ export function FixedBillsList({ cycle, budget, allRaw, statuses, catOf, onShowT
       paid: prevPaid.filter(id => id !== bill.id),
       skipped: prevSkipped.filter(id => id !== bill.id),
     });
+    const remainingOthers = statuses.filter(x => x.bill.id !== bill.id && (x.status === 'due' || x.status === 'overdue')).length;
     onToast({
-      text: `Verified ${bill.name} with ${tidyName(tx.title)} (${short(tx.isTransfer ? tx.amount : tx.net)})`,
+      text:
+        remainingOthers === 0
+          ? `Verified ${bill.name} — all fixed bills are sorted for this cycle!`
+          : `Verified ${bill.name} with ${tidyName(tx.title)} (${short(tx.isTransfer ? tx.amount : tx.net)})`,
       undo: () => {
         if (movedCat) setOverride(tx.id, tx.category, prevCat);
         saveCycleState({ linked: prevLinked, paid: prevPaid, skipped: prevSkipped });
@@ -150,8 +154,13 @@ export function FixedBillsList({ cycle, budget, allRaw, statuses, catOf, onShowT
       paid: paid ? [...prevPaid.filter(id => id !== bill.id), bill.id] : prevPaid.filter(id => id !== bill.id),
       skipped: paid ? prevSkipped.filter(id => id !== bill.id) : prevSkipped,
     });
+    const remainingOthers = statuses.filter(x => x.bill.id !== bill.id && (x.status === 'due' || x.status === 'overdue')).length;
     onToast({
-      text: paid ? `Marked ${bill.name} as paid (cash / no receipt)` : `Marked ${bill.name} as unpaid`,
+      text: paid
+        ? remainingOthers === 0
+          ? `${bill.name} paid — all fixed bills sorted for this cycle!`
+          : `Marked ${bill.name} as paid (cash / no receipt)`
+        : `Marked ${bill.name} as unpaid`,
       undo: () => saveCycleState({ paid: prevPaid, skipped: prevSkipped }),
     });
   };

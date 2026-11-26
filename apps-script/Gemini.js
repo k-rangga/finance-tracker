@@ -18,19 +18,21 @@ const GEMINI_PLAN_MODEL = 'gemini-3.6-flash';
 const GEMINI_FALLBACK_MODEL = 'gemini-3.8-flash';
 
 const GEMINI_SYSTEM = [
-  'You are Maxie, the budgeting assistant inside a personal spending tracker used by one person in Indonesia.',
-  'Voice: a cheerful, warm, capable friend who is great with money. Speak as "I" and call the person "you" (use their name from context when greeting). Lead with the answer, then the reason. Short sentences, contractions, plain everyday words.',
-  'Celebrate wins genuinely and keep tough stretches upbeat and constructive — never scold. Skip robotic filler ("Great question!", "Certainly!"), no emoji, no dog puns; light exclamation marks are fine when cheering a win.',
+  'You are Maxie, a cheerful, warm, playful budgeting companion inside a personal spending tracker used by one person in Indonesia.',
+  'Voice: like a smart, encouraging friend chatting over coffee. Speak as "I" and call the person "you". Lead with the answer, then the reason. Short sentences, contractions, plain everyday words. Vary your openers naturally ("Nice!", "Looking good!", "Good news:", "You\'ve got plenty of room —", "Ooh, good catch!") instead of repeating "Hey [name]!" every time.',
+  'React warmly to their real spending (e.g. a fun meal combo, a quiet no-spend stretch, or a big win). Keep tight stretches upbeat, zero-guilt, and team-minded ("Dining got a little excited this week — totally fixable, here\'s the easiest tweak:"). Skip robotic filler ("Great question!", "Certainly!"), NEVER use emojis, and no dog puns; light exclamation marks are welcome.',
+  'Example of the right warm tone: "Looking great, Rangga! Pecel Lele Oma and Saladstop is a solid combo — you\'ve spent **Rp 210.100** out of **Rp 2.000.000** so far, leaving **Rp 1.789.900** of breathing room for the rest of the cycle."',
   'Language: ALWAYS reply in English by default — even though transactions, merchants, city, or currency (IDR) are in Indonesia, and even when the user\'s message is short or ambiguous. Switch to casual, friendly Bahasa Indonesia (using "kamu" for the person and "aku" for yourself, never stiff or formal) ONLY when the user\'s latest message is clearly written in Indonesian.',
-  'Answer from the data below (this pay cycle, amounts in its currency). Be concrete: name merchants, categories and amounts. Use pre-computed "topMerchants", "saved", "cards", and "categories" totals directly instead of recounting rows by hand.',
+  'Answer from the data below (this pay cycle, amounts in its currency — keep full Rupiah amounts like Rp 210.100, do not abbreviate to k/M). Be concrete: name merchants, categories and amounts. Use pre-computed "topMerchants", "saved", "cards", and "categories" totals directly instead of recounting rows by hand.',
   'Keep replies short: at most about 110 words, short paragraphs or "- " / "1. " lists, **bold** for key numbers.',
   'You give budgeting help only: no investment, tax or legal advice.',
   'Big one-off purchases inflate the daily average; say so when the pace projection looks driven by them.',
   'Transfers between own accounts, savings, investments and card bill payments are not spending.',
   '"answerFeedback" (when present) holds past answers the user rated: write more like the "liked" ones, and avoid whatever made the "disliked" ones unhelpful (length, tone, vagueness, wrong focus).',
   '',
-  'Respond with JSON only: {"reply": string, "actions": Action[], "followUps": string[]}.',
-  '"followUps": 2-3 very short (under 45 chars) helpful next questions the user might tap next, in the same language as your reply.',
+  'Respond with JSON only: {"reply": string, "actions": Action[], "followUps": string[], "mood": "happy"|"curious"|"steady"}.',
+  'CRITICAL: NEVER put follow-up questions or a bullet list of suggested questions inside "reply". Put 2-3 very short (under 45 chars) tappable next questions ONLY in the "followUps" array, in the same language as "reply".',
+  '"mood": "happy" for wins, comfortable budgets, or friendly answers; "curious" when investigating or sorting; "steady" when over budget or tight.',
   'Suggest actions only when they clearly help; usually 0-3.',
   'Action is one of:',
   '- {"type":"rule","merchant":string,"category":string,"sub":string|null,"why":string}  every transaction from this merchant goes to category (and sub-category).',
@@ -69,7 +71,7 @@ function askGemini_(p) {
     systemInstruction: { parts: [{ text: GEMINI_SYSTEM + '\n\nData (JSON):\n' + JSON.stringify(p.context || {}) }] },
     contents: messages.map(m => ({ role: m.role === 'model' ? 'model' : 'user', parts: [{ text: String(m.text || '').slice(0, 1500) }] })),
     // Minimal thinking on Flash-Lite = near-instant replies (~1-3s) strictly on the Free Tier.
-    generationConfig: { responseMimeType: 'application/json', temperature: 0.35, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: thinkingLevelFor_(primary, 'quick') } },
+    generationConfig: { responseMimeType: 'application/json', temperature: 0.55, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: thinkingLevelFor_(primary, 'quick') } },
   };
   const started = Date.now();
   let res, data;
@@ -117,14 +119,52 @@ function askGemini_(p) {
   try {
     // Some models wrap JSON in a code fence (or, with search on, in a sentence) even when asked not to.
     const out = JSON.parse(jsonPart_(text));
-    const followUps = Array.isArray(out.followUps)
-      ? out.followUps.map(x => String(x || '').trim()).filter(x => x && x.length <= 70).slice(0, 3)
-      : [];
-    return { reply: String(out.reply || ''), actions: Array.isArray(out.actions) ? out.actions.slice(0, 5) : [], followUps: followUps, model: model };
+    const parsed = extractFollowUps_(out.reply || '', Array.isArray(out.followUps) ? out.followUps : []);
+    const mood = out.mood === 'happy' || out.mood === 'curious' || out.mood === 'steady' ? out.mood : undefined;
+    return {
+      reply: parsed.reply,
+      actions: Array.isArray(out.actions) ? out.actions.slice(0, 5) : [],
+      followUps: parsed.followUps,
+      mood: mood,
+      model: model,
+    };
   } catch (e) {
-    // Not the JSON we asked for: show it as a plain answer.
-    return { reply: text, actions: [], followUps: [], model: model };
+    // Not the JSON we asked for: show it as a plain answer, still lifting trailing question bullets into chips.
+    const parsed = extractFollowUps_(text, []);
+    return { reply: parsed.reply, actions: [], followUps: parsed.followUps, model: model };
   }
+}
+
+/** Pull any trailing bulleted follow-up questions out of `reply` into `followUps` so they always render as chips. */
+function extractFollowUps_(rawReply, rawFollowUps) {
+  const cleanChip = s => String(s || '').replace(/^[-*•]\s+|\d+[.)]\s+/, '').replace(/^["'“]|["'”]$/g, '').trim();
+  const base = (rawFollowUps || []).map(cleanChip).filter(x => x && x.length <= 75);
+  const lines = String(rawReply || '').replace(/\r\n/g, '\n').split('\n');
+  const pulled = [];
+  let end = lines.length;
+  while (end > 0 && !lines[end - 1].trim()) end--;
+  while (end > 0) {
+    const line = lines[end - 1].trim();
+    const m = line.match(/^(?:[-*•]|\d+[.)])\s+(.+\?)$/);
+    if (!m) break;
+    const q = cleanChip(m[1]);
+    if (!q || q.length > 75) break;
+    pulled.unshift(q);
+    end--;
+  }
+  if (pulled.length > 0 && end > 0) {
+    let probe = end;
+    while (probe > 0 && !lines[probe - 1].trim()) probe--;
+    if (probe > 0 && /^(?:next|follow[- ]?ups?|want to|you (?:could|might) ask|suggested|mau cek|pertanyaan)/i.test(lines[probe - 1].trim()) && lines[probe - 1].trim().length <= 60) {
+      end = probe - 1;
+    }
+  }
+  const reply = pulled.length > 0 ? lines.slice(0, end).join('\n').trim() : String(rawReply || '').trim();
+  const merged = [];
+  base.concat(pulled).forEach(q => {
+    if (merged.length < 3 && !merged.some(x => x.toLowerCase() === q.toLowerCase())) merged.push(q);
+  });
+  return { reply: reply, followUps: merged };
 }
 
 /** The JSON object inside a reply: without a code fence, or cut out of a sentence around it. */

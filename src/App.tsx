@@ -250,7 +250,7 @@ export default function App() {
     try {
       const r = await syncNow();
       await refreshImports();
-      setSyncNote(r.busy ? 'A sync is already running' : r.imported ? `Synced, ${r.imported} new` : 'Synced, nothing new');
+      setSyncNote(r.busy ? 'Already syncing — hang tight!' : r.imported ? `Synced! ${r.imported} new ${r.imported === 1 ? 'entry' : 'entries'} in.` : 'All caught up — nothing new.');
     } catch {
       setSyncNote("Couldn't sync. Try again from the Synced button.");
     }

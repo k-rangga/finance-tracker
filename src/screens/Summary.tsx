@@ -46,6 +46,7 @@ export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, on
   const scrollToBills = () => document.getElementById('summary-bills')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   return (
     <div className={s.sxSumGrid}>
+      <Celebrate id={id + '.payday'} when={cycle.dayN === 1} />
       <Celebrate id={id + '.saved'} when={target > 0 && b.saved >= target} />
       <Celebrate id={id + '.under'} when={cycle.daysLeft <= 1 && b.spent <= b.budget} />
       <MaxieGreeting cycle={cycle} budget={b} onAskMaxie={onAskMaxie} />
@@ -77,6 +78,25 @@ export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, on
   );
 }
 
+/** Consecutive completed days (ending yesterday) where variable spending stayed within daily target. */
+function smoothStreakDays(cycle: Cycle, b: Budget): number {
+  const varLimit = sum(b.cats.filter(c => c.type === 'variable').map(c => c.limit));
+  const dailyTarget = varLimit > 0 ? varLimit / Math.max(1, cycle.cycleDays) : b.safeDay;
+  if (dailyTarget <= 0 || cycle.dayIdx < 3) return 0;
+  const byDay = new Array<number>(cycle.dayIdx).fill(0);
+  for (const t of b.txs) {
+    if (t.offset >= 0 && t.offset < cycle.dayIdx && !t.isIncome && !t.isTransfer && categoryByName(t.cat)?.type === 'variable') {
+      byDay[t.offset] += t.net;
+    }
+  }
+  let streak = 0;
+  for (let d = cycle.dayIdx - 1; d >= 0; d--) {
+    if (byDay[d] <= dailyTarget * 1.05) streak++;
+    else break;
+  }
+  return streak;
+}
+
 /** One cheerful daily sentence from Maxie tuned to time of day, your name, your cycle state, and language setting. */
 function MaxieGreeting({ cycle, budget: b, onAskMaxie }: { cycle: Cycle; budget: Budget; onAskMaxie: (ask?: string) => void }) {
   const { short, settings } = useSettings();
@@ -103,6 +123,7 @@ function MaxieGreeting({ cycle, budget: b, onAskMaxie }: { cycle: Cycle; budget:
       ? sum(b.txs.filter(t => t.offset === cycle.dayIdx - 1 && categoryByName(t.cat) && !t.isIncome && !t.isTransfer).map(t => t.net))
       : null;
   const recentSavings = b.txs.some(t => t.isSavings && t.offset >= Math.max(0, cycle.dayIdx - 1));
+  const streak = smoothStreakDays(cycle, b);
 
   let mood: MaxieMood = 'happy';
   let line = '';
@@ -137,7 +158,7 @@ function MaxieGreeting({ cycle, budget: b, onAskMaxie }: { cycle: Cycle; budget:
     mood = 'happy';
     line = id
       ? `${salutation} Ritmemu cakep banget — masih ${short(b.paceToday - b.spent)} di bawah kecepatan normal hari ke-${cycle.dayN}!`
-      : `${salutation} You're crushing it — ${short(b.paceToday - b.spent)} under pace by day ${cycle.dayN}!`;
+      : `${salutation} You're cruising — ${short(b.paceToday - b.spent)} ahead of pace by day ${cycle.dayN}!`;
   } else {
     mood = 'happy';
     line = id
@@ -145,12 +166,25 @@ function MaxieGreeting({ cycle, budget: b, onAskMaxie }: { cycle: Cycle; budget:
       : `${salutation} Looking steady at ${short(b.safeDay)} a day until payday — hope you have a great day!`;
   }
 
+  const cheer =
+    left < 0
+      ? "We've got this together!"
+      : streak >= 3
+        ? `${streak} smooth days in a row!`
+        : `${short(left)} of breathing room!`;
+
   return (
     <div className={s.mxGreeting} data-wide>
-      <Logo size={36} mood={mood} interactive />
-      <p className={s.mxGreetingText} style={{ marginRight: 'auto' }}>
-        {line}
-      </p>
+      <Logo size={36} mood={mood} interactive cheer={cheer} />
+      <div className={s.mxGreetingBody}>
+        <p className={s.mxGreetingText}>{line}</p>
+        {streak >= 3 && left >= 0 && (
+          <span className={s.mxStreakPill}>
+            <Icon d={IC.check} size={11} strokeWidth={2.4} />
+            {streak}-day smooth streak
+          </span>
+        )}
+      </div>
       {quickAsk && (
         <button type="button" className={s.sxAttnPill} onClick={() => onAskMaxie(quickAsk)}>
           <Icon d={IC.sparkle} size={12} /> {id ? 'Tanya Maxie' : 'Ask Maxie'}
