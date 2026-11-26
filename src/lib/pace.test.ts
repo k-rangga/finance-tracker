@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { billLandingDay, oneOffThreshold, projectCycleSpend, type PaceTx } from './pace';
+import { billLandingDay, oneOffThreshold, paceInsight, projectCycleSpend, weekendSafeSplit, type PaceTx } from './pace';
 
 function test(name: string, fn: () => void) {
   fn();
@@ -127,4 +127,79 @@ test('last day: nothing left to project, bills still counted', () => {
   const r = projectCycleSpend({ cycleDays: 30, dayIdx: 29, cur: daily(0, 29, 100_000), history: [], varBudget: 3_000_000, bills: [{ offset: 29, amount: 300 }] });
   assert.equal(r.remainingVar, 0);
   assert.equal(r.fixedDue, 300);
+  assert.equal(r.bandHalf, 0);
+});
+
+test('E: confidence band narrows toward payday and excludes bill uncertainty', () => {
+  const h1 = daily(0, 29, 100_000); // 3M
+  const h2 = daily(0, 29, 140_000); // 4.2M
+  const early = projectCycleSpend({
+    cycleDays: 30,
+    dayIdx: 3,
+    cur: daily(0, 3, 110_000),
+    history: hist(h1, h2),
+    varBudget: 3_500_000,
+    bills: [{ offset: 20, amount: 2_000_000 }],
+  });
+  const late = projectCycleSpend({
+    cycleDays: 30,
+    dayIdx: 24,
+    cur: daily(0, 24, 110_000),
+    history: hist(h1, h2),
+    varBudget: 3_500_000,
+    bills: [{ offset: 28, amount: 2_000_000 }],
+  });
+  assert.ok(early.bandHalf > late.bandHalf && late.bandHalf > 0);
+  // Half-width on payday equals bandHigh - add, independent of bills.
+  near(early.bandHigh[29] - early.add[29], early.bandHalf, 1);
+  near(early.add[29] - early.bandLow[29], early.bandHalf, 1);
+});
+
+test('weekend ratio learned from history and splits safe daily spend accurately', () => {
+  // Cycle starting Monday (dow=1): Sat=5, Sun=6, 12, 13, 19, 20, 26, 27
+  const makeCycle = (): PaceTx[] =>
+    Array.from({ length: 30 }, (_, d) => {
+      const dow = (1 + d) % 7;
+      return { offset: d, amount: dow === 0 || dow === 6 ? 200_000 : 100_000 };
+    });
+  const r = projectCycleSpend({
+    cycleDays: 30,
+    dayIdx: 5,
+    startDow: 1,
+    cur: daily(0, 5, 100_000),
+    history: [{ txs: makeCycle(), days: 30, startDow: 1 }],
+    varBudget: 3_500_000,
+    bills: [],
+  });
+  near(r.weekendRatio, 2.0, 0.05);
+  // 7 days left starting Monday: 5 weekdays + 2 weekend days, total left 900k -> 100k weekday, 200k weekend
+  const split = weekendSafeSplit(900_000, 7, 1, r.weekendRatio);
+  assert.ok(split);
+  assert.equal(split.weekdaysLeft, 5);
+  assert.equal(split.weekendsLeft, 2);
+  near(split.weekdaySafe, 100_000, 2_000);
+  near(split.weekendSafe, 200_000, 4_000);
+});
+
+test('paceInsight: 3-tier tone, one-off explanation, trim lever, and top driver', () => {
+  const cats = [
+    { name: 'Dining', type: 'variable' as const, spent: 1_500_000, limit: 2_000_000, lastSameDays: 900_000 },
+    { name: 'Groceries', type: 'variable' as const, spent: 800_000, limit: 2_000_000, lastSameDays: 850_000 },
+  ];
+  // Within 5% over -> near (amber, not red)
+  const nearPlan = paceInsight({ budget: 10_000_000, projTotal: 10_300_000, oneOffs: 0, remainingVar: 3_000_000, daysLeft: 10, dayN: 20, cycleDays: 30, cats });
+  assert.equal(nearPlan.tier, 'near');
+  assert.equal(nearPlan.trimPerDay, 30_000);
+  assert.equal(nearPlan.zeroDaysToFix, 1);
+  assert.equal(nearPlan.topDriver?.name, 'Dining');
+
+  // >5% over because of a one-off -> oneOffExplains is true
+  const oneOff = paceInsight({ budget: 10_000_000, projTotal: 11_200_000, oneOffs: 2_000_000, remainingVar: 2_000_000, daysLeft: 10, dayN: 20, cycleDays: 30, cats });
+  assert.equal(oneOff.tier, 'over');
+  assert.equal(oneOff.oneOffExplains, true);
+
+  // Comfortably under plan -> calm + spareBy
+  const spare = paceInsight({ budget: 10_000_000, projTotal: 9_100_000, oneOffs: 0, remainingVar: 2_000_000, daysLeft: 10, dayN: 20, cycleDays: 30, cats });
+  assert.equal(spare.tier, 'calm');
+  assert.equal(spare.spareBy, 900_000);
 });

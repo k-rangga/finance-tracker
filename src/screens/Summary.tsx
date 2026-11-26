@@ -9,7 +9,7 @@ import { Celebrate, useCountUp } from '../components/Delight';
 import { cycleKey, hasPlan, nextCycleOf } from '../lib/cyclePlans';
 import { changeBadge, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { billLandingDay } from '../lib/pace';
+import { billLandingDay, paceInsight, weekendSafeSplit } from '../lib/pace';
 import { dayLabel, dayMonth, sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
@@ -185,6 +185,17 @@ function MaxieGreeting({
   const streak = smoothStreakDays(cycle, b);
   const sceneInfo = resolveVignetteScene({ cycle, budget: b, target, streak, todaySpend });
 
+  const insight = paceInsight({
+    budget: b.budget,
+    projTotal: b.projTotal,
+    oneOffs: b.proj.oneOffs,
+    remainingVar: b.proj.remainingVar,
+    daysLeft: cycle.daysLeft,
+    dayN: cycle.dayN,
+    cycleDays: cycle.cycleDays,
+    cats: b.cats,
+  });
+
   let mood: MaxieMood = 'happy';
   let line = '';
   let quickAsk: string | undefined;
@@ -204,6 +215,19 @@ function MaxieGreeting({
     line = id
       ? `${salutation} Tinggal ${cycle.daysLeft + 1} hari menuju gajian dengan sisa ${short(left)} — penutup yang tenang dan rapi.`
       : `${salutation} Just ${cycle.daysLeft + 1} days to payday with ${short(left)} to spare — a calm, steady finish.`;
+  } else if (insight.tier === 'over' && insight.oneOffExplains) {
+    mood = 'happy';
+    line = id
+      ? `${salutation} Ritme harianmu tetap tenang — proyeksi agak tinggi hanya karena transaksi besar ${short(b.proj.oneOffs)} sekali jalan.`
+      : `${salutation} Your everyday pace is steady — the projection only edges over because of ${short(b.proj.oneOffs)} in one-offs.`;
+  } else if (insight.tier === 'over' && insight.trimPerDay > 0) {
+    mood = 'steady';
+    const driverNoteId = insight.topDriver ? ` (terutama ${insight.topDriver.name})` : '';
+    const driverNoteEn = insight.topDriver ? ` (mostly ${insight.topDriver.name})` : '';
+    line = id
+      ? `${salutation} Proyeksi sedikit di atas rencana — kurangi sekitar ${short(insight.trimPerDay)}/hari${driverNoteId} supaya finis tetap aman.`
+      : `${salutation} Heading a touch above plan — easing back ~${short(insight.trimPerDay)}/day${driverNoteEn} brings you right back on track.`;
+    quickAsk = id ? 'Gimana cara ngerem pengeluaran dengan santai sampai gajian?' : 'How can I gently ease back spending until payday?';
   } else if (SAVINGS_TARGET_PCT > 0 && b.savedPct >= SAVINGS_TARGET_PCT && (cycle.dayN <= 4 || recentSavings)) {
     mood = 'happy';
     line = id
@@ -219,11 +243,11 @@ function MaxieGreeting({
     line = id
       ? `${salutation} Kemarin nol pengeluaran — ritme yang tenang untuk dibawa ke hari ini.`
       : `${salutation} Zero spend yesterday — quiet momentum to carry into today.`;
-  } else if (b.paceToday > 0 && b.spent < b.paceToday * 0.9 && cycle.dayN >= 4) {
+  } else if (insight.tier === 'calm' && b.budget > 0 && insight.spareBy >= b.budget * 0.08 && cycle.dayN >= 4) {
     mood = 'happy';
     line = id
-      ? `${salutation} Ritmemu terasa tenang — masih ${short(b.paceToday - b.spent)} di bawah kecepatan normal hari ke-${cycle.dayN}.`
-      : `${salutation} Nicely paced — ${short(b.paceToday - b.spent)} ahead of your usual pace by day ${cycle.dayN}.`;
+      ? `${salutation} Ritmemu terasa tenang — proyeksi masih punya ruang lega ${short(insight.spareBy)} sampai gajian.`
+      : `${salutation} Nicely paced — on track to finish with ${short(insight.spareBy)} to spare by payday.`;
   } else {
     mood = 'happy';
     line = id
@@ -430,13 +454,16 @@ const CH = 120;
  * a dashed projection to payday at your pace so far plus the bills still to come, and your plan as a flat line.
  */
 function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
-  const { short, full } = useSettings();
+  const { settings, short, full } = useSettings();
+  const idr = settings.currency === 'IDR';
   const [hover, setHover] = useState<number | null>(null);
   const [showTip, setShowTip] = useState(false);
   const left = b.budget - b.spent - b.fixedDue;
   const shownLeft = useCountUp(Math.abs(left), 700, 'summary.left');
   const tone = paceTone(b.spent, b.budget, b.paceToday);
   const tomorrowSafe = cycle.daysLeft > 0 && left > 0 ? left / cycle.daysLeft : 0;
+  const wkSplit = weekendSafeSplit(left, cycle.daysLeft + 1, cycle.today.getDay(), b.proj.weekendRatio);
+  const hasDayTip = tomorrowSafe > b.safeDay + 1 || wkSplit != null;
   const days = cycle.cycleDays;
   const today = Math.min(cycle.dayIdx, days - 1);
   const perDay = new Array<number>(days).fill(0);
@@ -444,24 +471,48 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
   const cum: number[] = [];
   perDay.reduce((acc, v, i) => (cum[i] = acc + v), 0);
   const end = Math.max(b.projTotal, cum[today]);
-  const top = Math.max(b.budget, end, 1) * 1.08;
+  const endLow = Math.max(cum[today], cum[today] + (b.proj.bandLow[days - 1] ?? 0));
+  const endHigh = Math.max(end, cum[today] + (b.proj.bandHigh[days - 1] ?? 0));
+  const top = Math.max(b.budget, endHigh, 1) * 1.08;
   const x = (i: number) => (days > 1 ? (i / (days - 1)) * CW : 0);
   const y = (v: number) => CH - (v / top) * CH;
   const actual = cum.slice(0, today + 1).map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
   const area = `${actual} L${x(today).toFixed(1)} ${CH} L0 ${CH} Z`;
-  const warnOver = b.budget > 0 && end > b.budget;
-  const projInk = warnOver ? C.redInk : C.textMuted;
+
+  // 3-tier calm tone: neutral (<= plan), warm amber (within 5% over), soft red (>5% over).
+  const insight = paceInsight({
+    budget: b.budget,
+    projTotal: end,
+    oneOffs: b.proj.oneOffs,
+    remainingVar: b.proj.remainingVar,
+    daysLeft: cycle.daysLeft,
+    dayN: cycle.dayN,
+    cycleDays: days,
+    cats: b.cats,
+  });
+  const projStroke = insight.tier === 'over' ? 'var(--danger)' : insight.tier === 'near' ? 'var(--amber)' : 'var(--clay-ink)';
+  const projInk = insight.tier === 'over' ? C.redInk : insight.tier === 'near' ? C.amberInk : C.textMuted;
+  const bandFill = insight.tier === 'over' ? 'var(--danger)' : insight.tier === 'near' ? 'var(--amber)' : 'var(--clay)';
+
   const shownPast = hover != null && hover >= 0 && hover <= today ? hover : null;
   const shownFuture = hover != null && hover > today && hover < days ? hover : null;
   const activeDay = shownPast ?? shownFuture;
   const projAt = (i: number) => cum[today] + (b.proj.add[i] ?? 0);
   // Projected path: everyday spend follows your rhythm; bills step up on the day they're due.
   let projPath = `M${x(today).toFixed(1)} ${y(cum[today]).toFixed(1)}`;
+  const hiPts: string[] = [`${x(today).toFixed(1)} ${y(cum[today]).toFixed(1)}`];
+  const loPts: string[] = [`${x(today).toFixed(1)} ${y(cum[today]).toFixed(1)}`];
   for (let i = today + 1; i < days; i++) {
     const bill = b.proj.billOn[i] ?? 0;
     if (bill > 0) projPath += ` L${x(i).toFixed(1)} ${y(projAt(i) - bill).toFixed(1)}`;
     projPath += ` L${x(i).toFixed(1)} ${y(projAt(i)).toFixed(1)}`;
+    hiPts.push(`${x(i).toFixed(1)} ${y(cum[today] + (b.proj.bandHigh[i] ?? 0)).toFixed(1)}`);
+    loPts.push(`${x(i).toFixed(1)} ${y(cum[today] + (b.proj.bandLow[i] ?? 0)).toFixed(1)}`);
   }
+  const showBand = today < days - 1 && b.proj.bandHalf >= (idr ? 25_000 : 3);
+  const bandPath = showBand ? `M${hiPts.join(' L')} L${loPts.reverse().join(' L')} Z` : '';
+  const showRange = b.proj.confidence < 0.7 && b.proj.bandHalf >= (idr ? 50_000 : 5) && short(endLow) !== short(endHigh);
+
   const billsOnDay = (i: number) =>
     b.bills.filter(bl => billLandingDay(cycle.offsetOf(bl.date), today, days) === i).map(bl => bl.title);
   const projNote = [
@@ -477,6 +528,62 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
   ]
     .filter(Boolean)
     .join(' · ');
+
+  // One-line calm wise-spending guidance.
+  const minSpare = Math.max(b.budget * 0.05, idr ? 100_000 : 10);
+  const guidance: { tone?: 'good' | 'near' | 'over'; node: ReactNode } | null = (() => {
+    if (b.budget <= 0 || cycle.daysLeft <= 0) return null;
+    if (insight.oneOffExplains) {
+      return {
+        node: (
+          <>
+            Everyday pace is steady — <strong>{short(b.proj.oneOffs)}</strong> in one-offs accounts for the overage.
+          </>
+        ),
+      };
+    }
+    if (insight.overBy > 0 && insight.trimPerDay > 0) {
+      return {
+        tone: insight.tier === 'over' ? 'over' : 'near',
+        node: (
+          <>
+            Ease back <strong>~{short(insight.trimPerDay)}/day</strong>
+            {insight.topDriver ? <> (mostly {insight.topDriver.name})</> : null}
+            {insight.zeroDaysToFix > 0 && insight.zeroDaysToFix <= 5 ? (
+              <>
+                {' — or '}
+                <strong>
+                  {insight.zeroDaysToFix} zero-spend {insight.zeroDaysToFix === 1 ? 'day' : 'days'}
+                </strong>
+              </>
+            ) : null}
+            {' — to finish on plan.'}
+          </>
+        ),
+      };
+    }
+    if (insight.spareBy >= minSpare) {
+      return {
+        tone: 'good',
+        node: (
+          <>
+            On track for <strong>{short(insight.spareBy)} spare</strong> — room to enjoy, or tuck into Savings on payday.
+          </>
+        ),
+      };
+    }
+    if (insight.topDriver) {
+      return {
+        node: (
+          <>
+            Overall on pace — just keep a gentle eye on <strong>{insight.topDriver.name}</strong>.
+          </>
+        ),
+      };
+    }
+    return null;
+  })();
+
   const dotDay = activeDay ?? today;
   const dotVal = shownFuture != null ? projAt(shownFuture) : cum[dotDay];
   const lastSameDays = sum(b.cats.map(c => c.lastSameDays));
@@ -493,13 +600,13 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
           {short(shownLeft)}
         </span>
         <span className={s.sxLeftLabel}>{left < 0 ? 'above plan' : 'left'}</span>
-        {tomorrowSafe > b.safeDay + 1 ? (
+        {hasDayTip ? (
           <button
             type="button"
             className={s.sxLeftDayBtn}
             aria-expanded={showTip}
             onClick={() => setShowTip(v => !v)}
-            title="See what a no-spend day does to your daily allowance"
+            title="See daily allowance tips"
           >
             <strong style={{ color: tone.ink }}>{short(b.safeDay)}</strong> a day
           </button>
@@ -509,9 +616,19 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
           </span>
         )}
       </div>
-      {showTip && tomorrowSafe > b.safeDay + 1 && (
+      {showTip && hasDayTip && (
         <span className={s.sxPaceBonus}>
-          Zero spend today bumps tomorrow up to <strong>{short(tomorrowSafe)}/day</strong> (+{short(tomorrowSafe - b.safeDay)}).
+          {wkSplit && (
+            <>
+              Weekdays: <strong>{short(wkSplit.weekdaySafe)}/day</strong> · Weekends: <strong>{short(wkSplit.weekendSafe)}/day</strong> ({wkSplit.weekendsLeft} weekend {wkSplit.weekendsLeft === 1 ? 'day' : 'days'} left).
+              {tomorrowSafe > b.safeDay + 1 ? ' ' : ''}
+            </>
+          )}
+          {tomorrowSafe > b.safeDay + 1 && (
+            <>
+              Zero spend today bumps tomorrow up to <strong>{short(tomorrowSafe)}/day</strong> (+{short(tomorrowSafe - b.safeDay)}).
+            </>
+          )}
         </span>
       )}
       <div className={s.sxLine} data-own-gestures onPointerMove={pick} onPointerDown={pick} onPointerLeave={() => setHover(null)} onPointerCancel={() => setHover(null)}>
@@ -549,15 +666,16 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
               vectorEffect="non-scaling-stroke"
             />
           )}
+          {showBand && <path d={bandPath} fill={bandFill} opacity={0.11} />}
           {today < days - 1 && (
             <path
               d={projPath}
               fill="none"
-              stroke={warnOver ? 'var(--danger)' : 'var(--clay-ink)'}
+              stroke={projStroke}
               strokeWidth={1.8}
               strokeDasharray="5 4"
               strokeLinejoin="round"
-              opacity={warnOver ? 0.9 : 0.65}
+              opacity={insight.tier === 'calm' ? 0.65 : 0.85}
               vectorEffect="non-scaling-stroke"
             />
           )}
@@ -567,7 +685,8 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
         <span
           className={s.sxLineDot}
           data-future={shownFuture != null || undefined}
-          data-over={shownFuture != null && warnOver ? true : undefined}
+          data-near={shownFuture != null && insight.tier === 'near' ? true : undefined}
+          data-over={shownFuture != null && insight.tier === 'over' ? true : undefined}
           style={{ left: `${(x(dotDay) / CW) * 100}%`, top: `${(y(dotVal) / CH) * 100}%` }}
         />
         {b.budget > 0 && (
@@ -596,7 +715,7 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
                 {b.budget > 0 && (
                   <>
                     {' · '}
-                    <strong style={{ color: rem >= 0 ? C.good : C.redInk }}>
+                    <strong style={{ color: rem >= 0 ? C.good : rem >= -b.budget * 0.05 ? C.amberInk : C.redInk }}>
                       {rem >= 0 ? `${short(rem)} left` : `${short(-rem)} over`}
                     </strong>
                   </>
@@ -610,7 +729,7 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
             <span title={projNote}>
               Spent <strong style={{ color: C.text }}>{short(b.spent)}</strong>
               {' · Heading for '}
-              <strong style={{ color: projInk }}>{short(end)}</strong>
+              <strong style={{ color: projInk }}>{showRange ? `~${short(endLow)}–${short(endHigh)}` : short(end)}</strong>
             </span>
             {vsLast && (
               <span className={s.sxDeltaBadge} style={{ background: vsLast.bg, color: vsLast.ink }} title="Compared to the same point last cycle">
@@ -620,6 +739,11 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
           </span>
         )}
       </div>
+      {guidance && (
+        <div className={s.sxPaceInsight} data-tone={guidance.tone}>
+          {guidance.node}
+        </div>
+      )}
     </ChartCard>
   );
 }

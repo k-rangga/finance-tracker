@@ -330,6 +330,7 @@ export function computeBudget(args: {
   const proj = projectCycleSpend({
     cycleDays: cycle.cycleDays,
     dayIdx: cycle.dayIdx,
+    startDow: cycle.start.getDay(),
     cur: txs
       .filter(t => isVariable(t.cat) && t.offset >= 0 && t.offset <= cycle.dayIdx)
       .map(t => ({ offset: t.offset, amount: t.net, committed: !!t.plan })),
@@ -337,6 +338,7 @@ export function computeBudget(args: {
       const hDays = Math.max(1, h.cycle.cycleDays);
       return {
         days: hDays,
+        startDow: h.cycle.start.getDay(),
         txs: h.transactions
           .filter(t => isVariable(effectiveCategory(t, recat, ownNames)))
           .map(t => ({ offset: h.cycle.offsetOf(t.date), amount: netOf(t), committed: !!t.plan }))

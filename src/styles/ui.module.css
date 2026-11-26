@@ -7018,8 +7018,36 @@ button.sxTile:active:not(:disabled),
   border: 2px solid var(--ink-muted);
   box-shadow: 0 0 0 2px var(--surface);
 }
+.sxLineDot[data-future][data-near] {
+  border-color: var(--amber);
+}
 .sxLineDot[data-future][data-over] {
   border-color: var(--danger);
+}
+.sxPaceInsight {
+  margin-top: 2px;
+  padding: 7px 11px;
+  border-radius: 10px;
+  background: var(--surface-200);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.42;
+}
+.sxPaceInsight[data-tone='good'] {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.sxPaceInsight[data-tone='near'] {
+  background: var(--amber-tint);
+  color: var(--amber-ink);
+}
+.sxPaceInsight[data-tone='over'] {
+  background: var(--red-tint);
+  color: var(--red-ink);
+}
+.sxPaceInsight strong {
+  color: inherit;
+  font-weight: 600;
 }
 .mxPledgeBtn {
   display: inline-flex;

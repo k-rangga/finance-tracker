@@ -24,13 +24,15 @@ export type PaceInput = {
   cycleDays: number;
   /** 0-based offset of today. */
   dayIdx: number;
+  /** Day-of-week (0=Sun..6=Sat) of this cycle's start date, for weekend-aware guidance. */
+  startDow?: number;
   /** This cycle's variable-category spending so far. */
   cur: PaceTx[];
   /**
    * Past cycles' variable-category spending, most recent first (up to 3 are used). Offsets are relative to
    * each cycle's own start; cycles too thin or partial to trust are skipped.
    */
-  history?: { txs: PaceTx[]; days: number }[];
+  history?: { txs: PaceTx[]; days: number; startDow?: number }[];
   /** Planned variable budget for this cycle. */
   varBudget: number;
   /** Variable-category bills still due this cycle (already part of `varBudget`). */
@@ -52,8 +54,15 @@ export type PaceResult = {
   fixedDue: number;
   /** Projected spend added after today, cumulative per day (length cycleDays; 0 up to today). */
   add: number[];
+  /** Calm confidence band around `add` (length cycleDays; bills have zero uncertainty). */
+  bandLow: number[];
+  bandHigh: number[];
+  /** Half-width of the confidence band at payday (0 on last day). */
+  bandHalf: number;
   /** Bills landing on each day (length cycleDays). */
   billOn: number[];
+  /** Learned weekend-to-weekday daily spending ratio (>=1.2 when history shows heavier weekends, else 1). */
+  weekendRatio: number;
   /** What the baseline came from. */
   basis: 'history' | 'plan' | 'pace';
   /** How many past cycles fed the rhythm and baseline (0–3). */
@@ -148,7 +157,7 @@ export function projectCycleSpend(input: PaceInput): PaceResult {
       const shape = rhythm(regular, Math.max(1, h.days));
       // Each cycle's regular total, scaled to this cycle's length.
       const total = (sumOf(regular.map(t => t.amount)) * days) / Math.max(1, h.days);
-      return shape && total > 0 ? { shape, total, w: RECENCY[k] } : null;
+      return shape && total > 0 ? { shape, total, w: RECENCY[k], regular, days: Math.max(1, h.days), startDow: h.startDow } : null;
     })
     .filter((u): u is NonNullable<typeof u> => u != null);
   const wSum = sumOf(usable.map(u => u.w));
@@ -156,6 +165,29 @@ export function projectCycleSpend(input: PaceInput): PaceResult {
     usable.length ? sumOf(usable.map(u => u.w * u.shape(elapsedHere / days))) / wSum : elapsedHere / days;
   // Blend the learned rhythm with a straight line so one odd cycle can't dominate.
   const shareNow = clamp(0.7 * shareAt(dayN) + 0.3 * f, 0.05, 0.98);
+
+  // Learn weekend vs. weekday spending ratio from usable history when day-of-week is available.
+  let wkndSum = 0;
+  let wkndDays = 0;
+  let wkdySum = 0;
+  let wkdyDays = 0;
+  for (const u of usable) {
+    if (u.startDow == null) continue;
+    for (let d = 0; d < u.days; d++) {
+      const dow = (u.startDow + d) % 7;
+      if (dow === 0 || dow === 6) wkndDays++;
+      else wkdyDays++;
+    }
+    for (const t of u.regular) {
+      const dow = (u.startDow + t.offset) % 7;
+      if (dow === 0 || dow === 6) wkndSum += t.amount;
+      else wkdySum += t.amount;
+    }
+  }
+  const wkdyAvg = wkdyDays > 0 ? wkdySum / wkdyDays : 0;
+  const wkndAvg = wkndDays > 0 ? wkndSum / wkndDays : 0;
+  const rawRatio = wkdyAvg > 0 && wkndDays >= 4 ? wkndAvg / wkdyAvg : 1;
+  const weekendRatio = rawRatio >= 1.2 ? clamp(rawRatio, 1.2, 2.2) : 1;
 
   const futureDays = days - dayN;
   let remainingVar = 0;
@@ -176,23 +208,40 @@ export function projectCycleSpend(input: PaceInput): PaceResult {
     }
   }
 
+  // Calm confidence band: derived from past-cycle variance (when >=2 cycles) or a gentle default, narrowing to 0 by payday.
+  let baseSpread = 0.14;
+  if (usable.length >= 2) {
+    const mu = sumOf(usable.map(u => u.w * u.total)) / wSum;
+    const variance = sumOf(usable.map(u => u.w * (u.total - mu) ** 2)) / wSum;
+    baseSpread = mu > 0 ? clamp(Math.sqrt(variance) / mu, 0.06, 0.25) : 0.14;
+  }
+  const spread = futureDays > 0 ? baseSpread * (1 - f) : 0;
+
   // D. Day-by-day path: regular spend spread by rhythm, bills stepped onto their due dates.
   const billOn = new Array<number>(days).fill(0);
   for (const b of bills) if (b.amount > 0) billOn[billLandingDay(b.offset, today, days)] += b.amount;
   const fixedDue = sumOf(billOn);
 
   const add = new Array<number>(days).fill(0);
+  const bandLow = new Array<number>(days).fill(0);
+  const bandHigh = new Array<number>(days).fill(0);
   if (futureDays > 0) {
     const weights: number[] = [];
     for (let i = dayN; i < days; i++) weights.push(0.7 * Math.max(0, shareAt(i + 1) - shareAt(i)) + 0.3 / days);
     const wTotal = sumOf(weights) || 1;
-    let acc = 0;
+    let varAcc = 0;
+    let billAcc = 0;
     for (let i = dayN; i < days; i++) {
-      acc += (remainingVar * weights[i - dayN]) / wTotal + billOn[i];
-      add[i] = acc;
+      varAcc += (remainingVar * weights[i - dayN]) / wTotal;
+      billAcc += billOn[i];
+      add[i] = varAcc + billAcc;
+      bandLow[i] = Math.max(0, varAcc * (1 - spread)) + billAcc;
+      bandHigh[i] = varAcc * (1 + spread) + billAcc;
     }
   } else if (fixedDue > 0) {
     add[days - 1] = fixedDue;
+    bandLow[days - 1] = fixedDue;
+    bandHigh[days - 1] = fixedDue;
   }
 
   return {
@@ -203,9 +252,94 @@ export function projectCycleSpend(input: PaceInput): PaceResult {
     remainingVar,
     fixedDue,
     add,
+    bandLow,
+    bandHigh,
+    bandHalf: futureDays > 0 ? remainingVar * spread : 0,
     billOn,
+    weekendRatio,
     basis,
     historyCycles: usable.length,
     confidence: f,
   };
+}
+
+/**
+ * Splits remaining safe spend into weekday vs. weekend daily allowances when your history shows heavier weekends
+ * (`weekendRatio >= 1.2`) and both weekdays and weekend days remain.
+ */
+export function weekendSafeSplit(
+  left: number,
+  daysLeftInclToday: number,
+  todayDow: number,
+  weekendRatio: number,
+): { weekdaySafe: number; weekendSafe: number; weekdaysLeft: number; weekendsLeft: number } | null {
+  if (left <= 0 || daysLeftInclToday < 2 || weekendRatio < 1.2) return null;
+  let weekendsLeft = 0;
+  let weekdaysLeft = 0;
+  for (let i = 0; i < daysLeftInclToday; i++) {
+    const dow = (todayDow + i) % 7;
+    if (dow === 0 || dow === 6) weekendsLeft++;
+    else weekdaysLeft++;
+  }
+  if (weekendsLeft === 0 || weekdaysLeft === 0) return null;
+  const weightedDays = weekdaysLeft + weekendsLeft * weekendRatio;
+  const weekdaySafe = left / weightedDays;
+  const weekendSafe = weekdaySafe * weekendRatio;
+  return { weekdaySafe, weekendSafe, weekdaysLeft, weekendsLeft };
+}
+
+export type PaceTier = 'calm' | 'near' | 'over';
+
+export type PaceInsight = {
+  /** 3-tier calm tone: calm (<= plan), near (within 5% over), over (>5% over). */
+  tier: PaceTier;
+  /** True when everyday pace is on/under plan and one-offs alone explain the projected overage. */
+  oneOffExplains: boolean;
+  overBy: number;
+  spareBy: number;
+  /** Daily reduction needed across remaining days to land on plan (0 when on/under plan). */
+  trimPerDay: number;
+  /** Whole zero-spend days at projected remaining daily rate that would close the gap (0 if not applicable). */
+  zeroDaysToFix: number;
+  /** Single variable category most ahead of its expected pace so far, if notable. */
+  topDriver: { name: string; ahead: number } | null;
+};
+
+/**
+ * Turns the projection into a calm status tier and one concrete, actionable spending lever.
+ */
+export function paceInsight(args: {
+  budget: number;
+  projTotal: number;
+  oneOffs: number;
+  remainingVar: number;
+  daysLeft: number;
+  dayN: number;
+  cycleDays: number;
+  cats: { name: string; type: 'fixed' | 'variable'; spent: number; limit: number; lastSameDays: number }[];
+}): PaceInsight {
+  const { budget, projTotal, oneOffs, remainingVar, daysLeft, dayN, cycleDays, cats } = args;
+  const overBy = budget > 0 ? Math.max(0, projTotal - budget) : 0;
+  const spareBy = budget > 0 ? Math.max(0, budget - projTotal) : 0;
+  const tier: PaceTier =
+    budget <= 0 || projTotal <= budget ? 'calm' : projTotal <= budget * 1.05 ? 'near' : 'over';
+  const oneOffExplains = overBy > 0 && oneOffs > 0 && projTotal - oneOffs <= budget;
+  const trimPerDay = overBy > 0 && daysLeft > 0 ? overBy / daysLeft : 0;
+  const remDaily = daysLeft > 0 ? remainingVar / daysLeft : 0;
+  const zeroDaysToFix =
+    overBy > 0 && daysLeft >= 2 && remDaily > 0 ? Math.min(daysLeft, Math.max(1, Math.ceil(overBy / remDaily))) : 0;
+
+  let topDriver: { name: string; ahead: number } | null = null;
+  const minNotable = budget > 0 ? budget * 0.02 : 0;
+  for (const c of cats) {
+    if (c.type !== 'variable' || c.spent <= 0) continue;
+    const expected = c.lastSameDays > 0 ? c.lastSameDays : (c.limit * dayN) / Math.max(1, cycleDays);
+    if (expected <= 0) continue;
+    const ahead = c.spent - expected;
+    if (ahead >= minNotable && c.spent >= expected * 1.15) {
+      if (!topDriver || ahead > topDriver.ahead) topDriver = { name: c.name, ahead };
+    }
+  }
+
+  return { tier, oneOffExplains, overBy, spareBy, trimPerDay, zeroDaysToFix, topDriver };
 }
