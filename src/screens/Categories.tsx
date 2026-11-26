@@ -4,6 +4,7 @@ import { FoundInstallments } from '../components/Plans';
 import { BillItem, BudgetCard, InstallmentsGroup, useInstallmentTotals } from './categoryCards';
 import { Badge, Toast } from '../components/ui';
 import { Celebrate } from '../components/Delight';
+import { Logo } from '../components/Logo';
 import { IC, Icon } from '../components/Icon';
 import { categoryStatus, changeBadge, type Budget, type CatView, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
@@ -109,7 +110,7 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
     // ofIncome(1) is 1% of income, so this is the amount as a % of income.
     const pct = amount / ofIncome(1);
     setLimits({ [to]: t.limitPct + pct, [from]: Math.max(0, f.limitPct - pct) });
-    setToast({ text: `${short(amount)} moved from ${from} to ${to}`, undo: () => setLimits({ [to]: t.limitPct, [from]: f.limitPct }) });
+    setToast({ text: `Moved ${short(amount)} from ${from} to ${to} — total plan stays the same.`, undo: () => setLimits({ [to]: t.limitPct, [from]: f.limitPct }) });
   };
   const donorsFor = (name: string) =>
     variable
@@ -249,6 +250,12 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
               }
             />
             <Celebrate id={'bills-' + cycleKey} when={fixed.length > 0 && fixed.every(isPaid)} />
+            {fixed.length > 0 && fixed.every(isPaid) && inst.paid >= inst.planned && (
+              <div className={s.mxGreeting}>
+                <Logo size={32} mood="happy" />
+                <p className={s.mxGreetingText}>Every fixed bill is taken care of this cycle. Everything left is yours to spend or save.</p>
+              </div>
+            )}
             <div className={s.mxBills}>
               {fixed.length === 0 && inst.planned === 0 && (
                 <div style={{ padding: '16px 20px', fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>

@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { IC, Icon } from '../components/Icon';
-import { Logo } from '../components/Logo';
+import { Logo, type MaxieMood } from '../components/Logo';
 import { MaxieNote } from './categoryCards';
 import { storage } from '../lib/storage';
 import { Celebrate, useCountUp } from '../components/Delight';
@@ -28,9 +28,8 @@ type SummaryProps = {
 };
 
 /**
- * The cycle at a glance, charts first: what's left as a ring, three tiles, spending by day against the plan,
- * where the money went, and the bills still coming. Words only where a number needs a label; each chart's
- * explanation is behind its info button.
+ * The cycle at a glance, charts first: a warm daily greeting from Maxie, what's left, three tiles, spending by day,
+ * where the money went, and the bills still coming.
  */
 export function Summary({ cycle, budget: b, onOpenCategory, onDismissBill, onShowTransactions, onPlanNext }: SummaryProps) {
   const { ofIncome, settings } = useSettings();
@@ -40,6 +39,7 @@ export function Summary({ cycle, budget: b, onOpenCategory, onDismissBill, onSho
     <div className={s.sxSumGrid}>
       <Celebrate id={id + '.saved'} when={target > 0 && b.saved >= target} />
       <Celebrate id={id + '.under'} when={cycle.daysLeft <= 1 && b.spent <= b.budget} />
+      <MaxieGreeting cycle={cycle} budget={b} />
       {cycle.daysLeft <= 4 && <PlanNextNudge cycle={cycle} planned={hasPlan(settings.cyclePlans?.[cycleKey(nextCycleOf(cycle))])} onOpen={onPlanNext} />}
       <CycleLine cycle={cycle} budget={b} />
       <Tiles cycle={cycle} budget={b} onSavings={() => onShowTransactions('cycle', TRANSFER_CATEGORY)} />
@@ -47,6 +47,75 @@ export function Summary({ cycle, budget: b, onOpenCategory, onDismissBill, onSho
       <WhereMap cycle={cycle} budget={b} onOpenCategory={onOpenCategory} />
       <BillsTimeline cycle={cycle} budget={b} onDismissBill={onDismissBill} />
       <Recent budget={b} cycle={cycle} onSeeAll={() => onShowTransactions('today')} />
+    </div>
+  );
+}
+
+/** One warm daily sentence from Maxie tuned to time of day, your cycle state, and language setting. */
+function MaxieGreeting({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
+  const { short, settings } = useSettings();
+  const id = settings.maxieLanguage === 'id';
+  const hr = new Date().getHours();
+  const salutation = id
+    ? hr < 11
+      ? 'Selamat pagi.'
+      : hr < 15
+        ? 'Selamat siang.'
+        : hr < 19
+          ? 'Selamat sore.'
+          : 'Selamat malam.'
+    : hr < 12
+      ? 'Good morning.'
+      : hr < 18
+        ? 'Good afternoon.'
+        : 'Good evening.';
+  const left = b.budget - b.spent - b.fixedDue;
+  const yesterdaySpend =
+    cycle.dayIdx > 0
+      ? sum(b.txs.filter(t => t.offset === cycle.dayIdx - 1 && categoryByName(t.cat) && !t.isIncome && !t.isTransfer).map(t => t.net))
+      : null;
+
+  let mood: MaxieMood = 'calm';
+  let line = '';
+  if (cycle.dayN === 1) {
+    mood = 'happy';
+    line = id ? 'Selamat gajian — siklus baru, lembar baru. Siap mulai pelan-pelan.' : 'Happy payday. Fresh cycle, clean slate — ready when you are.';
+  } else if (SAVINGS_TARGET_PCT > 0 && b.savedPct >= SAVINGS_TARGET_PCT) {
+    mood = 'happy';
+    line = id
+      ? `${salutation} Target tabungan ${SAVINGS_TARGET_PCT}% siklus ini sudah tercapai!`
+      : `${salutation} Savings goal met — ${Math.round(b.savedPct)}% set aside this cycle!`;
+  } else if (left < 0) {
+    mood = 'steady';
+    line = id
+      ? `${salutation} Siklus ini agak ketat, sudah lewat ${short(-left)} dari rencana. Kita atur pelan-pelan, ya.`
+      : `${salutation} Tight stretch — ${short(-left)} over plan so far. Let's take it one day at a time.`;
+  } else if (yesterdaySpend === 0 && cycle.dayN >= 2) {
+    mood = 'happy';
+    line = id
+      ? `${salutation} Kemarin nol pengeluaran — awal yang enak buat jaga ritme.`
+      : `${salutation} Yesterday was a zero-spend day — nice momentum.`;
+  } else if (b.paceToday > 0 && b.spent < b.paceToday * 0.9 && cycle.dayN >= 4) {
+    mood = 'happy';
+    line = id
+      ? `${salutation} Ritmemu rapi — masih ${short(b.paceToday - b.spent)} di bawah kecepatan normal hari ke-${cycle.dayN}.`
+      : `${salutation} Looking good — you're ${short(b.paceToday - b.spent)} under pace by day ${cycle.dayN}.`;
+  } else if (cycle.daysLeft <= 3 && left >= 0) {
+    mood = 'happy';
+    line = id
+      ? `${salutation} Tinggal ${cycle.daysLeft + 1} hari lagi ke gajian, masih aman dengan sisa ${short(left)}.`
+      : `${salutation} Almost at payday with ${short(left)} still to spare — finishing strong.`;
+  } else {
+    mood = 'calm';
+    line = id
+      ? `${salutation} Aman di ${short(b.safeDay)} per hari sampai gajian nanti.`
+      : `${salutation} You're set for ${short(b.safeDay)} a day until payday.`;
+  }
+
+  return (
+    <div className={s.mxGreeting} data-wide>
+      <Logo size={36} mood={mood} interactive />
+      <p className={s.mxGreetingText}>{line}</p>
     </div>
   );
 }
@@ -163,6 +232,14 @@ function Tiles({ cycle, budget: b, onSavings }: { cycle: Cycle; budget: Budget; 
   const owed = sum(b.cards.map(c => Math.max(0, c.owed)));
   const cardInstallments = sum(b.cards.map(c => c.installments));
   const savedShare = SAVINGS_TARGET_PCT > 0 ? Math.min(1, b.savedPct / SAVINGS_TARGET_PCT) : 0;
+  const savedNote =
+    savedShare >= 1
+      ? `Goal met (${SAVINGS_TARGET_PCT}%)`
+      : savedShare >= 0.75
+        ? `Almost at your ${SAVINGS_TARGET_PCT}% goal`
+        : savedShare >= 0.5
+          ? `Halfway to your ${SAVINGS_TARGET_PCT}% goal`
+          : `of income, goal ${SAVINGS_TARGET_PCT}%`;
   return (
     <div className={s.sxTiles}>
       <button type="button" className={s.sxTile} onClick={onSavings}>
@@ -173,14 +250,14 @@ function Tiles({ cycle, budget: b, onSavings }: { cycle: Cycle; budget: Budget; 
         <span className={s.sxTileMeter}>
           <span style={{ width: savedShare * 100 + '%', background: savedShare >= 1 ? C.good : 'var(--clay)' }} />
         </span>
-        <span className={s.sxTileNote}>of income, goal {SAVINGS_TARGET_PCT}%</span>
+        <span className={s.sxTileNote}>{savedNote}</span>
       </button>
       <div className={s.sxTile}>
         <span className={s.sxTileLabel}>
           <Icon d={IC.calendar} size={16} /> Bills to come
         </span>
         <span className={s.sxTileValue}>{short(billTotal)}</span>
-        <span className={s.sxTileNote}>{bills.length === 0 ? 'Nothing left this cycle' : bills.length === 1 ? '1 bill before payday' : `${bills.length} bills before payday`}</span>
+        <span className={s.sxTileNote}>{bills.length === 0 ? 'Clear until payday' : bills.length === 1 ? '1 bill before payday' : `${bills.length} bills before payday`}</span>
       </div>
       <div className={s.sxTile}>
         <span className={s.sxTileLabel}>
@@ -210,6 +287,7 @@ function DailyBars({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
       catsByDay[t.offset][t.cat] = (catsByDay[t.offset][t.cat] ?? 0) + t.net;
     }
   const sofar = perDay.slice(0, cycle.dayIdx + 1);
+  const zeroDays = sofar.filter(v => v === 0).length;
   const total = sum(sofar);
   const avg = total / Math.max(1, cycle.dayN);
   const top = Math.max(avg * 1.6, ...sofar, 1);
@@ -237,7 +315,7 @@ function DailyBars({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
     <ChartCard
       title="By day"
       wide
-      sub={`${dayMonth(cycle.start)} – ${dayMonth(cycle.today)}`}
+      sub={`${dayMonth(cycle.start)} – ${dayMonth(cycle.today)}${zeroDays > 0 ? `, ${zeroDays} zero-spend ${zeroDays === 1 ? 'day' : 'days'}` : ''}`}
       right={
         <span>
           <strong style={{ color: C.text }}>{full(total)}</strong> in {cycle.dayN} {cycle.dayN === 1 ? 'day' : 'days'}
@@ -403,7 +481,10 @@ function WhereMap({ cycle, budget: b, onOpenCategory }: { cycle: Cycle; budget: 
       sub={total > 0 ? `${full(total)} spent, ${dayMonth(cycle.start)} – ${dayMonth(cycle.today)}` : undefined}
     >
       {total === 0 ? (
-        <span className={s.sxChartEmpty}>Nothing spent yet</span>
+        <div className={s.mxEmptyInline}>
+          <Logo size={28} mood="curious" />
+          <span>Nothing spent yet — clean slate for this cycle.</span>
+        </div>
       ) : (
         <>
           <div style={{ position: 'relative' }} onMouseLeave={() => setHover(null)}>
@@ -548,7 +629,10 @@ function BillsTimeline({ cycle, budget: b, onDismissBill }: { cycle: Cycle; budg
       right={bills.length ? short(sum(bills.map(x => x.amount))) : undefined}
     >
       {bills.length === 0 ? (
-        <span className={s.sxChartEmpty}>None before payday</span>
+        <div className={s.mxEmptyInline}>
+          <Logo size={28} mood="happy" />
+          <span>Clear skies until payday. No bills left.</span>
+        </div>
       ) : (
         <>
           <div className={s.sxTimeline}>
@@ -607,7 +691,10 @@ function Recent({ budget: b, cycle, onSeeAll }: { budget: Budget; cycle: Cycle; 
       }
     >
       {today.length === 0 ? (
-        <span className={s.sxChartEmpty}>Nothing yet</span>
+        <div className={s.mxEmptyInline}>
+          <Logo size={28} mood="happy" />
+          <span>Quiet day so far — nothing spent today.</span>
+        </div>
       ) : (
         today.map(t => (
           <div key={t.id} className={s.sxRecentRow}>

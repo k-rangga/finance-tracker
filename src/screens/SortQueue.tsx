@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import s from '../styles/ui.module.css';
 import { Modal } from '../components/ui';
+import { Logo } from '../components/Logo';
 import { IC, Icon } from '../components/Icon';
 import { Select } from '../components/Select';
 import { CATEGORIES, catFilter, categoryByName, categoryLabel, OTHER_CATEGORIES, parseCatFilter } from '../data/categories';
@@ -37,12 +38,19 @@ export function SortQueue({ ids, allTxs, g, onPick, onClose }: Props) {
   if (!t)
     return (
       <Modal title="All sorted" onClose={onClose} width={460}>
-        <span style={{ fontSize: 15, color: C.textSoft }}>
-          {skipped.length ? `${done} sorted, ${skipped.length} skipped for later.` : `Nice: ${done} ${done === 1 ? 'transaction' : 'transactions'} sorted.`}
-        </span>
-        <button type="button" className={s.btnPrimary} style={{ alignSelf: 'flex-start' }} onClick={onClose}>
-          Done
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12, padding: '8px 0' }}>
+          <Logo size={52} mood={skipped.length ? 'calm' : 'happy'} />
+          <p style={{ fontFamily: 'var(--font-serif)', fontSize: 18, lineHeight: '26px', color: C.text }}>
+            {skipped.length
+              ? `Nice work — ${done} sorted, ${skipped.length} left for later.`
+              : done > 0
+                ? `Every rupiah has a home. ${done} ${done === 1 ? 'transaction' : 'transactions'} sorted!`
+                : 'Nothing left in Buffer — clean slate.'}
+          </p>
+          <button type="button" className={s.btnPrimary} onClick={onClose}>
+            Done
+          </button>
+        </div>
       </Modal>
     );
 

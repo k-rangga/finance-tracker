@@ -272,7 +272,7 @@ export default function App() {
     <div className={`${s.shell} ${collapsed ? s.collapsed : ''}`}>
       <aside className={s.sideFull} aria-label="Main navigation">
         <div className={s.brandRow}>
-          <Logo size={32} />
+          <Logo size={32} interactive />
           <span className={s.brandText}>Maxie</span>
           <button type="button" className={s.miniBtn} onClick={() => setNav(true)} title="Minimize sidebar" aria-label="Minimize sidebar">
             <Icon d={IC.chevLeft} size={16} />
@@ -295,7 +295,7 @@ export default function App() {
       </aside>
 
       <aside className={s.sideRail} aria-label="Main navigation">
-        <Logo size={36} />
+        <Logo size={36} interactive />
         <nav style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {TABS.map(t => (
             <button
@@ -356,6 +356,7 @@ export default function App() {
             <span className={`${s.badgeAccent} ${s.desktopOnly}`}>
               Next payday {dayLabel(cycle.next)}
               {nextNote}
+              {cycle.daysLeft <= 2 && budget.spent <= budget.budget ? ' — finishing strong' : ''}
             </span>
             <div className={s.headerActions}>
               <button type="button" className={s.chip} onClick={() => setChat({})} aria-label="Ask Maxie" title="Ask Maxie about your spending">

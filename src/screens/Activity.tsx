@@ -105,7 +105,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   const unplan = (id: string) => {
     const before = installments[id];
     setInstallment(id, null);
-    setToast({ text: 'Back to one purchase', action: 'Undo', run: () => before && setInstallment(id, before) });
+    setToast({ text: 'Got it, counted as one purchase again.', action: 'Undo', run: () => before && setInstallment(id, before) });
   };
   /** What just changed, with a way to take it back, for a few seconds. */
   const [toast, setToast] = useState<{ text: string; action?: string; run?: () => void } | null>(null);
@@ -131,7 +131,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   const remove = (t: TxView) => {
     setOpen(null);
     onRemove(t.id, true);
-    setToast({ text: `Removed ${t.title}`, action: 'Undo', run: () => onRemove(t.id, false) });
+    setToast({ text: `Hidden ${t.title} from your spending.`, action: 'Undo', run: () => onRemove(t.id, false) });
   };
   /** Category guesses for what's still in Buffer (your patterns, then Gemini), and the To sort queue. */
   const guesses = useGuesses(allTxs, settings.subcategories);
@@ -157,7 +157,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
       rows.forEach(x => onRecat(x.id, x.category, to));
       setSub(t.plan.of, sub);
       setToast({
-        text: `${tidyName(t.title.replace(/ \(\d+\/\d+\)( interest)?$/, ''))} → ${categoryLabel(to)}, every payment`,
+        text: `Moved ${tidyName(t.title.replace(/ \(\d+\/\d+\)( interest)?$/, ''))} to ${categoryLabel(to)} for every payment.`,
         action: 'Undo',
         run: () => before.forEach(({ x, was }) => onRecat(x.id, '', was ?? x.category)),
       });
@@ -171,7 +171,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
       if (to !== t.cat) onRecat(t.id, hasRule ? '' : t.category, to);
       setSub(prevSubPick, sub);
       const was = t.cat;
-      setToast({ text: `${t.title} → ${categoryLabel(to)}${sub ? ' › ' + sub : ''}, this one only`, action: 'Undo', run: () => onRecat(t.id, t.category, was) });
+      setToast({ text: `Moved ${t.title} to ${categoryLabel(to)}${sub ? ' › ' + sub : ''} — just this one.`, action: 'Undo', run: () => onRecat(t.id, t.category, was) });
       return;
     }
     if (to !== t.cat) onRecat(t.id, t.category, to);
@@ -186,8 +186,8 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
     handSet.forEach(({ x }) => onRecat(x.id, x.category, to));
     setToast({
       text:
-        `${t.title} → ${categoryLabel(to)}${sub ? ' › ' + sub : ''}` +
-        (others.length ? ` for all ${others.length + 1} and future ones` : ' from now on'),
+        `Moved ${t.title} to ${categoryLabel(to)}${sub ? ' › ' + sub : ''}` +
+        (others.length ? ` across all ${others.length + 1} — I'll remember it for next time.` : " — I'll remember that for next time."),
       action: 'Undo',
       run: () => {
         if (prev) setRules({ [prev[0]]: prev[1] }, { [prev[0]]: prevSub });
@@ -491,9 +491,9 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
         <div className={s.cardFlush} style={{ padding: '4px 0 6px', overflow: 'visible' }}>
           {groups.length === 0 && (
             <div style={{ padding: '40px 24px', textAlign: 'center', fontSize: 14, color: C.textMuted, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-              <Logo size={44} />
+              <Logo size={44} mood={!cat && !needle && range === 'today' ? 'happy' : 'curious'} />
               <span>
-                {!cat && !needle && range === 'today' ? 'No spending yet today.' : !cat && !needle ? 'Nothing here for these dates.' : 'No transactions match these filters.'}
+                {!cat && !needle && range === 'today' ? 'Quiet day so far — nothing spent today.' : !cat && !needle ? 'Nothing here for these dates.' : 'No transactions match these filters.'}
               </span>
               {(cat || needle || lo !== 0 || hi !== cycle.dayIdx) && (
                 <button type="button" className={s.btnOutline} onClick={() => setFilter({ range: 'cycle', cat: '', q: '', sort: 'newest' })}>

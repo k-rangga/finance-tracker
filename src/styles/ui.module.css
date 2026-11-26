@@ -4986,3 +4986,86 @@ button.sxTile:hover {
   }
 }
 
+/* ---- Playful & cheering touches: Maxie greeting, expressive empty states, 7-day stamp card ---- */
+.mxGreeting {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-000);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+.mxGreetingText {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+  font-weight: 500;
+}
+.mxEmptyInline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.stampCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-100);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.stampCard[data-kind='done'] {
+  background: var(--good-soft);
+  border-color: color-mix(in srgb, var(--good) 28%, var(--line));
+}
+.stampHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.stampRow {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.stampDot {
+  height: 30px;
+  border-radius: var(--radius-pill);
+  border: 1px dashed var(--line-strong);
+  background: var(--surface-000);
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  display: grid;
+  place-items: center;
+  transition: background 180ms ease-out, border-color 180ms ease-out, color 180ms ease-out;
+}
+.stampDot[data-hit] {
+  border-style: solid;
+  border-color: var(--clay);
+  background: var(--clay);
+  color: var(--on-clay);
+}
+.stampDot[data-hit][data-done] {
+  border-color: var(--good);
+  background: var(--good);
+  color: var(--on-clay);
+}
+.stampDot[data-missed] {
+  border-style: solid;
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+

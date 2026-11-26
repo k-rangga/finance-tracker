@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
-import { Logo } from '../components/Logo';
+import { Icon, IC } from '../components/Icon';
+import { Logo, type MaxieMood } from '../components/Logo';
 import { useCountUp } from '../components/Delight';
 import type { TxView } from '../lib/budget';
 import { getCycle, type Cycle } from '../lib/cycle';
@@ -13,11 +14,11 @@ const DAY = 864e5;
 const isSpend = (t: TxView) => !t.isIncome && !t.isTransfer;
 
 /** How the cycle is going: under the pace for today, on it, or past it (colours the bar and the line under it). */
-export function moodOf(spent: number, limit: number, expected: number) {
-  if (limit > 0 && spent > limit) return { label: 'Over the plan', ink: C.redInk, bar: C.red };
-  if (expected > 0 && spent > expected * 1.1) return { label: 'Spending faster than planned', ink: C.amberInk, bar: C.amber };
-  if (expected > 0 && spent < expected * 0.8) return { label: 'Nicely under pace', ink: C.good, bar: 'var(--category-1)' };
-  return { label: 'On pace', ink: C.good, bar: 'var(--category-1)' };
+export function moodOf(spent: number, limit: number, expected: number): { label: string; ink: string; bar: string; face: MaxieMood } {
+  if (limit > 0 && spent > limit) return { label: 'Over the plan', ink: C.redInk, bar: C.red, face: 'steady' };
+  if (expected > 0 && spent > expected * 1.1) return { label: 'Spending faster than planned', ink: C.amberInk, bar: C.amber, face: 'steady' };
+  if (expected > 0 && spent < expected * 0.8) return { label: 'Nicely under pace', ink: C.good, bar: 'var(--category-1)', face: 'happy' };
+  return { label: 'On pace', ink: C.good, bar: 'var(--category-1)', face: 'calm' };
 }
 
 /**
@@ -49,7 +50,7 @@ export function Summary({
     <section className={s.sumCard} aria-label="This cycle at a glance">
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
         <span className={s.sumCat} role="img" aria-label={mood.label} title={mood.label}>
-          <Logo size={44} />
+          <Logo size={44} mood={mood.face} interactive />
         </span>
         <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0, flex: '1 1 180px' }}>
           <span className={s.sumBig}>{(phone ? short : full)(shown)} spent</span>
@@ -171,7 +172,7 @@ export function ChallengeChip({ text, kind }: { text: string; kind: 'running' | 
   );
 }
 
-/** In an opened category: start a no-spend week, or see / end the one running. */
+/** In an opened category: start a no-spend week, or track it as a 7-day stamp card. */
 export function ChallengeBox({
   name,
   state,
@@ -190,13 +191,34 @@ export function ChallengeBox({
         Try a no-spend week
       </button>
     );
+  const earned = state.key === 'done' ? CHALLENGE_DAYS : state.key === 'running' ? state.day : Math.max(0, state.day - 1);
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-      <ChallengeChip text={state.text} kind={state.key} />
-      <button type="button" className={s.textBtnSm} onClick={onClear}>
-        {state.key === 'running' ? 'Stop' : 'Clear'}
-      </button>
-    </span>
+    <div className={s.stampCard} data-kind={state.key}>
+      <div className={s.stampHead}>
+        <ChallengeChip text={state.key === 'done' ? 'No-spend week done!' : state.text} kind={state.key} />
+        <button type="button" className={s.textBtnSm} onClick={onClear}>
+          {state.key === 'running' ? 'Stop' : 'Clear'}
+        </button>
+      </div>
+      <div className={s.stampRow} role="img" aria-label={`${earned} of ${CHALLENGE_DAYS} no-spend days completed`}>
+        {Array.from({ length: CHALLENGE_DAYS }, (_, i) => {
+          const hit = i < earned;
+          const missedHere = state.key === 'missed' && i === earned;
+          return (
+            <span
+              key={i}
+              className={s.stampDot}
+              data-hit={hit || undefined}
+              data-done={state.key === 'done' || undefined}
+              data-missed={missedHere || undefined}
+              title={`Day ${i + 1}`}
+            >
+              {hit ? <Icon d={IC.check} size={13} strokeWidth={2.25} /> : i + 1}
+            </span>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

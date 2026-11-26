@@ -1,32 +1,127 @@
+import { useEffect, useState } from 'react';
+import { reducedMotion } from './Delight';
+
+export type MaxieMood = 'calm' | 'happy' | 'curious' | 'steady';
+
 /**
- * Maxie, the husky mark (from the Maxie design system). Two layers: the face stays light in both themes and the
- * clay cap sits on top, so the husky never looks inverted on dark grounds. At 24px and below it switches to the
- * simplified small mark (no eye glints or mouth, bolder features).
+ * Maxie, the Siberian husky mark: upright closer-set husky ears, double-tuft wolf cheeks, ivory mask with thin
+ * forehead blaze and iconic white eyebrow pips, broad dog nose, and four quiet moods (`calm`, `happy`, `curious`,
+ * `steady`). At 24px and below it switches to simplified bolder features (no eye glints or mouth).
  */
-const MARK =
-  'M32 60C26 60 19.5 56.5 15 51L8.6 49.6L12.2 45C9.2 40 8.2 33.5 9.4 26.5L15.6 5.6Q16.4 3.4 18 4.8L26 13.8C28 13.3 30 13 32 13C34 13 36 13.3 38 13.8L46 4.8Q47.6 3.4 48.4 5.6L54.6 26.5C55.8 33.5 54.8 40 51.8 45L55.4 49.6L49 51C44.5 56.5 38 60 32 60Z M17.4 9.6L14.6 21.4Q18.2 17.4 22.6 15.8Z M46.6 9.6L49.4 21.4Q45.8 17.4 41.4 15.8Z M32 17.5L33.4 27C35.6 25.2 38.6 24.2 41.6 24.4C45 24.6 48.4 26.4 49.6 29.4C48.2 30.6 47 32.6 47.4 35C49.5 38.5 50.5 42.5 49 46C46 51.5 39.5 55.6 32 55.6C24.5 55.6 18 51.5 15 46C13.5 42.5 14.5 38.5 16.6 35C17 32.6 15.8 30.6 14.4 29.4C15.6 26.4 19 24.6 22.4 24.4C25.4 24.2 28.4 25.2 30.6 27Z M18.6 31.2Q23.6 27.6 28.6 32.4Q23.2 35.6 18.6 31.2Z M45.4 31.2Q40.4 27.6 35.4 32.4Q40.8 35.6 45.4 31.2Z M24.6 30.2a1 1 0 1 0 0 2a1 1 0 1 0 0-2Z M39.4 30.2a1 1 0 1 0 0 2a1 1 0 1 0 0-2Z M27.8 42.6Q32 41 36.2 42.6Q36 45.8 32 47.6Q28 45.8 27.8 42.6Z M31.3 47.2H32.7V49.6Q34.6 51.4 36.8 50.6L37.3 51.8Q34.4 53 32 51.2Q29.6 53 26.7 51.8L27.2 50.6Q29.4 51.4 31.3 49.6Z';
-const FACE =
-  'M17.4 9.6L14.6 21.4Q18.2 17.4 22.6 15.8Z M46.6 9.6L49.4 21.4Q45.8 17.4 41.4 15.8Z M32 17.5L33.4 27C35.6 25.2 38.6 24.2 41.6 24.4C45 24.6 48.4 26.4 49.6 29.4C48.2 30.6 47 32.6 47.4 35C49.5 38.5 50.5 42.5 49 46C46 51.5 39.5 55.6 32 55.6C24.5 55.6 18 51.5 15 46C13.5 42.5 14.5 38.5 16.6 35C17 32.6 15.8 30.6 14.4 29.4C15.6 26.4 19 24.6 22.4 24.4C25.4 24.2 28.4 25.2 30.6 27Z';
-const MARK_S =
-  'M32 60C26 60 19.5 56.5 15 51L8.6 49.6L12.2 45C9.2 40 8.2 33.5 9.4 26.5L15.6 5.6Q16.4 3.4 18 4.8L26 13.8C28 13.3 30 13 32 13C34 13 36 13.3 38 13.8L46 4.8Q47.6 3.4 48.4 5.6L54.6 26.5C55.8 33.5 54.8 40 51.8 45L55.4 49.6L49 51C44.5 56.5 38 60 32 60Z M17.4 9.6L14.6 21.4Q18.2 17.4 22.6 15.8Z M46.6 9.6L49.4 21.4Q45.8 17.4 41.4 15.8Z M32 16L34.2 27C35.6 25.2 38.6 24.2 41.6 24.4C45 24.6 48.4 26.4 49.6 29.4C48.2 30.6 47 32.6 47.4 35C49.5 38.5 50.5 42.5 49 46C46 51.5 39.5 55.6 32 55.6C24.5 55.6 18 51.5 15 46C13.5 42.5 14.5 38.5 16.6 35C17 32.6 15.8 30.6 14.4 29.4C15.6 26.4 19 24.6 22.4 24.4C25.4 24.2 28.4 25.2 30.6 27Z M17.8 31.4Q23.4 26.8 29 32.2Q23 36.6 17.8 31.4Z M46.2 31.4Q40.6 26.8 35 32.2Q41 36.6 46.2 31.4Z M26.8 42Q32 40.2 37.2 42Q37 46 32 48.4Q27 46 26.8 42Z';
-const FACE_S =
-  'M17.4 9.6L14.6 21.4Q18.2 17.4 22.6 15.8Z M46.6 9.6L49.4 21.4Q45.8 17.4 41.4 15.8Z M32 16L34.2 27C35.6 25.2 38.6 24.2 41.6 24.4C45 24.6 48.4 26.4 49.6 29.4C48.2 30.6 47 32.6 47.4 35C49.5 38.5 50.5 42.5 49 46C46 51.5 39.5 55.6 32 55.6C24.5 55.6 18 51.5 15 46C13.5 42.5 14.5 38.5 16.6 35C17 32.6 15.8 30.6 14.4 29.4C15.6 26.4 19 24.6 22.4 24.4C25.4 24.2 28.4 25.2 30.6 27Z';
+const HEAD =
+  'M32 60C26.5 60 21 57 17.5 52L11.5 48.5L13.8 43.2L9.8 39L12.6 32.8C11.4 28.5 12 24 13.5 19.5L16.6 5.6Q17.6 3 19.8 4.8L27.6 13.6Q32 12.6 36.4 13.6L44.2 4.8Q46.4 3 47.4 5.6L50.5 19.5C52 24 52.6 28.5 51.4 32.8L54.2 39L50.2 43.2L52.5 48.5L46.5 52C43 57 37.5 60 32 60Z';
+const INNER_EARS = 'M19 9.5L16.8 20.2Q20.4 16.8 24.4 15.8Z M45 9.5L47.2 20.2Q43.6 16.8 39.6 15.8Z';
+const MASK =
+  'M32 15.6L33.8 25.4C36.4 24.2 39.8 24 43.2 25.6C46.4 27.2 48.2 30.2 48.4 33.8C50.2 37.5 50.4 42.2 48.4 46.2C45.4 52.2 39.2 56.4 32 56.4C24.8 56.4 18.6 52.2 15.6 46.2C13.6 42.2 13.8 37.5 15.6 33.8C15.8 30.2 17.6 27.2 20.8 25.6C24.2 24 27.6 24.2 30.2 25.4Z';
+const BROWS = 'M20.8 22.0Q24.0 19.2 27.2 21.2Q24.2 23.0 20.8 22.0Z M43.2 22.0Q40.0 19.2 36.8 21.2Q39.8 23.0 43.2 22.0Z';
+const NOSE = 'M26.8 41.2Q32 39.6 37.2 41.2Q36.8 44.8 32 46.6Q27.2 44.8 26.8 41.2Z';
+const EYES = 'M18.6 32.2Q23.5 27.6 28.4 32.8Q23.3 37.0 18.6 32.2Z M45.4 32.2Q40.5 27.6 35.6 32.8Q40.7 37.0 45.4 32.2Z';
+const EYES_SMALL = 'M18 32Q23.5 27.6 28.8 32.8Q23 37 18 32Z M46 32Q40.5 27.6 35.2 32.8Q41 37 46 32Z';
+const NOSE_SMALL = 'M26.2 41Q32 39.2 37.8 41Q37.4 45.4 32 47.6Q26.6 45.4 26.2 41Z';
 
 /** `tone`: clay (default), ink (one colour), or on-clay (sitting on a clay fill). */
-export function Logo({ size, tone = 'clay', label }: { size: number; tone?: 'clay' | 'ink' | 'on-clay'; label?: string }) {
+export function Logo({
+  size,
+  tone = 'clay',
+  mood = 'calm',
+  interactive = false,
+  label,
+}: {
+  size: number;
+  tone?: 'clay' | 'ink' | 'on-clay';
+  mood?: MaxieMood;
+  /** Clicking Maxie gives a gentle, quiet happy blink/perk (respects reduced motion). */
+  interactive?: boolean;
+  label?: string;
+}) {
+  const [perked, setPerked] = useState(false);
+  useEffect(() => {
+    if (!perked) return;
+    const t = setTimeout(() => setPerked(false), 700);
+    return () => clearTimeout(t);
+  }, [perked]);
+
   const small = size <= 24;
-  return (
+  const activeMood: MaxieMood = perked ? 'happy' : mood;
+  const cap = tone === 'clay' ? 'var(--clay)' : 'var(--mark-ink)';
+  const face = 'var(--mark-face)';
+  const tilt = activeMood === 'curious' ? 'rotate(-5 32 34)' : undefined;
+
+  const svg = (
     <svg
       width={size}
       height={size}
       viewBox="0 0 64 64"
-      style={{ flex: 'none', display: 'block' }}
+      style={{
+        flex: 'none',
+        display: 'block',
+        transform: perked && !reducedMotion() ? 'translateY(-1.5px) scale(1.04)' : undefined,
+        transition: 'transform 180ms ease-out',
+      }}
       role={label ? 'img' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
     >
-      <path d={small ? FACE_S : FACE} fill="var(--mark-face)" />
-      <path d={small ? MARK_S : MARK} fillRule="evenodd" fill={tone === 'clay' ? 'var(--clay)' : 'var(--mark-ink)'} />
+      <g transform={tilt} style={{ transition: 'transform 180ms ease-out' }}>
+        <path d={HEAD} fill={cap} />
+        <path d={INNER_EARS} fill={face} />
+        <path d={MASK} fill={face} />
+        <path d={BROWS} fill={face} />
+        {activeMood === 'happy' ? (
+          <>
+            <path d="M19.4 33.4Q23.6 28.6 27.8 33.4 M36.2 33.4Q40.4 28.6 44.6 33.4" fill="none" stroke={cap} strokeWidth={small ? 3.2 : 2.6} strokeLinecap="round" />
+            <path d={small ? NOSE_SMALL : NOSE} fill={cap} />
+            {!small && <path d="M26 49.4Q32 55 38 49.4Q32 51.2 26 49.4Z" fill={cap} />}
+          </>
+        ) : (
+          <>
+            <path d={small ? EYES_SMALL : EYES} fill={cap} />
+            {!small && (
+              <>
+                {tone === 'clay' && (
+                  <>
+                    <circle cx={23.6} cy={32.4} r={2.05} fill="var(--mark-eye)" />
+                    <circle cx={40.4} cy={32.4} r={2.05} fill="var(--mark-eye)" />
+                    <circle cx={23.6} cy={32.4} r={0.95} fill={cap} />
+                    <circle cx={40.4} cy={32.4} r={0.95} fill={cap} />
+                  </>
+                )}
+                <circle cx={24.35} cy={31.65} r={tone === 'clay' ? 0.65 : 1.05} fill={face} />
+                <circle cx={41.15} cy={31.65} r={tone === 'clay' ? 0.65 : 1.05} fill={face} />
+              </>
+            )}
+            <path d={small ? NOSE_SMALL : NOSE} fill={cap} />
+            {!small &&
+              (activeMood === 'steady' ? (
+                <path d="M32 46.2V49.2 M27.4 50.4Q32 51.8 36.6 50.4" fill="none" stroke={cap} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
+              ) : (
+                <path d="M32 46.2V49.2 M26.4 50.4Q29.2 52.4 32 49.4Q34.8 52.4 37.6 50.4" fill="none" stroke={cap} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
+              ))}
+          </>
+        )}
+      </g>
     </svg>
+  );
+
+  if (!interactive) return svg;
+  return (
+    <button
+      type="button"
+      onClick={() => setPerked(true)}
+      aria-label={label ?? 'Say hi to Maxie'}
+      title="Say hi to Maxie"
+      style={{
+        border: 0,
+        padding: 0,
+        margin: 0,
+        background: 'transparent',
+        display: 'inline-grid',
+        placeItems: 'center',
+        borderRadius: 'var(--radius-md)',
+        cursor: 'pointer',
+      }}
+    >
+      {svg}
+    </button>
   );
 }
