@@ -38,6 +38,7 @@ const GEMINI_SYSTEM = [
   '- {"type":"rule","merchant":string,"category":string,"sub":string|null,"why":string}  every transaction from this merchant goes to category (and sub-category).',
   '- {"type":"recategorize","txIds":string[],"category":string,"sub":string|null,"why":string}  move these transactions.',
   '- {"type":"move_limit","from":string,"to":string,"amount":number,"why":string}  move this much of one variable category\'s monthly limit to another variable category (the total budget stays the same).',
+  '- {"type":"challenge","category":string,"why":string}  start a fun 7-day no-spend challenge for a variable category.',
   'Use only category names from "categoryNames", sub-categories from that category\'s "subs", and transaction ids from "transactions". "why" is one short sentence.',
 ].join('\n');
 

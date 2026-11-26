@@ -13,24 +13,29 @@ import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
 import { merchantKey } from '../data/transactions';
 import { useApplyAll } from './applyScope';
+import { FlameIcon } from './categoriesExtras';
 
 type Props = {
   /** Ids to go through, fixed when the queue opens (sorting "All Grab" clears the other Grabs on the way). */
   ids: string[];
   allTxs: TxView[];
   g: Guesses;
-  onPick: (t: TxView, cat: string, sub: string | null, all: boolean) => void;
+  onPick: (t: TxView, cat: string, sub: string | null, all: boolean) => (() => void) | void;
   onClose: () => void;
 };
+
+type HistoryItem = { kind: 'sort' | 'skip'; run: () => void };
 
 /**
  * The transactions still in Buffer, one at a time: the best guess as one big button, a few likely others, and
  * every category under Other. "This one / All <merchant>" works as in the row's menu. Supports quick keyboard
- * shortcuts: Enter for top guess, 1–4 for options, S to skip.
+ * shortcuts: Enter for top guess, 1–4 for options, S to skip, Z to undo last.
  */
 export function SortQueue({ ids, allTxs, g, onPick, onClose }: Props) {
   const { full, settings } = useSettings();
   const [skipped, setSkipped] = useState<string[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [streak, setStreak] = useState(0);
   const [all, setAll] = useApplyAll();
   const live = ids.map(id => allTxs.find(t => t.id === id)).filter((t): t is TxView => !!t);
   const left = live.filter(t => t.cat === 'Buffer' && !skipped.includes(t.id));
@@ -39,19 +44,46 @@ export function SortQueue({ ids, allTxs, g, onPick, onClose }: Props) {
   const total = Math.max(1, live.length);
   const options = t ? g.suggest(t) : [];
   const [first, ...rest] = options;
-  const pick = (cat: string, sub?: string | null) => t && onPick(t, cat, sub ?? null, !!merchantKey(t.title) && all);
+
+  const pick = (cat: string, sub?: string | null) => {
+    if (!t) return;
+    const undo = onPick(t, cat, sub ?? null, !!merchantKey(t.title) && all);
+    if (undo) setHistory(prev => [...prev, { kind: 'sort', run: undo }]);
+    setStreak(n => n + 1);
+  };
+
+  const skipCurrent = () => {
+    if (!t) return;
+    const id = t.id;
+    setSkipped(prev => [...prev, id]);
+    setHistory(prev => [...prev, { kind: 'skip', run: () => setSkipped(sList => sList.filter(x => x !== id)) }]);
+    setStreak(0);
+  };
+
+  const undoLast = () => {
+    const last = history[history.length - 1];
+    if (!last) return;
+    setHistory(prev => prev.slice(0, -1));
+    last.run();
+    if (last.kind === 'sort') setStreak(n => Math.max(0, n - 1));
+  };
 
   useEffect(() => {
-    if (!t) return;
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key.toLowerCase() === 'z' && history.length > 0) {
+        e.preventDefault();
+        undoLast();
+        return;
+      }
+      if (!t) return;
       if (e.key === 'Enter' && first) {
         e.preventDefault();
         pick(first.category, first.sub);
       } else if (e.key.toLowerCase() === 's') {
         e.preventDefault();
-        setSkipped(prev => [...prev, t.id]);
+        skipCurrent();
       } else if (/^[1-4]$/.test(e.key)) {
         const opt = options[Number(e.key) - 1];
         if (opt) {
@@ -62,7 +94,7 @@ export function SortQueue({ ids, allTxs, g, onPick, onClose }: Props) {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [t, first, options, all]);
+  }, [t, first, options, all, history]);
 
   if (!t)
     return (
@@ -78,9 +110,16 @@ export function SortQueue({ ids, allTxs, g, onPick, onClose }: Props) {
                   ? `Every rupiah has a home. ${done} ${done === 1 ? 'transaction' : 'transactions'} sorted!`
                   : 'Nothing left in Buffer — clean slate.'}
             </p>
-            <button type="button" className={s.btnPrimary} onClick={onClose}>
-              Done
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {history.length > 0 && (
+                <button type="button" className={s.btnGhost} onClick={undoLast}>
+                  Undo last
+                </button>
+              )}
+              <button type="button" className={s.btnPrimary} onClick={onClose}>
+                Done
+              </button>
+            </div>
           </div>
         </Modal>
       </>
@@ -106,12 +145,18 @@ export function SortQueue({ ids, allTxs, g, onPick, onClose }: Props) {
         <div className={s.track} style={{ height: 5 }} aria-hidden="true">
           <span className={s.fill} style={{ width: `${Math.round(((done + skipped.length) / total) * 100)}%`, background: 'var(--clay)' }} />
         </div>
+        {streak >= 2 && (
+          <span className={s.sortStreak}>
+            <FlameIcon size={13} />
+            {streak} in a row!
+          </span>
+        )}
         <span className={s.sortProgressLabel}>
           {done} of {live.length} sorted
         </span>
       </div>
 
-      <div className={s.sortCard}>
+      <div key={t.id} className={`${s.sortCard} ${s.sortCardEnter}`}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           <span style={{ fontSize: 19, fontWeight: 650, marginRight: 'auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
           <span style={{ fontSize: 19, fontWeight: 650, whiteSpace: 'nowrap' }}>{full(t.amount)}</span>
@@ -181,15 +226,20 @@ export function SortQueue({ ids, allTxs, g, onPick, onClose }: Props) {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <button type="button" className={s.btnGhost} onClick={() => setSkipped([...skipped, t.id])}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <button type="button" className={s.btnGhost} onClick={skipCurrent}>
           Skip <kbd className={`${s.sortKeyHint} ${s.desktopOnly}`} style={{ marginLeft: 4 }}>S</kbd>
         </button>
+        {history.length > 0 && (
+          <button type="button" className={s.btnGhost} onClick={undoLast}>
+            Undo <kbd className={`${s.sortKeyHint} ${s.desktopOnly}`} style={{ marginLeft: 4 }}>Z</kbd>
+          </button>
+        )}
         {g.status === 'no_key' ? (
           <span style={{ fontSize: 12, color: C.textMuted, marginLeft: 'auto' }}>Maxie guesses need the Gemini API key (GEMINI_API_KEY).</span>
         ) : (
           <span className={s.desktopOnly} style={{ fontSize: 12, color: C.textMuted, marginLeft: 'auto' }}>
-            Enter or 1–4 to sort · S to skip
+            Enter / 1–4 sort · S skip · Z undo
           </span>
         )}
       </div>

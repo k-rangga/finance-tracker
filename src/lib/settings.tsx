@@ -125,9 +125,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setPaydayRule(merged.payday);
     // Before children render, so every screen sees the same category list. This cycle's own plan (made as
     // "next cycle") overrides the regular amounts while it runs.
-    const thisCycle = merged.cyclePlans?.[currentCycleKey()]?.limits ?? {};
+    const curPlan = merged.cyclePlans?.[currentCycleKey()];
+    const thisCycle = curPlan?.limits ?? {};
     applyCategorySettings(merged.customCategories, { ...merged, limitOverrides: { ...merged.limitOverrides, ...thisCycle } });
-    setSavingsTarget(merged.savingsPct);
+    const activeSavingsPct =
+      curPlan?.savings != null && merged.income > 0 ? Math.round((curPlan.savings / merged.income) * 1e6) / 1e4 : merged.savingsPct;
+    setSavingsTarget(activeSavingsPct);
     if (typeof document !== 'undefined') document.documentElement.dataset.lang = merged.maxieLanguage ?? 'en';
     latest.current = merged;
     return merged;

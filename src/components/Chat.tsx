@@ -14,6 +14,7 @@ import { C } from '../lib/tokens';
 import { CATEGORIES, categoryByName, categoryLabel, OTHER_CATEGORIES } from '../data/categories';
 import { merchantKey } from '../data/transactions';
 import { sum, tidyName, toISO } from '../lib/format';
+import { startChallenge } from '../screens/categoriesExtras';
 
 /** Stop waiting after this long; per-model fetches abort at 22s and fall back automatically. */
 const TIMEOUT_MS = 45_000;
@@ -100,6 +101,7 @@ function buildStarters(b: Budget, isId: boolean): string[] {
     out.push(isId ? `Gimana cara ngerem ${overCat.name}?` : `How do I rein in ${overCat.name}?`);
   } else {
     out.push(isId ? 'Siklus ini masih aman gak?' : 'Am I on track this cycle?');
+    out.push(isId ? 'Apresiasi pencapaianku siklus ini!' : 'Hype my wins this cycle!');
   }
 
   if (bufferCount > 0) {
@@ -582,7 +584,7 @@ type PreparedAction = {
 
 /** Resolve an AI-proposed action against real data, returning null if it doesn't match cleanly. */
 function usePrepareAction(allTxs: TxView[]) {
-  const { settings, short, ofIncome } = useSettings();
+  const { settings, update, short, ofIncome } = useSettings();
   const { rules, ruleSubs, subs, setRules, setSub, setOverride } = useData();
   const setLimits = useSetLimits();
   const subOf = (cat: string, sub?: string | null) => (sub ? settings.subcategories[cat]?.find(x => x.toLowerCase() === sub.trim().toLowerCase()) : undefined);
@@ -659,6 +661,25 @@ function usePrepareAction(allTxs: TxView[]) {
           const pct = Math.ceil((amount / onePct) * 100) / 100;
           setLimits({ [to.name]: to.limitPct + pct, [from.name]: Math.max(0, from.limitPct - pct) });
           return () => setLimits({ [to.name]: to.limitPct, [from.name]: from.limitPct });
+        },
+      };
+    }
+    if (a.type === 'challenge') {
+      const cat = categoryByName(known(a.category) ?? '');
+      if (!cat || cat.type !== 'variable') return null;
+      return {
+        title: (
+          <>
+            Start a 7-day no-spend challenge for <strong>{cat.name}</strong>
+          </>
+        ),
+        preview: `7 days starting today — spend nothing on ${cat.name} to earn a trophy.`,
+        why: a.why,
+        apply: () => {
+          const prev = settings.challenges ?? [];
+          const next = [...prev.filter(c => c.category !== cat.name), startChallenge(cat.name, new Date())];
+          update({ challenges: next });
+          return () => update({ challenges: prev });
         },
       };
     }

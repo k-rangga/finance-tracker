@@ -11,7 +11,8 @@ import type { FixedBillStatus } from './fixedBills';
 export type ChatAction =
   | { type: 'rule'; merchant: string; category: string; sub?: string | null; why?: string }
   | { type: 'recategorize'; txIds: string[]; category: string; sub?: string | null; why?: string }
-  | { type: 'move_limit'; from: string; to: string; amount: number; why?: string };
+  | { type: 'move_limit'; from: string; to: string; amount: number; why?: string }
+  | { type: 'challenge'; category: string; why?: string };
 
 /** A reply also carries the model that wrote it, suggested next questions, husky mood, and your thumbs up or down once rated. */
 export type ChatMessage = {

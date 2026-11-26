@@ -101,7 +101,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
       document.removeEventListener('keydown', onKey);
     };
   }, [panel]);
-  const { installments, setInstallment, notes, rules, ruleSubs, setRules, setSub, receipts, recat } = useData();
+  const { installments, setInstallment, notes, rules, ruleSubs, subs, setRules, setSub, receipts, recat } = useData();
   /** The purchase whose installment plan is open in the dialog. */
   const [planFor, setPlanFor] = useState<string | null>(null);
   const planTx = planFor ? allTxs.find(x => x.id === planFor) : undefined;
@@ -151,31 +151,41 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
    * this row changes and the merchant's rule (if any) stays as it was.
    * An installment payment's sub-category is set on its purchase, so every month follows.
    */
-  const recategorise = (t: TxView, to: string, sub: string | null = null, all = true) => {
+  const recategorise = (t: TxView, to: string, sub: string | null = null, all = true): (() => void) => {
     // An installment payment's category is its plan's: a split purchase changes on the purchase (every payment
     // follows), a plan the bank bills changes on all its charges. Interest stays in Interest & fees.
     if (t.plan) {
       const rows = t.plan.of.startsWith('tracked:') ? allTxs.filter(x => x.plan?.of === t.plan!.of) : allTxs.filter(x => x.id === t.plan!.of);
       const before = rows.map(x => ({ x, was: recat[x.id] }));
+      const prevSub = subs[t.plan.of] ?? null;
       rows.forEach(x => onRecat(x.id, x.category, to));
       setSub(t.plan.of, sub);
+      const undo = () => {
+        before.forEach(({ x, was }) => onRecat(x.id, '', was ?? x.category));
+        setSub(t.plan!.of, prevSub);
+      };
       setToast({
         text: `Moved ${tidyName(t.title.replace(/ \(\d+\/\d+\)( interest)?$/, ''))} to ${categoryLabel(to)} for every payment.`,
         action: 'Undo',
-        run: () => before.forEach(({ x, was }) => onRecat(x.id, '', was ?? x.category)),
+        run: undo,
       });
-      return;
+      return undo;
     }
     const key = merchantKey(t.title);
     const prevSubPick = t.id;
+    const prevRowSub = subs[prevSubPick] ?? null;
     if (!all || !key) {
       // Keep this row's choice even when it's the category the email gave it, so a merchant rule can't move it.
       const hasRule = !!key && Object.keys(rules).some(m => merchantKey(m) === key);
       if (to !== t.cat) onRecat(t.id, hasRule ? '' : t.category, to);
       setSub(prevSubPick, sub);
       const was = t.cat;
-      setToast({ text: `Moved ${t.title} to ${categoryLabel(to)}${sub ? ' › ' + sub : ''} — just this one.`, action: 'Undo', run: () => onRecat(t.id, t.category, was) });
-      return;
+      const undo = () => {
+        onRecat(t.id, t.category, was);
+        setSub(prevSubPick, prevRowSub);
+      };
+      setToast({ text: `Moved ${t.title} to ${categoryLabel(to)}${sub ? ' › ' + sub : ''} — just this one.`, action: 'Undo', run: undo });
+      return undo;
     }
     if (to !== t.cat) onRecat(t.id, t.category, to);
     setSub(prevSubPick, sub);
@@ -187,18 +197,21 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
     // Rows of this merchant you'd set by hand follow too, so the merchant reads the same everywhere.
     const handSet = others.filter(x => x.id in recat && recat[x.id] !== to).map(x => ({ x, was: recat[x.id] }));
     handSet.forEach(({ x }) => onRecat(x.id, x.category, to));
+    const undo = () => {
+      if (prev) setRules({ [prev[0]]: prev[1] }, { [prev[0]]: prevSub });
+      else setRules({ [key]: null });
+      handSet.forEach(({ x, was }) => onRecat(x.id, '', was));
+      if (to !== t.cat) onRecat(t.id, t.category, t.cat);
+      setSub(prevSubPick, prevRowSub);
+    };
     setToast({
       text:
         `Moved ${t.title} to ${categoryLabel(to)}${sub ? ' › ' + sub : ''}` +
         (others.length ? ` across all ${others.length + 1} — I'll remember it for next time.` : " — I'll remember that for next time."),
       action: 'Undo',
-      run: () => {
-        if (prev) setRules({ [prev[0]]: prev[1] }, { [prev[0]]: prevSub });
-        else setRules({ [key]: null });
-        handSet.forEach(({ x, was }) => onRecat(x.id, '', was));
-        if (to !== t.cat) onRecat(t.id, t.category, t.cat);
-      },
+      run: undo,
     });
+    return undo;
   };
   const expenses = budget.txs.filter(t => !t.isIncome && !t.isTransfer);
   const { range, cat, q } = filter;
