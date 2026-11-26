@@ -70,15 +70,19 @@ test('generates personalized reflections from zero-spend days, savings goal, cat
   assert.ok(hint.reflections.some(r => /Dining is 40% lighter/i.test(r)));
   assert.ok(hint.reflections.some(r => /Buffer/i.test(r)));
   assert.ok(hint.reflections.some(r => /1 payment left on MacBook Air/i.test(r)));
+  assert.equal(hint.aura, 'good');
+  assert.equal(hint.isPayday, false);
   assert.ok(pickBootReflection(hint).length > 10);
 });
 
-test('localizes personalized reflections in Bahasa Indonesia and respects quietMode flag', () => {
+test('localizes personalized reflections in Bahasa Indonesia, detects payday aura, and respects quietMode flag', () => {
   const settings: Settings = { ...DEFAULT_SETTINGS, name: 'Rangga', maxieLanguage: 'id', quietMode: true };
-  const hint = buildBootHint({ cycle: sampleCycle, budget: baseBudget, settings, plans: [] });
+  const paydayCycle: Cycle = { ...sampleCycle, dayN: 1, dayIdx: 0 };
+  const hint = buildBootHint({ cycle: paydayCycle, budget: baseBudget, settings, plans: [] });
   assert.equal(hint.lang, 'id');
   assert.equal(hint.quiet, true);
-  assert.ok(hint.reflections.some(r => /hari nol pengeluaran/i.test(r)));
+  assert.equal(hint.isPayday, true);
+  assert.equal(hint.aura, 'payday');
   assert.ok(hint.reflections.some(r => /Target tabungan/i.test(r)));
 });
 

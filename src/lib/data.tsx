@@ -53,11 +53,39 @@ type Ctx = UserData & {
 const DataCtx = createContext<Ctx | null>(null);
 
 /** Loads the signed-in user's data and writes changes through to the backend (optimistic). */
-export function DataProvider({ backend, children, loading, failed }: { backend: Backend; children: ReactNode; loading: ReactNode; failed: (msg: string, retry: () => void) => ReactNode }) {
+export function DataProvider({
+  backend,
+  children,
+  loading,
+  failed,
+  minLoadMs = 0,
+  bootAt,
+}: {
+  backend: Backend;
+  children: ReactNode;
+  loading: ReactNode | ((state: { ready: boolean; enterNow: () => void }) => ReactNode);
+  failed: (msg: string, retry: () => void) => ReactNode;
+  /** Optional minimum display time (ms) from `bootAt` so the initial loading quote stays readable. */
+  minLoadMs?: number;
+  bootAt?: number;
+}) {
   const [data, setData] = useState<UserData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [minElapsed, setMinElapsed] = useState(() => minLoadMs <= 0);
+  const [startedAt] = useState(() => bootAt ?? Date.now());
+
+  useEffect(() => {
+    if (minLoadMs <= 0) return;
+    const rem = Math.max(0, minLoadMs - (Date.now() - startedAt));
+    if (rem === 0) {
+      setMinElapsed(true);
+      return;
+    }
+    const t = setTimeout(() => setMinElapsed(true), rem);
+    return () => clearTimeout(t);
+  }, [minLoadMs, startedAt]);
 
   useEffect(() => {
     let live = true;
@@ -246,7 +274,9 @@ export function DataProvider({ backend, children, loading, failed }: { backend: 
   }, [data, backend, saveError, write]);
 
   if (loadError) return <>{failed(loadError, () => setAttempt(a => a + 1))}</>;
-  if (!value) return <>{loading}</>;
+  if (!value || !minElapsed) {
+    return <>{typeof loading === 'function' ? loading({ ready: !!value, enterNow: () => setMinElapsed(true) }) : loading}</>;
+  }
   return <DataCtx.Provider value={value}>{children}</DataCtx.Provider>;
 }
 

@@ -7,11 +7,15 @@ import { storage } from './storage';
 
 const BOOT_KEY = 'moneyTracker.bootHint';
 
+export type BootAura = 'clay' | 'good' | 'payday';
+
 export type BootHint = {
   name: string;
   quiet: boolean;
   lang: 'en' | 'id';
   reflections: string[];
+  isPayday?: boolean;
+  aura?: BootAura;
   updatedAt: string;
 };
 
@@ -63,7 +67,8 @@ export function buildBootHint({
   }
 
   // 2. Savings milestone or steady saving ratio
-  if (b.savingsTarget > 0 && b.saved >= b.savingsTarget) {
+  const hitSavings = b.savingsTarget > 0 && b.saved >= b.savingsTarget;
+  if (hitSavings) {
     reflections.push(
       id
         ? `Target tabungan ${Math.round(b.savedPct)}% sudah tercapai — langkah tenang untuk masa depan.`
@@ -149,11 +154,17 @@ export function buildBootHint({
     }
   }
 
+  const isPayday = cycle.dayN === 1;
+  const underPace = cycle.dayN >= 4 && b.paceToday > 0 && b.spent <= b.paceToday * 0.92;
+  const aura: BootAura = isPayday ? 'payday' : hitSavings || (zeroDays >= 3 && left >= 0) || (underPace && left >= 0) ? 'good' : 'clay';
+
   return {
     name: settings.name.trim(),
     quiet: !!settings.quietMode,
     lang: id ? 'id' : 'en',
     reflections: reflections.slice(0, 5),
+    isPayday,
+    aura,
     updatedAt: new Date().toISOString(),
   };
 }

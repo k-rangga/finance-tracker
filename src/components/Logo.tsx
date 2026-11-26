@@ -1,17 +1,17 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import s from '../styles/ui.module.css';
 import { reducedMotion } from './Delight';
 
-export type MaxieMood = 'calm' | 'happy' | 'curious' | 'steady';
+export type MaxieMood = 'calm' | 'happy' | 'curious' | 'steady' | 'cozy' | 'wink';
 
 const PET_CHEERS = {
-  en: ['You are doing great!', 'High five!', 'Cheering you on!', 'Got your back!', 'Smooth sailing!'],
-  id: ['Keren banget hari ini!', 'Tos dulu!', 'Aku dukung terus!', 'Santai, aman kok!', 'Lancar jaya!'],
+  en: ['You are doing great.', 'High five.', 'Cheering you on.', 'Got your back.', 'Smooth sailing.'],
+  id: ['Keren hari ini.', 'Tos dulu.', 'Aku dukung terus.', 'Santai, aman kok.', 'Lancar terus.'],
 };
 const STREAK_CHEERS = {
-  en: ['Okay, you are officially unstoppable!', 'High five x3 — love this energy!'],
-  id: ['Wih, semangatnya luar biasa!', 'Tos tiga kali — mantap banget!'],
+  en: ['Quietly unstoppable.', 'High five x3 — lovely energy.'],
+  id: ['Tenang tapi mantap.', 'Tos tiga kali — energi yang enak.'],
 };
 
 const currentLang = (): 'en' | 'id' => (typeof document !== 'undefined' && document.documentElement.dataset.lang === 'id' ? 'id' : 'en');
@@ -20,18 +20,25 @@ type BubblePos = { text: string; style: CSSProperties; place: 'right' | 'bottom'
 
 /**
  * Maxie, the Siberian husky mark: upright closer-set husky ears, double-tuft wolf cheeks, ivory mask with thin
- * forehead blaze and iconic white eyebrow pips, broad dog nose, and four quiet moods (`calm`, `happy`, `curious`,
- * `steady`). At 24px and below it switches to simplified bolder features (no eye glints or mouth).
+ * forehead blaze and iconic white eyebrow pips, broad dog nose, and calm moods (`calm`, `happy`, `curious`,
+ * `steady`, `cozy`, `wink`). Supports optional cursor-following eyes and gentle head tilt.
  */
-const HEAD =
-  'M32 60C26.5 60 21 57 17.5 52L11.5 48.5L13.8 43.2L9.8 39L12.6 32.8C11.4 28.5 12 24 13.5 19.5L16.6 5.6Q17.6 3 19.8 4.8L27.6 13.6Q32 12.6 36.4 13.6L44.2 4.8Q46.4 3 47.4 5.6L50.5 19.5C52 24 52.6 28.5 51.4 32.8L54.2 39L50.2 43.2L52.5 48.5L46.5 52C43 57 37.5 60 32 60Z';
-const INNER_EARS = 'M19 9.5L16.8 20.2Q20.4 16.8 24.4 15.8Z M45 9.5L47.2 20.2Q43.6 16.8 39.6 15.8Z';
+const FACE_BASE =
+  'M32 60C26.5 60 21 57 17.5 52L11.5 48.5L13.8 43.2L9.8 39L12.6 32.8C11.4 28.5 12 24 13.5 19.5Q19.5 15 27.6 13.6Q32 12.6 36.4 13.6Q44.5 15 50.5 19.5C52 24 52.6 28.5 51.4 32.8L54.2 39L50.2 43.2L52.5 48.5L46.5 52C43 57 37.5 60 32 60Z';
+const LEFT_EAR_OUTER = 'M13.2 23L13.5 19.5L16.6 5.6Q17.6 3 19.8 4.8L27.6 13.6L28.2 16.5Z';
+const RIGHT_EAR_OUTER = 'M50.8 23L50.5 19.5L47.4 5.6Q46.4 3 44.2 4.8L36.4 13.6L35.8 16.5Z';
+const LEFT_EAR_INNER = 'M19 9.5L16.8 20.2Q20.4 16.8 24.4 15.8Z';
+const RIGHT_EAR_INNER = 'M45 9.5L47.2 20.2Q43.6 16.8 39.6 15.8Z';
 const MASK =
   'M32 15.6L33.8 25.4C36.4 24.2 39.8 24 43.2 25.6C46.4 27.2 48.2 30.2 48.4 33.8C50.2 37.5 50.4 42.2 48.4 46.2C45.4 52.2 39.2 56.4 32 56.4C24.8 56.4 18.6 52.2 15.6 46.2C13.6 42.2 13.8 37.5 15.6 33.8C15.8 30.2 17.6 27.2 20.8 25.6C24.2 24 27.6 24.2 30.2 25.4Z';
 const BROWS = 'M20.8 22.0Q24.0 19.2 27.2 21.2Q24.2 23.0 20.8 22.0Z M43.2 22.0Q40.0 19.2 36.8 21.2Q39.8 23.0 43.2 22.0Z';
 const NOSE = 'M26.8 41.2Q32 39.6 37.2 41.2Q36.8 44.8 32 46.6Q27.2 44.8 26.8 41.2Z';
-const EYES = 'M18.6 32.2Q23.5 27.6 28.4 32.8Q23.3 37.0 18.6 32.2Z M45.4 32.2Q40.5 27.6 35.6 32.8Q40.7 37.0 45.4 32.2Z';
-const EYE_FILL = 'M20.4 32.4Q23.6 29.6 26.8 32.8Q23.4 35.4 20.4 32.4Z M43.6 32.4Q40.4 29.6 37.2 32.8Q40.6 35.4 43.6 32.4Z';
+const LEFT_EYE = 'M18.6 32.2Q23.5 27.6 28.4 32.8Q23.3 37.0 18.6 32.2Z';
+const RIGHT_EYE = 'M45.4 32.2Q40.5 27.6 35.6 32.8Q40.7 37.0 45.4 32.2Z';
+const EYES = `${LEFT_EYE} ${RIGHT_EYE}`;
+const LEFT_EYE_FILL = 'M20.4 32.4Q23.6 29.6 26.8 32.8Q23.4 35.4 20.4 32.4Z';
+const RIGHT_EYE_FILL = 'M43.6 32.4Q40.4 29.6 37.2 32.8Q40.6 35.4 43.6 32.4Z';
+const EYE_FILL = `${LEFT_EYE_FILL} ${RIGHT_EYE_FILL}`;
 const EYES_SMALL = 'M18 32Q23.5 27.6 28.8 32.8Q23 37 18 32Z M46 32Q40.5 27.6 35.2 32.8Q41 37 46 32Z';
 const NOSE_SMALL = 'M26.2 41Q32 39.2 37.8 41Q37.4 45.4 32 47.6Q26.6 45.4 26.2 41Z';
 
@@ -41,22 +48,29 @@ export function Logo({
   tone = 'clay',
   mood = 'calm',
   interactive = false,
+  followCursor = false,
   cheer,
   label,
 }: {
   size: number;
   tone?: 'clay' | 'ink' | 'on-clay';
   mood?: MaxieMood;
-  /** Clicking Maxie gives a playful happy perk + brief cheerful speech bubble (respects reduced motion). */
+  /** Clicking Maxie gives a gentle perk + brief cheerful speech bubble (respects reduced motion). */
   interactive?: boolean;
+  /** Gently tilts Maxie's head, perks the nearer ear, and shifts the ice-blue eyes toward the cursor. */
+  followCursor?: boolean;
   /** Optional custom short line shown when tapped (falls back to cheerful defaults). */
   cheer?: string;
   label?: string;
 }) {
   const [perked, setPerked] = useState(false);
   const [bubble, setBubble] = useState<BubblePos | null>(null);
+  const [gaze, setGaze] = useState({ x: 0, y: 0 });
+  const [blinking, setBlinking] = useState(false);
   const tapCount = useRef(0);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const clipId = useId();
 
   useEffect(() => {
     if (!perked) return;
@@ -69,14 +83,71 @@ export function Logo({
     return () => clearTimeout(t);
   }, [bubble]);
 
+  // Cursor tracking for gentle head tilt, ear perk, and eye gaze.
+  useEffect(() => {
+    if (!followCursor || reducedMotion() || typeof window === 'undefined') return;
+    let raf = 0;
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') return;
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = svgRef.current;
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const dx = Math.max(-1, Math.min(1, (e.clientX - cx) / 240));
+        const dy = Math.max(-1, Math.min(1, (e.clientY - cy) / 240));
+        setGaze({ x: dx, y: dy });
+      });
+    };
+    const onLeave = () => setGaze({ x: 0, y: 0 });
+    window.addEventListener('pointermove', onMove, { passive: true });
+    document.addEventListener('mouseleave', onLeave);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener('pointermove', onMove);
+      document.removeEventListener('mouseleave', onLeave);
+    };
+  }, [followCursor]);
+
+  // Natural calm blink every ~4.5s when tracking cursor.
+  useEffect(() => {
+    if (!followCursor || reducedMotion()) return;
+    let blinkOff = 0;
+    const interval = window.setInterval(() => {
+      setBlinking(true);
+      blinkOff = window.setTimeout(() => setBlinking(false), 140);
+    }, 4600);
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(blinkOff);
+    };
+  }, [followCursor]);
+
   const small = size <= 24;
   const activeMood: MaxieMood = perked ? 'happy' : mood;
   const cap = tone === 'clay' ? 'var(--clay)' : 'var(--mark-ink)';
   const face = 'var(--mark-face)';
-  const tilt = activeMood === 'curious' ? 'rotate(-5 32 34)' : undefined;
+  const baseTilt = activeMood === 'curious' ? -5 : activeMood === 'cozy' ? 2.5 : 0;
+  const deg = baseTilt + (followCursor ? gaze.x * 7.5 : 0);
+  const headDx = followCursor ? gaze.x * 1.15 : 0;
+  const headDy = followCursor ? gaze.y * 0.85 : 0;
+  const eyeDx = followCursor ? gaze.x * 1.45 : 0;
+  const eyeDy = followCursor ? gaze.y * 0.95 : 0;
+  const leftEarDeg = followCursor && gaze.x < -0.15 ? gaze.x * 4.2 : 0;
+  const rightEarDeg = followCursor && gaze.x > 0.15 ? gaze.x * 4.2 : 0;
+  const headTransform =
+    deg !== 0 || headDx !== 0 || headDy !== 0
+      ? `translate(${headDx.toFixed(2)} ${headDy.toFixed(2)}) rotate(${deg.toFixed(2)} 32 34)`
+      : undefined;
+  const eyeTransform = eyeDx !== 0 || eyeDy !== 0 ? `translate(${eyeDx.toFixed(2)} ${eyeDy.toFixed(2)})` : undefined;
+  const leftEarTransform = leftEarDeg !== 0 ? `rotate(${leftEarDeg.toFixed(2)} 20.5 16.5)` : undefined;
+  const rightEarTransform = rightEarDeg !== 0 ? `rotate(${rightEarDeg.toFixed(2)} 43.5 16.5)` : undefined;
 
   const svg = (
     <svg
+      ref={svgRef}
       width={size}
       height={size}
       viewBox="0 0 64 64"
@@ -84,32 +155,75 @@ export function Logo({
       style={{
         flex: 'none',
         display: 'block',
-        transition: 'transform 180ms ease-out',
+        overflow: 'visible',
+        transition: 'transform 200ms cubic-bezier(0.22, 1, 0.36, 1)',
       }}
       role={label ? 'img' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
     >
-      <g transform={tilt} style={{ transition: 'transform 180ms ease-out' }}>
-        <path d={HEAD} fill={cap} />
-        <path d={INNER_EARS} fill={face} />
+      {!small && (
+        <defs>
+          <clipPath id={clipId}>
+            <path d={activeMood === 'wink' ? LEFT_EYE : EYES} />
+          </clipPath>
+        </defs>
+      )}
+      <g transform={headTransform} style={{ transition: 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)' }}>
+        <path d={FACE_BASE} fill={cap} />
+        <g transform={leftEarTransform} style={{ transition: 'transform 180ms cubic-bezier(0.22, 1, 0.36, 1)' }}>
+          <path d={LEFT_EAR_OUTER} fill={cap} />
+          <path d={LEFT_EAR_INNER} fill={face} />
+        </g>
+        <g transform={rightEarTransform} style={{ transition: 'transform 180ms cubic-bezier(0.22, 1, 0.36, 1)' }}>
+          <path d={RIGHT_EAR_OUTER} fill={cap} />
+          <path d={RIGHT_EAR_INNER} fill={face} />
+        </g>
         <path d={MASK} fill={face} />
         <path d={BROWS} fill={face} />
-        {activeMood === 'happy' ? (
+        {activeMood === 'happy' || blinking ? (
           <>
             <path d="M19.4 33.4Q23.6 28.6 27.8 33.4 M36.2 33.4Q40.4 28.6 44.6 33.4" fill="none" stroke={cap} strokeWidth={small ? 3.2 : 2.6} strokeLinecap="round" />
             <path d={small ? NOSE_SMALL : NOSE} fill={cap} />
-            {!small && <path d="M26 49.4Q32 55 38 49.4Q32 51.2 26 49.4Z" fill={cap} />}
+            {!small &&
+              (activeMood === 'happy' ? (
+                <path d="M26 49.4Q32 55 38 49.4Q32 51.2 26 49.4Z" fill={cap} />
+              ) : (
+                <path d="M32 46.2V49.2 M26.4 50.4Q29.2 52.4 32 49.4Q34.8 52.4 37.6 50.4" fill="none" stroke={cap} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
+              ))}
+          </>
+        ) : activeMood === 'cozy' ? (
+          <>
+            <path d="M19.2 32.8Q23.6 35.6 28.0 32.8 M36.0 32.8Q40.4 35.6 44.8 32.8" fill="none" stroke={cap} strokeWidth={small ? 3.0 : 2.4} strokeLinecap="round" />
+            <path d={small ? NOSE_SMALL : NOSE} fill={cap} />
+            {!small && <path d="M32 46.2V49.2 M27.2 50.4Q32 52.6 36.8 50.4" fill="none" stroke={cap} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />}
+          </>
+        ) : activeMood === 'wink' ? (
+          <>
+            <path d={LEFT_EYE} fill={cap} />
+            {!small && (
+              <g clipPath={`url(#${clipId})`}>
+                <g transform={eyeTransform} style={{ transition: 'transform 160ms cubic-bezier(0.22, 1, 0.36, 1)' }}>
+                  {tone === 'clay' && <path d={LEFT_EYE_FILL} fill="var(--mark-eye)" />}
+                  <circle cx={24.5} cy={31.9} r={tone === 'clay' ? 0.85 : 1.05} fill={face} />
+                </g>
+              </g>
+            )}
+            <path d="M36.2 33.2Q40.4 28.8 44.6 33.2" fill="none" stroke={cap} strokeWidth={small ? 3.2 : 2.6} strokeLinecap="round" />
+            <path d={small ? NOSE_SMALL : NOSE} fill={cap} />
+            {!small && <path d="M32 46.2V49.2 M26.4 50.4Q29.2 52.6 32 49.4Q34.8 52.6 37.6 50.4" fill="none" stroke={cap} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />}
           </>
         ) : (
           <>
             <path d={small ? EYES_SMALL : EYES} fill={cap} />
             {!small && (
-              <>
-                {tone === 'clay' && <path d={EYE_FILL} fill="var(--mark-eye)" />}
-                <circle cx={24.5} cy={31.9} r={tone === 'clay' ? 0.85 : 1.05} fill={face} />
-                <circle cx={39.5} cy={31.9} r={tone === 'clay' ? 0.85 : 1.05} fill={face} />
-              </>
+              <g clipPath={`url(#${clipId})`}>
+                <g transform={eyeTransform} style={{ transition: 'transform 160ms cubic-bezier(0.22, 1, 0.36, 1)' }}>
+                  {tone === 'clay' && <path d={EYE_FILL} fill="var(--mark-eye)" />}
+                  <circle cx={24.5} cy={31.9} r={tone === 'clay' ? 0.85 : 1.05} fill={face} />
+                  <circle cx={39.5} cy={31.9} r={tone === 'clay' ? 0.85 : 1.05} fill={face} />
+                </g>
+              </g>
             )}
             <path d={small ? NOSE_SMALL : NOSE} fill={cap} />
             {!small &&

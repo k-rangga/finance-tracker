@@ -206,7 +206,7 @@ function MaxieGreeting({ cycle, budget: b, onAskMaxie }: { cycle: Cycle; budget:
 
   return (
     <div className={s.mxGreeting} data-wide>
-      <Logo size={36} mood={mood} interactive cheer={cheer} />
+      <Logo size={36} mood={mood} interactive followCursor cheer={cheer} />
       <div className={s.mxGreetingBody}>
         <p className={s.mxGreetingText}>{line}</p>
         {todaySpend === 0 && (

@@ -392,7 +392,7 @@ export function Activity({
         <div ref={bar} className={s.stickyBar}>
           <div ref={toolbarRef} className={s.mxToolbar} role="toolbar" aria-label="Transaction view controls">
             <div className={s.mxToolbarLeft}>
-              <div className={s.sxMiniSeg} role="group" aria-label="View mode">
+              <div className={s.mxViewSeg} role="group" aria-label="View mode">
                 <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}>
                   List
                 </button>
