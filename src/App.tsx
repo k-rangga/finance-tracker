@@ -8,12 +8,12 @@ import { CategoryDialog } from './components/CategoryDialog';
 import { GmailDialog, syncedAgo } from './components/GmailDialog';
 import { ONBOARDING_STEP_KEY, OnboardingWizard } from './components/OnboardingWizard';
 import { KEYS, storage } from './lib/storage';
-import { getCycle, paydayRule } from './lib/cycle';
+import { getCycle, paydayRule, type Cycle } from './lib/cycle';
 import { computeBudget, txViews } from './lib/budget';
 import { addDays, dayLabel, dayMonth, ordinal, startOfToday, tidyName, toISO } from './lib/format';
 import { useSettings } from './lib/settings';
 import { useData } from './lib/data';
-import { billKey, merchantKey, expectedBills, inCycle, installmentPayments, resolveSubs, toTransaction, withMerchantRules, type Bill } from './data/transactions';
+import { billKey, merchantKey, expectedBills, inCycle, installmentPayments, resolveSubs, toTransaction, withMerchantRules, type Bill, type Transaction } from './data/transactions';
 import { CATEGORIES, INSTALLMENT_CATEGORY, INSTALLMENTS_CATEGORY, SAVINGS_CATEGORY } from './data/categories';
 import { InstallmentsAhead } from './screens/InstallmentsAhead';
 import { PlansProvider, ScheduleModal } from './components/Plans';
@@ -109,6 +109,18 @@ export default function App() {
   const subs = useMemo(() => resolveSubs(all, t => recat[t.id] ?? t.category, picked, ruleSubs, settings.subcategories), [all, recat, picked, ruleSubs, settings.subcategories]);
   const transactions = useMemo(() => inCycle(all, cycle), [all, cycle]);
   const prevTransactions = useMemo(() => all.filter(t => t.date >= prevCycle.start && t.date < cycle.start), [all, prevCycle, cycle]);
+  /** Up to 3 past cycles (most recent first) that have any data, for the projection's spending rhythm. */
+  const paceHistory = useMemo(() => {
+    const out: { transactions: Transaction[]; cycle: Cycle }[] = [{ transactions: prevTransactions, cycle: prevCycle }];
+    let c = prevCycle;
+    for (let k = 1; k < 3; k++) {
+      const older = getCycle(addDays(c.start, -1));
+      const end = c.start;
+      out.push({ transactions: all.filter(t => t.date >= older.start && t.date < end), cycle: older });
+      c = older;
+    }
+    return out.filter(h => h.transactions.length > 0);
+  }, [all, prevTransactions, prevCycle]);
   /** Each subscription's charges and where it stands: next billing date, missed, new price. */
   const subCharges = useMemo(() => chargesBySub(subscriptions, all), [subscriptions, all]);
   const subStates = useMemo(() => Object.fromEntries(Object.entries(subscriptions).map(([id, x]) => [id, subState(x, subCharges.get(id) ?? [], today)])), [subscriptions, subCharges, today]);
@@ -271,9 +283,9 @@ export default function App() {
       const plannedCosts: Record<string, number> = {};
       for (const c of settings.cyclePlans?.[cycleKey(cycle)]?.costs ?? []) plannedCosts[c.category] = (plannedCosts[c.category] ?? 0) + c.amount;
       const fixedBillLimits = fixedBillCategoryLimits(fixedBillStatuses);
-      return computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, ownNames, cycle, income: settings.income, warnAt: settings.warnAt, plannedCosts, fixedBillLimits });
+      return computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, ownNames, cycle, income: settings.income, warnAt: settings.warnAt, plannedCosts, fixedBillLimits, history: paceHistory });
     },
-    [transactions, prevTransactions, prevCycle, bills, fixedBillStatuses, recat, links, shares, subs, ownNames, cycle, settings.income, settings.warnAt, settings.cyclePlans, settings.savingsPct, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
+    [transactions, prevTransactions, prevCycle, paceHistory, bills, fixedBillStatuses, recat, links, shares, subs, ownNames, cycle, settings.income, settings.warnAt, settings.cyclePlans, settings.savingsPct, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
   );
   // Keep personalized calm loading reflections fresh locally so the next initial load greets with real context.
   useEffect(() => {

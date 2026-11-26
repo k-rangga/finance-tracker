@@ -2,6 +2,7 @@ import { CATEGORIES, CC_PAYMENT_CATEGORY, categoryByName, INCOME_CATEGORY, INSTA
 import { isCard, type Bill, type CardCycle, type Transaction } from '../data/transactions';
 import { weekOf, type Cycle } from './cycle';
 import { sum } from './format';
+import { projectCycleSpend, type PaceResult } from './pace';
 import { C } from './tokens';
 
 export type StatusKey = 'over' | 'near' | 'ok';
@@ -101,7 +102,10 @@ export type Budget = {
   fixedDue: number;
   /** Variable spend per day so far. */
   velDay: number;
+  /** Projected total spend by payday (see projectCycleSpend). */
   projTotal: number;
+  /** How the projection was built: one-offs, rhythm basis, and the day-by-day path for the chart. */
+  proj: PaceResult;
   projSavePct: number;
   paceToday: number;
   safeDay: number;
@@ -287,8 +291,11 @@ export function computeBudget(args: {
   plannedCosts?: Record<string, number>;
   /** Exact totals from individual fixed bills per category (fixed currency amount, immune to income % drift). */
   fixedBillLimits?: Record<string, number>;
+  /** Up to 3 past cycles (most recent first) for the projection's rhythm; defaults to just the previous cycle. */
+  history?: { transactions: Transaction[]; cycle: Cycle }[];
 }): Budget {
   const { transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, ownNames = [], cycle, income, warnAt, plannedCosts = {}, fixedBillLimits = {} } = args;
+  const history = args.history?.length ? args.history : [{ transactions: prevTransactions, cycle: prevCycle }];
   const ofIncome = (p: number) => (p / 100) * income;
   const { txs, netOf } = txViews(transactions, [...transactions, ...prevTransactions], { recat, links, shares, cycle, subs, ownNames });
 
@@ -319,7 +326,28 @@ export function computeBudget(args: {
   const varBudget = sum(cats.filter(c => c.type === 'variable').map(c => c.limit));
   const fixedDue = sum(bills.map(b => b.amount));
   const velDay = varSpent / cycle.dayN;
-  const projTotal = spent + velDay * cycle.daysLeft + fixedDue;
+  const isVariable = (cat: string) => categoryByName(cat)?.type === 'variable';
+  const proj = projectCycleSpend({
+    cycleDays: cycle.cycleDays,
+    dayIdx: cycle.dayIdx,
+    cur: txs
+      .filter(t => isVariable(t.cat) && t.offset >= 0 && t.offset <= cycle.dayIdx)
+      .map(t => ({ offset: t.offset, amount: t.net, committed: !!t.plan })),
+    history: history.map(h => {
+      const hDays = Math.max(1, h.cycle.cycleDays);
+      return {
+        days: hDays,
+        txs: h.transactions
+          .filter(t => isVariable(effectiveCategory(t, recat, ownNames)))
+          .map(t => ({ offset: h.cycle.offsetOf(t.date), amount: netOf(t), committed: !!t.plan }))
+          .filter(t => t.offset >= 0 && t.offset < hDays),
+      };
+    }),
+    varBudget,
+    varBillsDue: sum(bills.filter(b => isVariable(b.category)).map(b => b.amount)),
+    bills: bills.map(b => ({ offset: cycle.offsetOf(b.date), amount: b.amount })),
+  });
+  const projTotal = spent + proj.remainingVar + fixedDue;
 
   const prevCards = new Map<string, number>();
   for (const t of prevTransactions)
@@ -343,6 +371,7 @@ export function computeBudget(args: {
     fixedDue,
     velDay,
     projTotal,
+    proj,
     projSavePct: income > 0 ? 100 - (projTotal / income) * 100 : 0,
     paceToday: fixedSpent + (varBudget * cycle.dayN) / cycle.cycleDays,
     // Days remaining including today (matches "N days to payday" on Summary and Categories).

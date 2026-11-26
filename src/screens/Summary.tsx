@@ -9,6 +9,7 @@ import { Celebrate, useCountUp } from '../components/Delight';
 import { cycleKey, hasPlan, nextCycleOf } from '../lib/cyclePlans';
 import { changeBadge, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
+import { billLandingDay } from '../lib/pace';
 import { dayLabel, dayMonth, sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
@@ -448,14 +449,34 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
   const y = (v: number) => CH - (v / top) * CH;
   const actual = cum.slice(0, today + 1).map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
   const area = `${actual} L${x(today).toFixed(1)} ${CH} L0 ${CH} Z`;
-  const earlyCycle = cycle.dayN <= 3;
-  const overPlan = b.budget > 0 && end > b.budget;
-  const warnOver = overPlan && !earlyCycle;
+  const warnOver = b.budget > 0 && end > b.budget;
   const projInk = warnOver ? C.redInk : C.textMuted;
   const shownPast = hover != null && hover >= 0 && hover <= today ? hover : null;
   const shownFuture = hover != null && hover > today && hover < days ? hover : null;
   const activeDay = shownPast ?? shownFuture;
-  const projAt = (i: number) => cum[today] + ((end - cum[today]) * (i - today)) / Math.max(1, days - 1 - today);
+  const projAt = (i: number) => cum[today] + (b.proj.add[i] ?? 0);
+  // Projected path: everyday spend follows your rhythm; bills step up on the day they're due.
+  let projPath = `M${x(today).toFixed(1)} ${y(cum[today]).toFixed(1)}`;
+  for (let i = today + 1; i < days; i++) {
+    const bill = b.proj.billOn[i] ?? 0;
+    if (bill > 0) projPath += ` L${x(i).toFixed(1)} ${y(projAt(i) - bill).toFixed(1)}`;
+    projPath += ` L${x(i).toFixed(1)} ${y(projAt(i)).toFixed(1)}`;
+  }
+  const billsOnDay = (i: number) =>
+    b.bills.filter(bl => billLandingDay(cycle.offsetOf(bl.date), today, days) === i).map(bl => bl.title);
+  const projNote = [
+    b.proj.basis === 'history'
+      ? b.proj.historyCycles > 1
+        ? `Follows your last ${b.proj.historyCycles} cycles' spending rhythm`
+        : "Follows last cycle's spending rhythm"
+      : b.proj.basis === 'plan'
+        ? 'Blends your pace with your plan'
+        : 'Based on your pace so far',
+    b.proj.oneOffCount > 0 ? `${b.proj.oneOffCount} big one-off${b.proj.oneOffCount === 1 ? '' : 's'} counted once` : '',
+    b.bills.length > 0 ? 'bills on their due dates' : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const dotDay = activeDay ?? today;
   const dotVal = shownFuture != null ? projAt(shownFuture) : cum[dotDay];
   const lastSameDays = sum(b.cats.map(c => c.lastSameDays));
@@ -529,14 +550,13 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
             />
           )}
           {today < days - 1 && (
-            <line
-              x1={x(today)}
-              y1={y(cum[today])}
-              x2={CW}
-              y2={y(end)}
+            <path
+              d={projPath}
+              fill="none"
               stroke={warnOver ? 'var(--danger)' : 'var(--clay-ink)'}
               strokeWidth={1.8}
               strokeDasharray="5 4"
+              strokeLinejoin="round"
               opacity={warnOver ? 0.9 : 0.65}
               vectorEffect="non-scaling-stroke"
             />
@@ -569,6 +589,7 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
           (() => {
             const val = projAt(shownFuture);
             const rem = b.budget - val;
+            const due = billsOnDay(shownFuture);
             return (
               <span>
                 Projected {dayMonth(cycle.dateOf(shownFuture))}: <strong style={{ color: projInk }}>{short(val)}</strong>
@@ -580,21 +601,16 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
                     </strong>
                   </>
                 )}
+                {due.length > 0 && <> · incl. {due.join(', ')}</>}
               </span>
             );
           })()
         ) : (
           <span className={s.sxLineFootRow}>
-            <span>
+            <span title={projNote}>
               Spent <strong style={{ color: C.text }}>{short(b.spent)}</strong>
-              {earlyCycle && overPlan ? (
-                <> · Early pace — settles over the next few days</>
-              ) : (
-                <>
-                  {' · Heading for '}
-                  <strong style={{ color: projInk }}>{short(end)}</strong>
-                </>
-              )}
+              {' · Heading for '}
+              <strong style={{ color: projInk }}>{short(end)}</strong>
             </span>
             {vsLast && (
               <span className={s.sxDeltaBadge} style={{ background: vsLast.bg, color: vsLast.ink }} title="Compared to the same point last cycle">

@@ -8,12 +8,12 @@ import { startOfToday } from './format';
 
 /** Load transactions from the start of the previous pay cycle (needed for last-cycle comparisons). */
 /**
- * Imports from the 1st of the month two months back: settings (and so your payday) arrive with this same load, so
- * the window has to cover the previous pay cycle whatever day you're paid.
+ * Imports from the 1st of the month four months back: settings (and so your payday) arrive with this same load, so
+ * the window has to cover up to three full previous pay cycles whatever day you're paid.
  */
 const importsSince = () => {
   const t = startOfToday();
-  return new Date(t.getFullYear(), t.getMonth() - 2, 1);
+  return new Date(t.getFullYear(), t.getMonth() - 4, 1);
 };
 
 type Ctx = UserData & {
