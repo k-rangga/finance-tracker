@@ -18,6 +18,7 @@ import type { Bill } from '../data/transactions';
 import { UpcomingBills } from '../components/UpcomingBills';
 import type { ActivityFilter } from './Activity';
 import { FlameIcon, TargetIcon, TrophyIcon } from './categoriesExtras';
+import { CycleStoryModal, DailyRitualCard, MaxieVignette } from './SummaryRituals';
 
 type TxPatch = Pick<ActivityFilter, 'range'> & Partial<ActivityFilter>;
 
@@ -39,14 +40,33 @@ type SummaryProps = {
 };
 
 /**
- * The cycle at a glance, charts first: a warm daily greeting from Maxie, earned milestone wins, actionable alerts when
- * needed, what's left, three interactive tiles, spending by day, where the money went (treemap), upcoming bills, and
- * recent activity.
+ * The cycle at a glance, charts first: a warm daily greeting from Maxie, living ambient vignette, daily check-in,
+ * earned milestone wins, gentle alerts, what's left, three interactive tiles, spending by day, where the money went
+ * (treemap), upcoming bills, and recent activity.
  */
 export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, onDismissBill, onMarkBillPaid, onShowTransactions, onPlanNext, onAskMaxie }: SummaryProps) {
   const { ofIncome, settings } = useSettings();
   const id = toISO(cycle.start);
+  const todayISO = toISO(cycle.today);
+  const storyKey = `moneyTracker.storySeen.${todayISO}`;
+  const [storyOpen, setStoryOpen] = useState(false);
+
+  // Open the 3-card Cycle Story pop-up gently on first visit of the day (skipped in Quiet mode or empty cycles).
+  useEffect(() => {
+    if (settings.quietMode || b.txs.length === 0) return;
+    if (storage.getRaw(storyKey)) return;
+    const t = setTimeout(() => {
+      storage.setRaw(storyKey, '1');
+      setStoryOpen(true);
+    }, 320);
+    return () => clearTimeout(t);
+  }, [storyKey, settings.quietMode, b.txs.length]);
+
   const target = ofIncome(SAVINGS_TARGET_PCT);
+  const streak = smoothStreakDays(cycle, b);
+  const todaySpend = sum(
+    b.txs.filter(t => t.offset === cycle.dayIdx && categoryByName(t.cat) && !t.isIncome && !t.isTransfer).map(t => t.net),
+  );
   const scrollToBills = () => document.getElementById('summary-bills')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   return (
     <div className={s.sxSumGrid}>
@@ -54,6 +74,15 @@ export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, on
       <Celebrate id={id + '.saved'} when={target > 0 && b.saved >= target} />
       <Celebrate id={id + '.under'} when={cycle.daysLeft <= 1 && b.spent <= b.budget} />
       <MaxieGreeting cycle={cycle} budget={b} onAskMaxie={onAskMaxie} />
+      <MaxieVignette
+        cycle={cycle}
+        budget={b}
+        target={target}
+        streak={streak}
+        todaySpend={todaySpend}
+        onOpenStory={() => setStoryOpen(true)}
+      />
+      <DailyRitualCard cycle={cycle} budget={b} />
       <WinsStrip cycle={cycle} budget={b} target={target} />
       {cycle.daysLeft <= 4 && <PlanNextNudge cycle={cycle} planned={hasPlan(settings.cyclePlans?.[cycleKey(nextCycleOf(cycle))])} onOpen={onPlanNext} />}
       <NeedsAttention
@@ -78,6 +107,7 @@ export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, on
         onSeeAll={range => onShowTransactions({ range })}
         onOpenTx={t => onShowTransactions({ range: 'custom', from: toISO(t.date), to: toISO(t.date), cat: categoryByName(t.cat) ? t.cat : '' })}
       />
+      <CycleStoryModal cycle={cycle} budget={b} open={storyOpen} onClose={() => setStoryOpen(false)} />
     </div>
   );
 }
