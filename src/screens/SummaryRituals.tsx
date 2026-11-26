@@ -41,48 +41,8 @@ export function resolveVignetteScene({
   return { scene: 'steady', label: 'Clear afternoon', sub: 'Steady clouds and comfortable room ahead.' };
 }
 
-/**
- * Living Maxie Vignette: an editorial drawn-SVG window scene that subtly mirrors your cycle mood
- * (payday sunrise, blooming plant on savings goal, cozy lamp on zero-spend streak, gentle rain when above plan).
- */
-export function MaxieVignette({
-  cycle,
-  budget: b,
-  target,
-  streak,
-  todaySpend,
-  onOpenStory,
-}: {
-  cycle: Cycle;
-  budget: Budget;
-  target: number;
-  streak: number;
-  todaySpend: number;
-  onOpenStory: () => void;
-}) {
-  const { settings } = useSettings();
-  if (settings.quietMode) return null;
-  const info = resolveVignetteScene({ cycle, budget: b, target, streak, todaySpend });
-
-  return (
-    <section className={s.vigCard} data-wide data-scene={info.scene} aria-label={`Maxie's room: ${info.label}`}>
-      <div className={s.vigArtWrap} aria-hidden="true">
-        <VignetteSvg scene={info.scene} />
-      </div>
-      <div className={s.vigBody}>
-        <span className={s.vigTag}>{info.label}</span>
-        <p className={s.vigSub}>{info.sub}</p>
-      </div>
-      <button type="button" className={s.btnOutlineSm} onClick={onOpenStory}>
-        <Icon d={IC.sparkle} size={13} />
-        Cycle story
-      </button>
-    </section>
-  );
-}
-
 /** Minimalist ceramic/editorial window illustration (180×76 viewBox) adapting cleanly to Light & Dark mode. */
-function VignetteSvg({ scene }: { scene: VignetteScene }) {
+export function VignetteSvg({ scene }: { scene: VignetteScene }) {
   return (
     <svg viewBox="0 0 180 76" className={s.vigSvg}>
       {/* Soft room backdrop */}
@@ -154,19 +114,29 @@ function VignetteSvg({ scene }: { scene: VignetteScene }) {
         </g>
       )}
 
-      {/* Calm sitting Maxie silhouette on the sill */}
-      <g transform="translate(76 28)">
-        {/* Body */}
-        <path d="M12 29 C10 21 13 15 20 14 C27 15 29 21 28 29 Z" fill="var(--clay)" opacity="0.92" />
-        {/* Fluffy curled tail */}
-        <path d="M27 27 Q35 25 33 19 Q31 16 27 20" fill="none" stroke="var(--clay)" strokeWidth="3.2" strokeLinecap="round" />
-        {/* Head + ears */}
-        <path d="M14 14 L15.5 6 L19.5 10.5 Q22 9.8 24.5 10.5 L28.5 6 L30 14 C30 18.5 26.5 21 22 21 C17.5 21 14 18.5 14 14 Z" fill="var(--clay)" />
-        {/* Ivory mask & happy/calm eyes */}
-        <ellipse cx="22" cy="16.2" rx="5.2" ry="4.1" fill="var(--mark-face)" />
-        <circle cx="19.8" cy="15.2" r="1" fill="var(--mark-eye)" />
-        <circle cx="24.2" cy="15.2" r="1" fill="var(--mark-eye)" />
-        <circle cx="22" cy="17.2" r="1.1" fill="var(--clay)" />
+      {/* Calm sitting Siberian Husky Maxie on the windowsill */}
+      <g transform="translate(74 26)">
+        {/* Thick curled husky plume tail (wolf-grey outer, snow-white inner) */}
+        <path d="M27 29 Q37 26 35 18 Q33 14 28 19" fill="none" stroke="#4F5A67" strokeWidth="4.2" strokeLinecap="round" />
+        <path d="M28 28 Q35 25 34 19.5" fill="none" stroke="#F4F0E8" strokeWidth="2" strokeLinecap="round" />
+        {/* Sturdy husky body (wolf-grey mantle + fluffy snow-white chest bib) */}
+        <path d="M11 31 C9.5 22 13 15 20.5 14 C28 15 30 22 28.5 31 Z" fill="#4F5A67" />
+        <path d="M15.5 31 C15 24 17 19 20.5 18.5 C24 19 25.5 24 24.5 31 Z" fill="#F4F0E8" />
+        {/* Warm terracotta collar */}
+        <path d="M15 19.5 Q20.5 22 26 19.5" fill="none" stroke="var(--clay)" strokeWidth="2" strokeLinecap="round" />
+        {/* Husky head: closer upright ears, fluffy wolf cheek tufts, white forehead blaze & mask */}
+        <path d="M13.5 14 L15 5.5 L19.5 10.5 Q21.5 9.8 23.5 10.5 L28 5.5 L29.5 14 L31 16.5 L28.5 18.2 C27.2 21 24.2 22.2 21.5 22.2 C18.8 22.2 15.8 21 14.5 18.2 L12 16.5 Z" fill="#4F5A67" />
+        <path d="M16 8 L15.4 12.2 L18.2 11 Z M27 8 L27.6 12.2 L24.8 11 Z" fill="#F4F0E8" />
+        <path d="M21.5 11.4 L22.5 14.6 C24.8 14.2 27.6 15.6 27.6 18.2 C27 20.6 24.4 21.8 21.5 21.8 C18.6 21.8 16 20.6 15.4 18.2 C15.4 15.6 18.2 14.2 20.5 14.6 Z" fill="#F4F0E8" />
+        {/* White husky brow pips */}
+        <circle cx="18.6" cy="13.5" r="0.85" fill="#F4F0E8" />
+        <circle cx="24.4" cy="13.5" r="0.85" fill="#F4F0E8" />
+        {/* Ice-blue eyes & dark dog nose */}
+        <circle cx="18.8" cy="16.2" r="1.15" fill="#7AC7EE" />
+        <circle cx="24.2" cy="16.2" r="1.15" fill="#7AC7EE" />
+        <circle cx="18.8" cy="16.2" r="0.55" fill="#1F252C" />
+        <circle cx="24.2" cy="16.2" r="0.55" fill="#1F252C" />
+        <ellipse cx="21.5" cy="18.4" rx="1.5" ry="1.05" fill="#1F252C" />
       </g>
     </svg>
   );
@@ -455,7 +425,13 @@ export function CycleStoryModal({
 
   return (
     <div className={s.storyOverlay} onMouseDown={e => e.target === e.currentTarget && onClose()}>
-      <section className={`${s.storyModal} fade-in`} role="dialog" aria-modal="true" aria-label="Story of your cycle">
+      <section className={`${s.storyModal} fade-in`} data-card={idx} role="dialog" aria-modal="true" aria-label="Story of your cycle">
+        {/* Full-bleed seamless background illustration covering the entire card */}
+        <div key={`art-${idx}`} className={s.storyBg} aria-hidden="true">
+          {card.art}
+        </div>
+
+        {/* Floating top progress bars + frosted close button */}
         <div className={s.storyTop}>
           <div className={s.storyDots} role="tablist" aria-label="Story cards">
             {cards.map((c, i) => (
@@ -472,16 +448,14 @@ export function CycleStoryModal({
               />
             ))}
           </div>
-          <button type="button" className={s.iconBtnSm} aria-label="Close story" onClick={onClose}>
-            <Icon d={IC.close} size={16} />
+          <button type="button" className={s.storyClose} aria-label="Close story" onClick={onClose}>
+            <Icon d={IC.close} size={15} />
           </button>
         </div>
 
-        <div key={idx} className={s.storyCardBody}>
-          <div className={s.storyArt} aria-hidden="true">
-            {card.art}
-          </div>
-          <div className={s.storyCopy}>
+        {/* Lower seamless editorial overlay floating over the landscape's atmospheric fade */}
+        <div className={s.storyContent}>
+          <div key={`copy-${idx}`} className={s.storyCopy}>
             <span className={s.storyKicker}>{card.kicker}</span>
             <h2 className={s.storyTitle}>{card.title}</h2>
             <p className={s.storyText}>{card.body}</p>
@@ -489,32 +463,32 @@ export function CycleStoryModal({
               <div className={s.storyChips}>
                 {card.chips.map(ch => (
                   <div key={ch.label} className={s.storyChip}>
-                    <span className={s.modelKpiLabel}>{ch.label}</span>
-                    <strong>{ch.val}</strong>
+                    <span className={s.storyChipLabel}>{ch.label}</span>
+                    <strong className={s.storyChipVal}>{ch.val}</strong>
                   </div>
                 ))}
               </div>
             )}
           </div>
-        </div>
 
-        <div className={s.storyFoot}>
-          <Logo size={28} mood={idx === 2 ? 'happy' : 'calm'} followCursor />
-          <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-            {idx > 0 && (
-              <button type="button" className={s.btnGhost} onClick={() => setIdx(i => i - 1)}>
-                Back
-              </button>
-            )}
-            {idx < cards.length - 1 ? (
-              <button type="button" className={s.btnPrimarySm} onClick={() => setIdx(i => i + 1)}>
-                Next
-              </button>
-            ) : (
-              <button type="button" className={s.btnPrimarySm} onClick={onClose}>
-                Continue to Summary
-              </button>
-            )}
+          <div className={s.storyFoot}>
+            <Logo size={26} mood={idx === 2 ? 'happy' : 'calm'} followCursor />
+            <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+              {idx > 0 && (
+                <button type="button" className={s.storyBtnGhost} onClick={() => setIdx(i => i - 1)}>
+                  Back
+                </button>
+              )}
+              {idx < cards.length - 1 ? (
+                <button type="button" className={s.storyBtnPrimary} onClick={() => setIdx(i => i + 1)}>
+                  Next
+                </button>
+              ) : (
+                <button type="button" className={s.storyBtnPrimary} onClick={onClose}>
+                  Continue to Summary
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -522,121 +496,358 @@ export function CycleStoryModal({
   );
 }
 
-/** Card 1 Art: Maxie bounding happily along a sunlit alpine mountain ridge. */
+/** Card 1 Art (Full-Card Seamless): Siberian Husky Maxie bounding cheerfully along a misty dawn mountain ridge. */
 function MountainRunSvg() {
   return (
-    <svg viewBox="0 0 360 154" className={s.storySvg}>
-      <rect width="360" height="154" fill="var(--bg)" />
-      {/* Warm sunrise sun */}
-      <circle cx="272" cy="46" r="24" fill="var(--amber)" opacity="0.22" />
-      <circle cx="272" cy="46" r="14" fill="var(--amber)" opacity="0.65" />
-      {/* Distant misty peaks */}
-      <path d="M0 112 L68 54 L132 98 L206 42 L286 100 L360 66 V154 H0 Z" fill="var(--category-9)" opacity="0.22" />
-      <path d="M0 124 L94 74 L172 114 L256 64 L360 118 V154 H0 Z" fill="var(--category-8)" opacity="0.28" />
-      {/* Foreground serene meadow ridge */}
-      <path d="M0 124 Q96 98 188 112 T360 106 V154 H0 Z" fill="var(--good)" opacity="0.28" />
-      {/* Minimalist pines */}
-      <g fill="var(--good)" opacity="0.55">
-        <path d="M44 114 L51 94 L58 114 Z" />
-        <path d="M62 116 L67 101 L72 116 Z" />
-        <path d="M308 111 L315 92 L322 111 Z" />
+    <svg viewBox="0 0 420 560" preserveAspectRatio="xMidYMid slice" className={s.storySvg}>
+      <defs>
+        <linearGradient id="stMtnSky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#263638" />
+          <stop offset="32%" stopColor="#4F6B6B" />
+          <stop offset="56%" stopColor="#C9A88C" />
+          <stop offset="100%" stopColor="#1B2724" />
+        </linearGradient>
+        <radialGradient id="stMtnSun" cx="72%" cy="22%" r="36%">
+          <stop offset="0%" stopColor="#F5D3A3" stopOpacity="0.88" />
+          <stop offset="45%" stopColor="#E6B284" stopOpacity="0.32" />
+          <stop offset="100%" stopColor="#E6B284" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="stMtnFade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#1A2623" stopOpacity="0" />
+          <stop offset="38%" stopColor="#1A2623" stopOpacity="0.06" />
+          <stop offset="55%" stopColor="#1A2623" stopOpacity="0.72" />
+          <stop offset="72%" stopColor="#1A2623" stopOpacity="0.96" />
+          <stop offset="100%" stopColor="#16201E" stopOpacity="1" />
+        </linearGradient>
+      </defs>
+
+      {/* Painterly dawn sky */}
+      <rect width="420" height="560" fill="url(#stMtnSky)" />
+      <rect width="420" height="340" fill="url(#stMtnSun)" />
+
+      {/* Calm rising dawn sun */}
+      <circle cx="304" cy="118" r="24" fill="#F9E3C0" opacity="0.88" />
+
+      {/* Soft high alpine mist clouds */}
+      <g fill="#F4EBE0" opacity="0.22" className={s.vigDrift}>
+        <ellipse cx="104" cy="96" rx="46" ry="9" />
+        <ellipse cx="130" cy="91" rx="28" ry="8" />
+        <ellipse cx="264" cy="84" rx="34" ry="7" />
       </g>
-      {/* Running Maxie silhouette bounding across the ridge */}
-      <g transform="translate(154 78)">
+
+      {/* Distant snow-dusted mountain range */}
+      <path d="M-10 250 L74 148 L142 198 L228 118 L314 196 L382 146 L430 202 V360 H-10 Z" fill="#3B5152" />
+      {/* Subtle sunlit snow ridges on peaks */}
+      <path d="M228 118 L244 152 L226 144 L214 156 Z M74 148 L88 172 L75 168 L64 176 Z M382 146 L392 168 L380 164 Z" fill="#EFE7DC" opacity="0.52" />
+
+      {/* Midground pine-covered mountain slope */}
+      <path d="M-10 278 L108 186 L196 238 L296 174 L430 258 V390 H-10 Z" fill="#2D423E" />
+
+      {/* Foreground sunlit alpine meadow ridge where Maxie runs */}
+      <path d="M-10 272 Q112 232 222 252 T430 238 V560 H-10 Z" fill="#293E37" />
+      <path d="M-10 276 Q116 238 228 258 T430 246 V320 H-10 Z" fill="#3E5C50" opacity="0.52" />
+
+      {/* Minimalist alpine pines framing the trail */}
+      <g fill="#1F332E" opacity="0.9">
+        <path d="M36 266 L48 224 L60 266 Z" />
+        <path d="M58 269 L68 238 L78 269 Z" />
+        <path d="M342 252 L354 212 L366 252 Z" />
+        <path d="M368 256 L376 230 L384 256 Z" />
+      </g>
+
+      {/* Soft meadow grass wisps */}
+      <g stroke="#7B9B8A" strokeWidth="1.5" strokeLinecap="round" opacity="0.42">
+        <path d="M98 274 Q96 265 101 260 M105 275 Q107 267 110 263 M292 268 Q290 259 295 254" fill="none" />
+      </g>
+
+      {/* Ground shadow under running husky */}
+      <ellipse cx="212" cy="264" rx="46" ry="6.5" fill="#131E1B" opacity="0.38" />
+
+      {/* Siberian Husky Maxie bounding joyously along the alpine ridge */}
+      <g transform="translate(148 182)">
         <g className={s.storyMaxieRun}>
-          {/* Fluffy tail streaming back */}
-          <path d="M4 18 Q-6 12 -3 6 Q2 4 8 13" fill="none" stroke="var(--clay)" strokeWidth="4" strokeLinecap="round" />
-          {/* Striding hind & front legs */}
-          <path d="M12 22 L4 31 M16 22 L12 31 M30 22 L38 29 M34 21 L44 26" stroke="var(--clay)" strokeWidth="3.2" strokeLinecap="round" />
-          {/* Torso */}
-          <ellipse cx="22" cy="18" rx="14" ry="7.5" transform="rotate(-7 22 18)" fill="var(--clay)" />
-          {/* Ivory chest */}
-          <path d="M27 14 Q35 16 33 23 Q27 24 25 19 Z" fill="var(--mark-face)" opacity="0.9" />
-          {/* Head + perked husky ears */}
-          <path d="M30 12 L33 2 L38 8 L43 3 L44 12 C45 17 41 20 36 20 C31 20 29 17 30 12 Z" fill="var(--clay)" />
-          <ellipse cx="38.5" cy="14.5" rx="4.2" ry="3.4" fill="var(--mark-face)" />
-          <circle cx="39.8" cy="13.8" r="1.1" fill="var(--mark-eye)" />
-          <circle cx="42.5" cy="15.2" r="1.1" fill="var(--clay)" />
+          {/* Thick, fluffy curled Siberian Husky plume tail (wolf-grey top, snow-white underside & tip) */}
+          <path d="M16 42 C2 35 -4 18 8 10 C17 5 26 14 23 28" fill="#444F5C" />
+          <path d="M18 40 C6 34 3 21 11 15 C16 12 22 17 20 28" fill="#F5F2EC" />
+
+          {/* Far hind leg & far front leg (snow-white husky legs with subtle shade) */}
+          <path d="M34 52 L19 72 Q16 76 20 77 L26 76 L41 56 Z" fill="#D9D5CE" />
+          <path d="M74 48 L96 64 Q100 67 97 70 L91 69 L68 53 Z" fill="#D9D5CE" />
+
+          {/* Sturdy athletic torso: wolf-charcoal saddle + generous snow-white underbelly & chest ruff */}
+          <path d="M22 44 C26 27 46 22 72 26 C84 28 90 36 86 48 C81 58 64 60 44 58 C30 56 20 52 22 44 Z" fill="#444F5C" />
+          {/* Silver-grey shoulder highlight */}
+          <path d="M32 33 Q52 26 72 30 Q62 38 38 38 Z" fill="#637182" opacity="0.55" />
+          {/* Fluffy snow-white belly & deep husky chest ruff */}
+          <path d="M30 50 C42 46 58 45 70 36 C77 31 85 33 88 41 C89 50 81 59 68 60 C52 61 36 58 30 50 Z" fill="#F5F2EC" />
+          {/* Cheeky fluff tufts on chest */}
+          <path d="M84 42 L91 45 L85 49 L89 53 L80 54 Z" fill="#F5F2EC" />
+
+          {/* Near hind leg & near front leg (crisp snow-white legs & paws) */}
+          <path d="M39 50 L29 74 Q27 79 32 79 L38 77 L49 54 Z" fill="#F5F2EC" />
+          <path d="M68 48 L88 71 Q91 75 96 73 L97 68 L77 44 Z" fill="#F5F2EC" />
+
+          {/* Warm terracotta collar tying Maxie to the app palette */}
+          <path d="M72 32 Q81 39 87 37" fill="none" stroke="#D98366" strokeWidth="4.2" strokeLinecap="round" />
+          <circle cx="87" cy="40" r="2.2" fill="#E8C27A" />
+
+          {/* Siberian Husky head (profile-3/4): closer-set upright triangular ears, snow mask, white brow pip, fluffy cheek tuft, broad snout & dark nose */}
+          <g transform="translate(74 9)">
+            {/* Far upright ear */}
+            <path d="M18 11 L23 0 Q25 -1 27 2 L28 13 Z" fill="#3B4552" />
+            <path d="M21 10 L24 3 L26 11 Z" fill="#EDE8DF" />
+            {/* Main wolf-grey skull & forehead cap */}
+            <path d="M4 22 C4 12 12 7 22 9 C29 10 35 15 38 20 L42 23 C43 26 40 29 35 30 L28 32 C20 34 10 31 5 26 Z" fill="#444F5C" />
+            {/* Near upright husky ear with snow-white inner fur */}
+            <path d="M7 14 L8 0 Q10 -2 13 1 L20 11 Z" fill="#444F5C" />
+            <path d="M10 12 L11 3 L17 11 Z" fill="#F5F2EC" />
+            {/* Iconic snow-white husky facial mask, muzzle & fluffy wolf cheek tuft */}
+            <path d="M14 20 C19 16 27 16 34 19 L41 22 C43 25 40 29 34 30 L24 32 C15 33 8 29 6 25 L10 23 L7 20 Z" fill="#F5F2EC" />
+            {/* White husky eyebrow pip above eye */}
+            <ellipse cx="23.5" cy="14.5" rx="2.4" ry="1.2" transform="rotate(-12 23.5 14.5)" fill="#F5F2EC" />
+            {/* Cheerful ice-blue husky eye with sparkle */}
+            <ellipse cx="26.2" cy="18.6" rx="2.3" ry="2.1" fill="#7CC8EE" />
+            <circle cx="26.6" cy="18.6" r="1.05" fill="#1B2128" />
+            <circle cx="27.2" cy="17.9" r="0.55" fill="#FFFFFF" />
+            {/* Broad dark dog nose (not a pointy fox tip) */}
+            <path d="M38.5 21.2 Q42 20.8 42.5 23.5 Q41 25.5 38.2 24.4 Z" fill="#1D2229" />
+            {/* Happy gentle smile + tiny warm tongue */}
+            <path d="M31 26.8 Q35.5 28.5 38.8 26.2" fill="none" stroke="#2D3540" strokeWidth="1.35" strokeLinecap="round" />
+            <path d="M33.5 27.5 Q35.5 31.2 37.5 27.6 Z" fill="#DF8F8B" />
+          </g>
         </g>
       </g>
+
+      {/* Seamless atmospheric veil fading the mountain meadow smoothly into the card text canvas */}
+      <rect width="420" height="560" fill="url(#stMtnFade)" />
     </svg>
   );
 }
 
-/** Card 2 Art: Maxie trotting calmly beside a tranquil sea-glass lake with ripples and reeds. */
+/** Card 2 Art (Full-Card Seamless): Siberian Husky Maxie trotting calmly beside a mirror-still alpine lake. */
 function LakeTrotSvg() {
   return (
-    <svg viewBox="0 0 360 154" className={s.storySvg}>
-      <rect width="360" height="154" fill="var(--bg)" />
-      {/* Soft afternoon sun reflection */}
-      <circle cx="110" cy="40" r="16" fill="var(--amber)" opacity="0.35" />
-      {/* Distant rolling shore hills */}
-      <path d="M0 84 Q88 52 180 76 T360 68 V96 H0 Z" fill="var(--category-2)" opacity="0.22" />
-      {/* Calm reflective sea-glass lake */}
-      <rect x="0" y="88" width="360" height="66" fill="var(--category-2)" opacity="0.2" />
-      {/* Gentle shimmering water ripples */}
-      <g stroke="var(--category-2)" strokeWidth="1.5" strokeLinecap="round" opacity="0.45" className={s.vigDrift}>
-        <line x1="78" y1="104" x2="146" y2="104" />
-        <line x1="94" y1="114" x2="132" y2="114" />
-        <line x1="210" y1="108" x2="278" y2="108" />
-        <line x1="232" y1="120" x2="268" y2="120" />
+    <svg viewBox="0 0 420 560" preserveAspectRatio="xMidYMid slice" className={s.storySvg}>
+      <defs>
+        <linearGradient id="stLakeSky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#263B48" />
+          <stop offset="30%" stopColor="#587C8D" />
+          <stop offset="48%" stopColor="#B8C9CE" />
+          <stop offset="100%" stopColor="#18252E" />
+        </linearGradient>
+        <radialGradient id="stLakeSun" cx="30%" cy="22%" r="34%">
+          <stop offset="0%" stopColor="#F5E1BE" stopOpacity="0.82" />
+          <stop offset="50%" stopColor="#D6D3C5" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#D6D3C5" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="stLakeWater" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#6D94A2" stopOpacity="0.72" />
+          <stop offset="55%" stopColor="#3B5C6B" stopOpacity="0.82" />
+          <stop offset="100%" stopColor="#1A2A34" stopOpacity="1" />
+        </linearGradient>
+        <linearGradient id="stLakeFade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#17242D" stopOpacity="0" />
+          <stop offset="40%" stopColor="#17242D" stopOpacity="0.06" />
+          <stop offset="57%" stopColor="#17242D" stopOpacity="0.76" />
+          <stop offset="74%" stopColor="#17242D" stopOpacity="0.97" />
+          <stop offset="100%" stopColor="#141F27" stopOpacity="1" />
+        </linearGradient>
+      </defs>
+
+      {/* Tranquil afternoon lake sky */}
+      <rect width="420" height="560" fill="url(#stLakeSky)" />
+      <rect width="420" height="300" fill="url(#stLakeSun)" />
+
+      {/* Soft afternoon sun */}
+      <circle cx="122" cy="112" r="20" fill="#FAF0DA" opacity="0.86" />
+
+      {/* Distant rolling fjord hills */}
+      <path d="M-10 198 Q84 148 188 182 T430 166 V220 H-10 Z" fill="#4A6B7A" opacity="0.72" />
+      <path d="M-10 208 Q120 172 246 196 T430 184 V224 H-10 Z" fill="#355260" opacity="0.85" />
+
+      {/* Mirror-calm sea-glass lake */}
+      <rect x="0" y="206" width="420" height="160" fill="url(#stLakeWater)" />
+
+      {/* Soft golden sun shimmer + drifting ripples on the lake */}
+      <g stroke="#EFE4CE" strokeLinecap="round" opacity="0.34" className={s.vigDrift}>
+        <line x1="92" y1="220" x2="152" y2="220" strokeWidth="2.4" />
+        <line x1="104" y1="230" x2="142" y2="230" strokeWidth="1.8" />
+        <line x1="112" y1="240" x2="134" y2="240" strokeWidth="1.4" />
+        <line x1="256" y1="226" x2="322" y2="226" strokeWidth="1.4" opacity="0.6" />
+        <line x1="278" y1="238" x2="314" y2="238" strokeWidth="1.2" opacity="0.5" />
       </g>
-      {/* Foreground warm sandy shoreline */}
-      <path d="M0 124 Q130 112 248 128 T360 122 V154 H0 Z" fill="var(--category-8)" opacity="0.32" />
-      {/* Minimalist reeds */}
-      <g stroke="var(--good)" strokeWidth="1.6" strokeLinecap="round" opacity="0.6">
-        <path d="M36 132 Q34 114 39 102 M44 134 Q46 118 42 108 M316 134 Q319 116 314 104" fill="none" />
+
+      {/* Warm pebble & grass shoreline bank */}
+      <path d="M-10 274 Q140 250 284 268 T430 258 V560 H-10 Z" fill="#2A3E46" />
+      <path d="M-10 274 Q142 252 284 270 T430 260 V296 H-10 Z" fill="#465D64" opacity="0.55" />
+
+      {/* Minimalist lakeside reeds */}
+      <g stroke="#6C8C87" strokeWidth="1.8" strokeLinecap="round" opacity="0.7">
+        <path d="M40 286 Q36 254 44 230 M50 290 Q53 262 47 242 M372 282 Q376 252 368 228 M382 286 Q385 264 380 246" fill="none" />
       </g>
-      {/* Maxie happily trotting along the lakeside shore */}
-      <g transform="translate(170 92)">
+
+      {/* Soft shore shadow */}
+      <ellipse cx="218" cy="272" rx="44" ry="6" fill="#121D23" opacity="0.4" />
+
+      {/* Siberian Husky Maxie trotting peacefully along the lakefront */}
+      <g transform="translate(158 190)">
         <g className={s.storyMaxieRun}>
-          <path d="M6 17 Q-2 10 3 6 Q8 6 10 14" fill="none" stroke="var(--clay)" strokeWidth="3.8" strokeLinecap="round" />
-          <path d="M13 21 L9 30 M18 22 L19 30 M28 22 L27 30 M32 21 L37 29" stroke="var(--clay)" strokeWidth="3" strokeLinecap="round" />
-          <ellipse cx="22" cy="18" rx="13" ry="7" fill="var(--clay)" />
-          <path d="M27 14 Q34 16 32 22 Q27 23 25 19 Z" fill="var(--mark-face)" opacity="0.9" />
-          <path d="M29 12 L32 3 L36.5 8.5 L41.5 3.5 L42.5 12 C43.5 16.5 40 19.5 35.5 19.5 C31 19.5 28.5 16.5 29 12 Z" fill="var(--clay)" />
-          <ellipse cx="37.2" cy="14.5" rx="4" ry="3.2" fill="var(--mark-face)" />
-          <circle cx="38.5" cy="13.8" r="1.1" fill="var(--mark-eye)" />
-          <circle cx="41.2" cy="15.2" r="1.1" fill="var(--clay)" />
+          {/* High curled husky sickle tail with fluffy white inner curl */}
+          <path d="M18 42 C5 34 2 14 14 7 C22 3 30 12 26 26" fill="#424D5A" />
+          <path d="M20 40 C10 33 8 18 16 13 C22 10 25 16 23 26" fill="#F5F2EC" />
+
+          {/* Far legs (trotting stride) */}
+          <path d="M36 52 L28 76 Q27 80 31 80 L36 78 L44 54 Z" fill="#D5D2CB" />
+          <path d="M70 50 L80 75 Q82 79 86 78 L88 73 L76 48 Z" fill="#D5D2CB" />
+
+          {/* Sturdy wolf-grey husky body & snow-white chest/belly */}
+          <path d="M22 44 C26 28 46 24 72 27 C84 29 89 37 85 48 C80 57 62 60 44 58 C30 56 20 52 22 44 Z" fill="#424D5A" />
+          <path d="M34 34 Q54 28 72 32 Q62 40 38 39 Z" fill="#637284" opacity="0.52" />
+          <path d="M31 50 C43 46 58 45 70 36 C77 32 85 35 87 43 C87 52 79 59 66 60 C50 61 36 58 31 50 Z" fill="#F5F2EC" />
+
+          {/* Near legs (crisp snow-white paws) */}
+          <path d="M41 52 L45 77 Q46 81 51 80 L54 76 L50 52 Z" fill="#F5F2EC" />
+          <path d="M64 50 L62 77 Q62 81 67 80 L70 76 L72 50 Z" fill="#F5F2EC" />
+
+          {/* Terracotta collar + brass tag */}
+          <path d="M71 33 Q79 40 86 38" fill="none" stroke="#D98366" strokeWidth="4.2" strokeLinecap="round" />
+          <circle cx="85" cy="41" r="2.2" fill="#E8C27A" />
+
+          {/* Husky head turned warmly in cheerful trot */}
+          <g transform="translate(72 10)">
+            <path d="M18 11 L23 1 Q25 -1 27 2 L28 13 Z" fill="#37414D" />
+            <path d="M21 10 L24 3.5 L26 11 Z" fill="#ECE7DE" />
+            <path d="M4 22 C4 12 12 7 22 9 C29 10 35 15 38 20 L42 23 C43 26 40 29 35 30 L27 32 C19 34 9 31 5 26 Z" fill="#424D5A" />
+            <path d="M7 14 L8 0 Q10 -2 13 1 L20 11 Z" fill="#424D5A" />
+            <path d="M10 12 L11 3 L17 11 Z" fill="#F5F2EC" />
+            <path d="M13 20 C19 16 27 16 34 19 L41 22 C43 25 40 29 34 30 L23 32 C14 33 8 29 6 25 L10 23 L7 20 Z" fill="#F5F2EC" />
+            <ellipse cx="23.5" cy="14.5" rx="2.4" ry="1.2" transform="rotate(-10 23.5 14.5)" fill="#F5F2EC" />
+            {/* Signature ice-blue husky eye */}
+            <ellipse cx="26" cy="18.6" rx="2.3" ry="2.1" fill="#7CC8EE" />
+            <circle cx="26.4" cy="18.6" r="1.05" fill="#1B2128" />
+            <circle cx="27" cy="17.9" r="0.55" fill="#FFFFFF" />
+            {/* Broad dark dog nose & content smile */}
+            <path d="M38.5 21.2 Q42 20.8 42.5 23.5 Q41 25.5 38.2 24.4 Z" fill="#1D2229" />
+            <path d="M30.5 26.8 Q35 28.4 38.5 26" fill="none" stroke="#2D3540" strokeWidth="1.4" strokeLinecap="round" />
+          </g>
         </g>
       </g>
+
+      {/* Seamless atmospheric veil melting the shoreline into the deep lake card base */}
+      <rect width="420" height="560" fill="url(#stLakeFade)" />
     </svg>
   );
 }
 
-/** Card 3 Art: Maxie sitting peacefully by a warm lantern overlooking twilight peaks toward payday. */
+/** Card 3 Art (Full-Card Seamless): Siberian Husky Maxie sitting calmly beside a warm lantern under twilight peaks. */
 function TwilightCampSvg() {
   return (
-    <svg viewBox="0 0 360 154" className={s.storySvg}>
-      <rect width="360" height="154" fill="var(--bg)" />
-      {/* Soft twilight sky wash */}
-      <rect width="360" height="104" fill="var(--sky)" opacity="0.14" />
-      {/* Gentle stars & crescent moon */}
-      <path d="M294 26 A11 11 0 1 0 307 39 A8.5 8.5 0 1 1 294 26 Z" fill="var(--amber)" opacity="0.72" />
-      <g fill="var(--ink-muted)" opacity="0.5">
-        <circle cx="66" cy="28" r="1.3" />
-        <circle cx="122" cy="20" r="1.1" />
-        <circle cx="218" cy="30" r="1.4" />
-        <circle cx="256" cy="18" r="1" />
+    <svg viewBox="0 0 420 560" preserveAspectRatio="xMidYMid slice" className={s.storySvg}>
+      <defs>
+        <linearGradient id="stTwSky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#192033" />
+          <stop offset="34%" stopColor="#2C354D" />
+          <stop offset="56%" stopColor="#4A4458" />
+          <stop offset="100%" stopColor="#181C28" />
+        </linearGradient>
+        <radialGradient id="stLanternGlow" cx="62%" cy="44%" r="28%">
+          <stop offset="0%" stopColor="#F5C37A" stopOpacity="0.55" />
+          <stop offset="45%" stopColor="#E6A15C" stopOpacity="0.18" />
+          <stop offset="100%" stopColor="#E6A15C" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="stTwFade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#181C28" stopOpacity="0" />
+          <stop offset="40%" stopColor="#181C28" stopOpacity="0.06" />
+          <stop offset="57%" stopColor="#181C28" stopOpacity="0.78" />
+          <stop offset="74%" stopColor="#181C28" stopOpacity="0.97" />
+          <stop offset="100%" stopColor="#151822" stopOpacity="1" />
+        </linearGradient>
+      </defs>
+
+      {/* Serene twilight sky */}
+      <rect width="420" height="560" fill="url(#stTwSky)" />
+
+      {/* Crescent moon & quiet twilight stars */}
+      <path d="M326 68 A16 16 0 1 0 345 87 A12.5 12.5 0 1 1 326 68 Z" fill="#F5D9A4" opacity="0.88" />
+      <g fill="#ECE5D8" opacity="0.65">
+        <circle cx="66" cy="78" r="1.5" />
+        <circle cx="118" cy="56" r="1.2" />
+        <circle cx="164" cy="88" r="1.1" />
+        <circle cx="222" cy="64" r="1.6" />
+        <circle cx="268" cy="96" r="1.2" />
+        <circle cx="364" cy="112" r="1.3" />
       </g>
-      {/* Layered dusk ridges */}
-      <path d="M0 108 L82 64 L174 96 L276 58 L360 98 V154 H0 Z" fill="var(--sky)" opacity="0.2" />
-      <path d="M0 122 Q120 102 224 118 T360 110 V154 H0 Z" fill="var(--category-11)" opacity="0.28" />
-      {/* Winding trail heading toward the horizon */}
-      <path d="M126 154 Q158 132 192 124 T256 106" fill="none" stroke="var(--surface)" strokeWidth="4" strokeLinecap="round" opacity="0.55" />
-      {/* Warm camp lantern + soft radial glow */}
-      <circle cx="218" cy="112" r="24" fill="var(--amber)" opacity="0.18" />
-      <rect x="213" y="106" width="10" height="13" rx="3" fill="var(--amber)" opacity="0.88" />
-      <path d="M214 106 Q218 100 222 106" fill="none" stroke="var(--ink-muted)" strokeWidth="1.5" />
-      {/* Peaceful sitting Maxie looking ahead */}
-      <g transform="translate(152 84)">
-        <path d="M12 34 C10 23 14 16 21 15 C28 16 31 23 30 34 Z" fill="var(--clay)" />
-        <path d="M13 32 Q4 29 7 22 Q9 19 13 24" fill="none" stroke="var(--clay)" strokeWidth="3.6" strokeLinecap="round" />
-        <path d="M15 16 L17 6 L21.5 11.5 Q24 10.6 26.5 11.5 L31 6 L32.5 16 C32.5 21 28.5 24 23.8 24 C19 24 15 21 15 16 Z" fill="var(--clay)" />
-        <ellipse cx="23.8" cy="18.2" rx="5.6" ry="4.4" fill="var(--mark-face)" />
-        <path d="M20.2 17.6 Q21.8 15.8 23.2 17.6 M24.4 17.6 Q26 15.8 27.4 17.6" fill="none" stroke="var(--clay)" strokeWidth="1.5" strokeLinecap="round" />
-        <circle cx="23.8" cy="19.6" r="1.1" fill="var(--clay)" />
+
+      {/* Layered dusk mountain silhouettes */}
+      <path d="M-10 230 L78 152 L176 202 L284 140 L376 196 L430 166 V340 H-10 Z" fill="#2A3147" />
+      <path d="M-10 256 L112 190 L216 234 L334 182 L430 232 V360 H-10 Z" fill="#22283A" />
+
+      {/* Peaceful camp overlook hill */}
+      <path d="M-10 264 Q138 236 266 254 T430 244 V560 H-10 Z" fill="#1F2433" />
+
+      {/* Winding horizon path leading toward payday */}
+      <path d="M188 308 Q224 274 268 258 T344 234" fill="none" stroke="#66708A" strokeWidth="5" strokeLinecap="round" opacity="0.34" />
+
+      {/* Warm lantern radial halo illuminating Husky Maxie */}
+      <rect width="420" height="380" fill="url(#stLanternGlow)" />
+
+      {/* Minimalist camp lantern */}
+      <g transform="translate(248 228)">
+        <ellipse cx="11" cy="34" rx="14" ry="3.5" fill="#11141E" opacity="0.5" />
+        <path d="M5 10 Q11 1 17 10" fill="none" stroke="#B7B0A4" strokeWidth="1.8" />
+        <rect x="3" y="10" width="16" height="22" rx="4" fill="#F2BE72" opacity="0.92" />
+        <rect x="6.5" y="14" width="9" height="14" rx="2.5" fill="#FFF2D6" opacity="0.9" />
+        <rect x="2" y="9" width="18" height="3.2" rx="1.6" fill="#464D61" />
+        <rect x="2" y="30" width="18" height="3.2" rx="1.6" fill="#464D61" />
       </g>
+
+      {/* Ground shadow under sitting husky */}
+      <ellipse cx="188" cy="266" rx="34" ry="6" fill="#10131D" opacity="0.52" />
+
+      {/* Calm sitting Siberian Husky Maxie facing 3/4 toward the warm lantern */}
+      <g transform="translate(148 168)">
+        {/* Thick curled husky tail wrapped neatly beside flank (wolf-grey + snow-white tip) */}
+        <path d="M22 92 C0 88 -4 66 10 56 C18 51 26 60 22 76" fill="#485362" />
+        <path d="M19 88 C6 84 4 70 12 63 C16 60 21 66 19 76" fill="#F5F2EC" />
+
+        {/* Sturdy sitting wolf-grey body & shoulders */}
+        <path d="M18 96 C14 70 21 48 40 46 C59 48 66 70 62 96 Z" fill="#485362" />
+        <path d="M24 54 Q40 46 56 54 Q48 62 32 62 Z" fill="#687688" opacity="0.45" />
+
+        {/* Deep fluffy snow-white chest bib & neat sitting white front paws */}
+        <path d="M27 96 C25 74 30 56 40 55 C50 56 55 74 53 96 Z" fill="#F5F2EC" />
+        <ellipse cx="33" cy="96" rx="6.5" ry="3.8" fill="#F5F2EC" />
+        <ellipse cx="47" cy="96" rx="6.5" ry="3.8" fill="#F5F2EC" />
+        <line x1="40" y1="74" x2="40" y2="96" stroke="#D5D1C9" strokeWidth="1.2" opacity="0.6" />
+
+        {/* Warm terracotta collar + brass tag */}
+        <path d="M26 54 Q40 61 54 54" fill="none" stroke="#D98366" strokeWidth="4" strokeLinecap="round" />
+        <circle cx="40" cy="60.5" r="2.3" fill="#E8C27A" />
+
+        {/* Iconic Siberian Husky head (matching Logo.tsx traits: upright closer-set ears, wolf cheek tufts, white forehead blaze & brow pips, peaceful smile) */}
+        <g transform="translate(11 6)">
+          {/* Outer wolf-grey head + fluffy double cheek tufts */}
+          <path d="M10 34 L7 29 L11 25 C10 18 14 13 29 12 C44 13 48 18 47 25 L51 29 L48 34 L50 39 L43 42 C39 47 34 50 29 50 C24 50 19 47 15 42 L8 39 Z" fill="#485362" />
+          {/* Closer-set upright triangular husky ears with snow-white inner fur */}
+          <path d="M12 20 L15 3 Q17 0 20 3 L26 14 Z" fill="#485362" />
+          <path d="M46 20 L43 3 Q41 0 38 3 L32 14 Z" fill="#485362" />
+          <path d="M16 17 L17.5 7 L23 15 Z" fill="#F5F2EC" />
+          <path d="M42 17 L40.5 7 L35 15 Z" fill="#F5F2EC" />
+          {/* Iconic snow-white trefoil husky mask + thin forehead blaze */}
+          <path d="M29 15 L30.8 24 C34 22.8 39 23.4 42.5 26 C45.5 28.5 46 34 44.5 39 C42 45 36 48.5 29 48.5 C22 48.5 16 45 13.5 39 C12 34 12.5 28.5 15.5 26 C19 23.4 24 22.8 27.2 24 Z" fill="#F5F2EC" />
+          {/* Iconic white husky eyebrow pips */}
+          <ellipse cx="22.5" cy="21" rx="2.7" ry="1.3" transform="rotate(-14 22.5 21)" fill="#F5F2EC" />
+          <ellipse cx="35.5" cy="21" rx="2.7" ry="1.3" transform="rotate(14 35.5 21)" fill="#F5F2EC" />
+          {/* Peaceful serene eyes looking calmly at the lantern glow */}
+          <path d="M19 30 Q22.5 26.8 26 30 M32 30 Q35.5 26.8 39 30" fill="none" stroke="#2E3642" strokeWidth="2.1" strokeLinecap="round" />
+          {/* Broad dark dog nose & warm calm smile */}
+          <path d="M25 36 Q29 34.8 33 36 Q32.5 39 29 40.4 Q25.5 39 25 36 Z" fill="#1D2229" />
+          <path d="M29 40 V42.5 M24.8 43.2 Q27 45 29 42.6 Q31 45 33.2 43.2" fill="none" stroke="#2E3642" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </g>
+      </g>
+
+      {/* Seamless atmospheric veil fading the twilight hill smoothly into the card text canvas */}
+      <rect width="420" height="560" fill="url(#stTwFade)" />
     </svg>
   );
 }

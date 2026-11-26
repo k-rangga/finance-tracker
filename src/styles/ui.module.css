@@ -7284,12 +7284,20 @@ button.sxTile:active:not(:disabled),
   border: 1px solid var(--border);
   box-shadow: var(--card-glow);
 }
-.vigArtWrap {
+.vigArtBtn {
   flex: none;
-  width: 152px;
+  width: 144px;
+  padding: 0;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--divider);
+  background: none;
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease;
+}
+.vigArtBtn:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
 }
 .vigSvg {
   display: block;
@@ -7297,25 +7305,25 @@ button.sxTile:active:not(:disabled),
   height: auto;
 }
 .vigBody {
-  flex: 1 1 180px;
+  flex: 1 1 220px;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 5px;
 }
 .vigTag {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 650;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--clay-ink);
 }
-.vigSub {
-  margin: 0;
-  font-family: var(--font-serif);
-  font-size: 16px;
-  line-height: 1.4;
-  color: var(--ink);
+.vigMetaRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
 }
 .vigDrift {
   animation: vigCloudDrift 7s ease-in-out infinite alternate;
@@ -7384,25 +7392,47 @@ button.sxTile:active:not(:disabled),
   z-index: 80;
   display: grid;
   place-items: center;
-  padding: 20px;
-  background: rgba(18, 16, 14, 0.48);
-  backdrop-filter: blur(4px);
+  padding: 18px;
+  background: rgba(14, 13, 12, 0.56);
+  backdrop-filter: blur(6px);
 }
 .storyModal {
-  width: min(100%, 440px);
+  position: relative;
+  width: min(100%, 420px);
+  min-height: 552px;
+  max-height: calc(100dvh - 32px);
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px 18px 18px;
-  border-radius: 22px;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-md);
+  padding: 0;
+  border-radius: 26px;
+  overflow: hidden;
+  background: #17201e;
+  border: 1px solid rgba(255, 250, 242, 0.14);
+  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.storyBg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  animation: storyFadeIn 0.36s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes storyFadeIn {
+  from { opacity: 0.55; transform: scale(1.015); }
+  to { opacity: 1; transform: scale(1); }
+}
+.storySvg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 .storyTop {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 16px 18px 0;
 }
 .storyDots {
   flex: 1;
@@ -7411,36 +7441,36 @@ button.sxTile:active:not(:disabled),
   gap: 6px;
 }
 .storyDot {
-  height: 4px;
+  height: 3.5px;
   border: none;
   border-radius: 999px;
-  background: var(--divider);
+  background: rgba(255, 250, 242, 0.28);
   padding: 0;
   cursor: pointer;
-  transition: background-color 0.22s ease;
+  transition: background-color 0.24s ease, opacity 0.24s ease;
 }
 .storyDot[data-past],
 .storyDot[data-active] {
-  background: var(--clay);
+  background: #f6efe4;
 }
 .storyDot[data-past] {
-  opacity: 0.45;
+  opacity: 0.52;
 }
-.storyCardBody {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  animation: sortCardSlide 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+.storyClose {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 250, 242, 0.18);
+  background: rgba(20, 24, 28, 0.34);
+  color: rgba(255, 250, 242, 0.9);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: background-color 0.18s ease, transform 0.18s ease;
 }
-.storyArt {
-  border-radius: 16px;
-  overflow: hidden;
-  border: 1px solid var(--divider);
-}
-.storySvg {
-  display: block;
-  width: 100%;
-  height: auto;
+.storyClose:hover {
+  background: rgba(20, 24, 28, 0.54);
 }
 .storyMaxieRun {
   animation: storyMaxieStride 2.6s ease-in-out infinite;
@@ -7449,59 +7479,123 @@ button.sxTile:active:not(:disabled),
   0%, 100% { transform: translate(0, 0); }
   50% { transform: translate(5px, -2.5px); }
 }
+.storyContent {
+  position: relative;
+  z-index: 2;
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 230px 22px 20px;
+}
 .storyCopy {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 0 2px;
+  animation: sortCardSlide 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .storyKicker {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 650;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--clay-ink);
+  color: rgba(244, 214, 184, 0.92);
 }
 .storyTitle {
   font-family: var(--font-serif);
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 500;
-  line-height: 1.22;
-  color: var(--ink);
+  line-height: 1.2;
+  color: #f8f4ed;
   margin: 0;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.24);
 }
 .storyText {
   margin: 0;
   font-size: 14.5px;
-  line-height: 1.55;
-  color: var(--text-soft);
+  line-height: 1.56;
+  color: rgba(242, 237, 228, 0.82);
 }
 .storyChips {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 .storyChip {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 9px 11px;
-  border-radius: 12px;
-  background: var(--bg);
-  border: 1px solid var(--divider);
+  padding: 9px 12px;
+  border-radius: 13px;
+  background: rgba(255, 250, 242, 0.08);
+  border: 1px solid rgba(255, 250, 242, 0.12);
+  backdrop-filter: blur(8px);
+}
+.storyChipLabel {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(242, 237, 228, 0.68);
+}
+.storyChipVal {
   font-size: 14px;
+  font-weight: 650;
+  color: #f8f4ed;
+  font-variant-numeric: tabular-nums;
 }
 .storyFoot {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding-top: 6px;
-  border-top: 1px solid var(--divider);
+  padding-top: 4px;
+}
+.storyBtnGhost {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 250, 242, 0.18);
+  background: rgba(255, 250, 242, 0.07);
+  color: rgba(248, 244, 237, 0.88);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: background-color 0.18s ease;
+}
+.storyBtnGhost:hover {
+  background: rgba(255, 250, 242, 0.14);
+}
+.storyBtnPrimary {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: none;
+  background: #f5ede2;
+  color: #1c2224;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform 0.18s ease, background-color 0.18s ease;
+}
+.storyBtnPrimary:hover {
+  background: #ffffff;
+  transform: translateY(-1px);
 }
 @media (max-width: 560px) {
-  .vigArtWrap {
-    width: 126px;
+  .vigArtBtn {
+    width: 120px;
+  }
+  .storyModal {
+    min-height: 500px;
+    border-radius: 22px;
+  }
+  .storyContent {
+    padding: 205px 18px 18px;
+  }
+  .storyTitle {
+    font-size: 23px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -7509,7 +7603,8 @@ button.sxTile:active:not(:disabled),
   .vigRain,
   .storyMaxieRun,
   .ritualReveal,
-  .storyCardBody {
+  .storyBg,
+  .storyCopy {
     animation: none;
   }
 }

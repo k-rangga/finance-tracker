@@ -18,7 +18,7 @@ import type { Bill } from '../data/transactions';
 import { UpcomingBills } from '../components/UpcomingBills';
 import type { ActivityFilter } from './Activity';
 import { FlameIcon, TargetIcon, TrophyIcon } from './categoriesExtras';
-import { CycleStoryModal, DailyRitualCard, MaxieVignette } from './SummaryRituals';
+import { CycleStoryModal, DailyRitualCard, resolveVignetteScene, VignetteSvg } from './SummaryRituals';
 
 type TxPatch = Pick<ActivityFilter, 'range'> & Partial<ActivityFilter>;
 
@@ -40,9 +40,9 @@ type SummaryProps = {
 };
 
 /**
- * The cycle at a glance, charts first: a warm daily greeting from Maxie, living ambient vignette, daily check-in,
- * earned milestone wins, gentle alerts, what's left, three interactive tiles, spending by day, where the money went
- * (treemap), upcoming bills, and recent activity.
+ * The cycle at a glance, charts first: one unified Maxie companion bar (vignette, greeting, inline wins, and Cycle Story),
+ * gentle alerts, what's left, three interactive tiles, spending by day, where the money went (treemap),
+ * a calm mid-page daily check-in, upcoming bills, and recent activity.
  */
 export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, onDismissBill, onMarkBillPaid, onShowTransactions, onPlanNext, onAskMaxie }: SummaryProps) {
   const { ofIncome, settings } = useSettings();
@@ -63,27 +63,19 @@ export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, on
   }, [storyKey, settings.quietMode, b.txs.length]);
 
   const target = ofIncome(SAVINGS_TARGET_PCT);
-  const streak = smoothStreakDays(cycle, b);
-  const todaySpend = sum(
-    b.txs.filter(t => t.offset === cycle.dayIdx && categoryByName(t.cat) && !t.isIncome && !t.isTransfer).map(t => t.net),
-  );
   const scrollToBills = () => document.getElementById('summary-bills')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   return (
     <div className={s.sxSumGrid}>
       <Celebrate id={id + '.payday'} when={cycle.dayN === 1} />
       <Celebrate id={id + '.saved'} when={target > 0 && b.saved >= target} />
       <Celebrate id={id + '.under'} when={cycle.daysLeft <= 1 && b.spent <= b.budget} />
-      <MaxieGreeting cycle={cycle} budget={b} onAskMaxie={onAskMaxie} />
-      <MaxieVignette
+      <MaxieGreeting
         cycle={cycle}
         budget={b}
         target={target}
-        streak={streak}
-        todaySpend={todaySpend}
+        onAskMaxie={onAskMaxie}
         onOpenStory={() => setStoryOpen(true)}
       />
-      <DailyRitualCard cycle={cycle} budget={b} />
-      <WinsStrip cycle={cycle} budget={b} target={target} />
       {cycle.daysLeft <= 4 && <PlanNextNudge cycle={cycle} planned={hasPlan(settings.cyclePlans?.[cycleKey(nextCycleOf(cycle))])} onOpen={onPlanNext} />}
       <NeedsAttention
         budget={b}
@@ -100,6 +92,7 @@ export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, on
       />
       <DailyBars cycle={cycle} budget={b} onOpenDay={iso => onShowTransactions({ range: 'custom', from: iso, to: iso })} />
       <WhereMap cycle={cycle} budget={b} onOpenCategory={onOpenCategory} onOpenCategories={onOpenCategories} />
+      <DailyRitualCard cycle={cycle} budget={b} />
       <UpcomingBills id="summary-bills" cycle={cycle} bills={b.bills} limit={5} compact onDismiss={onDismissBill} onMarkPaid={onMarkBillPaid} />
       <Recent
         budget={b}
@@ -131,13 +124,29 @@ function smoothStreakDays(cycle: Cycle, b: Budget): number {
   return streak;
 }
 
-/** One cheerful daily sentence from Maxie tuned to time of day, your name, your cycle state, and language setting. */
-function MaxieGreeting({ cycle, budget: b, onAskMaxie }: { cycle: Cycle; budget: Budget; onAskMaxie: (ask?: string) => void }) {
+/**
+ * Unified Maxie Companion Bar: combines Maxie's living Husky window scene, personalized daily greeting,
+ * inline milestone win badges, optional zero-spend pledge, and the Cycle Story replay trigger into one calm strip.
+ */
+function MaxieGreeting({
+  cycle,
+  budget: b,
+  target,
+  onAskMaxie,
+  onOpenStory,
+}: {
+  cycle: Cycle;
+  budget: Budget;
+  target: number;
+  onAskMaxie: (ask?: string) => void;
+  onOpenStory: () => void;
+}) {
   const { short, settings } = useSettings();
   const id = settings.maxieLanguage === 'id';
   const name = settings.name.trim();
   const pledgeKey = `moneyTracker.zeroPledge.${toISO(cycle.today)}`;
   const [pledged, setPledged] = useState(() => storage.get<boolean>(pledgeKey, false));
+  const [pickedWin, setPickedWin] = useState<string | null>(null);
   useEffect(() => {
     setPledged(storage.get<boolean>(pledgeKey, false));
   }, [pledgeKey]);
@@ -175,6 +184,7 @@ function MaxieGreeting({ cycle, budget: b, onAskMaxie }: { cycle: Cycle; budget:
       : null;
   const recentSavings = b.txs.some(t => t.isSavings && t.offset >= Math.max(0, cycle.dayIdx - 1));
   const streak = smoothStreakDays(cycle, b);
+  const sceneInfo = resolveVignetteScene({ cycle, budget: b, target, streak, todaySpend });
 
   let mood: MaxieMood = 'happy';
   let line = '';
@@ -234,124 +244,130 @@ function MaxieGreeting({ cycle, budget: b, onAskMaxie }: { cycle: Cycle; budget:
             ? `Masih ada ${short(left)} ruang lega.`
             : `${short(left)} of breathing room.`;
 
+  // Inline milestone wins (hidden in Quiet mode).
+  const bufferCount = b.txs.filter(t => t.cat === 'Buffer' && !t.isIncome && !t.isTransfer).length;
+  const wins: { id: string; icon: ReactNode; label: string; detail: string }[] = [];
+  if (!settings.quietMode) {
+    if (streak >= 3 && left >= 0) {
+      wins.push({
+        id: 'streak',
+        icon: <FlameIcon size={13} />,
+        label: id ? `${streak} hari mulus` : `${streak}-day smooth streak`,
+        detail: id
+          ? `Pengeluaran harian tetap rapi di dalam target selama ${streak} hari berturut-turut.`
+          : `Everyday spending stayed within your daily target for ${streak} days in a row.`,
+      });
+    }
+    if (target > 0 && b.saved >= target) {
+      wins.push({
+        id: 'saved',
+        icon: <TrophyIcon size={13} />,
+        label: id ? 'Target tabungan tercapai' : 'Savings goal reached',
+        detail: id
+          ? `Sudah menyisihkan ${short(b.saved)} (${Math.round(b.savedPct)}%) siklus ini.`
+          : `You set aside ${short(b.saved)} (${Math.round(b.savedPct)}%) this cycle.`,
+      });
+    }
+    if (b.txs.length > 0 && bufferCount === 0) {
+      wins.push({
+        id: 'buffer',
+        icon: <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} />,
+        label: id ? 'Buffer rapi' : 'Buffer zero',
+        detail: id
+          ? 'Semua transaksi siklus ini sudah masuk kategori masing-masing.'
+          : 'Every transaction this cycle has a calm category home.',
+      });
+    }
+    if (cycle.dayN >= 4 && b.paceToday > 0 && b.spent <= b.paceToday) {
+      wins.push({
+        id: 'pace',
+        icon: <TargetIcon size={13} />,
+        label: id ? 'Di bawah pace' : 'Under pace',
+        detail: id
+          ? `Masih ${short(b.paceToday - b.spent)} di bawah ritme normal hari ke-${cycle.dayN}.`
+          : `Currently ${short(b.paceToday - b.spent)} ahead of your usual day-${cycle.dayN} pace.`,
+      });
+    }
+    if (b.txs.length > 0 && b.bills.length === 0) {
+      wins.push({
+        id: 'bills',
+        icon: <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} />,
+        label: id ? 'Tagihan beres' : 'All bills clear',
+        detail: id
+          ? 'Tidak ada tagihan terjadwal tersisa sampai gajian berikutnya.'
+          : 'No scheduled bills left before payday — smooth sailing from here.',
+      });
+    }
+  }
+  const activeWin = wins.find(w => w.id === pickedWin);
+  const hasMetaRow = wins.length > 0 || todaySpend === 0 || !!quickAsk;
+
   return (
-    <div className={s.mxGreeting} data-wide>
-      <Logo size={36} mood={mood} interactive followCursor cheer={cheer} />
-      <div className={s.mxGreetingBody}>
-        <p className={s.mxGreetingText}>{line}</p>
-        {todaySpend === 0 && (
-          <button
-            type="button"
-            className={s.mxPledgeBtn}
-            data-active={pledged || undefined}
-            aria-pressed={pledged}
-            onClick={togglePledge}
-          >
-            {pledged ? <Icon d={IC.check} size={12} strokeWidth={2.4} /> : <TargetIcon size={13} />}
-            {pledged
-              ? id
-                ? 'Hari nol pengeluaran aktif — jalani dengan santai'
-                : 'Zero-spend day active — taking it slow'
-              : id
-                ? 'Targetkan hari nol pengeluaran'
-                : 'Aim for a zero-spend day'}
-          </button>
-        )}
-      </div>
-      {quickAsk && (
-        <button type="button" className={s.sxAttnPill} onClick={() => onAskMaxie(quickAsk)}>
-          <Icon d={IC.sparkle} size={12} /> {id ? 'Tanya Maxie' : 'Ask Maxie'}
+    <section className={s.vigCard} data-wide data-scene={sceneInfo.scene} aria-label={`Maxie: ${sceneInfo.label}`}>
+      {settings.quietMode ? (
+        <Logo size={36} mood={mood} interactive followCursor cheer={cheer} />
+      ) : (
+        <button
+          type="button"
+          className={s.vigArtBtn}
+          onClick={onOpenStory}
+          title={`${sceneInfo.label} — open Cycle story`}
+          aria-label={`Open Cycle story (${sceneInfo.label})`}
+        >
+          <VignetteSvg scene={sceneInfo.scene} />
         </button>
       )}
-    </div>
-  );
-}
-
-/** Compact Milestone Trophy Shelf: highlights real cycle wins with tappable warm detail notes (hidden in Quiet mode). */
-function WinsStrip({ cycle, budget: b, target }: { cycle: Cycle; budget: Budget; target: number }) {
-  const { short, settings } = useSettings();
-  const [picked, setPicked] = useState<string | null>(null);
-  if (settings.quietMode) return null;
-  const id = settings.maxieLanguage === 'id';
-
-  const streak = smoothStreakDays(cycle, b);
-  const bufferCount = b.txs.filter(t => t.cat === 'Buffer' && !t.isIncome && !t.isTransfer).length;
-  const left = b.budget - b.spent - b.fixedDue;
-
-  const wins: { id: string; icon: ReactNode; label: string; detail: string }[] = [];
-  if (streak >= 3 && left >= 0) {
-    wins.push({
-      id: 'streak',
-      icon: <FlameIcon size={14} />,
-      label: id ? `${streak} hari mulus` : `${streak}-day smooth streak`,
-      detail: id
-        ? `Pengeluaran harian tetap rapi di dalam target selama ${streak} hari berturut-turut.`
-        : `Everyday spending stayed within your daily target for ${streak} days in a row.`,
-    });
-  }
-  if (target > 0 && b.saved >= target) {
-    wins.push({
-      id: 'saved',
-      icon: <TrophyIcon size={14} />,
-      label: id ? 'Target tabungan tercapai' : 'Savings goal reached',
-      detail: id
-        ? `Sudah menyisihkan ${short(b.saved)} (${Math.round(b.savedPct)}%) siklus ini.`
-        : `You set aside ${short(b.saved)} (${Math.round(b.savedPct)}%) this cycle.`,
-    });
-  }
-  if (b.txs.length > 0 && bufferCount === 0) {
-    wins.push({
-      id: 'buffer',
-      icon: <Icon d={IC.check} size={13} strokeWidth={2.4} color={C.good} />,
-      label: id ? 'Buffer rapi' : 'Buffer zero',
-      detail: id
-        ? 'Semua transaksi siklus ini sudah masuk kategori masing-masing.'
-        : 'Every transaction this cycle has a calm category home.',
-    });
-  }
-  if (cycle.dayN >= 4 && b.paceToday > 0 && b.spent <= b.paceToday) {
-    wins.push({
-      id: 'pace',
-      icon: <TargetIcon size={14} />,
-      label: id ? 'Di bawah pace' : 'Under pace',
-      detail: id
-        ? `Masih ${short(b.paceToday - b.spent)} di bawah ritme normal hari ke-${cycle.dayN}.`
-        : `Currently ${short(b.paceToday - b.spent)} ahead of your usual day-${cycle.dayN} pace.`,
-    });
-  }
-  if (b.txs.length > 0 && b.bills.length === 0) {
-    wins.push({
-      id: 'bills',
-      icon: <Icon d={IC.check} size={13} strokeWidth={2.4} color={C.good} />,
-      label: id ? 'Tagihan beres' : 'All bills clear',
-      detail: id
-        ? 'Tidak ada tagihan terjadwal tersisa sampai gajian berikutnya.'
-        : 'No scheduled bills left before payday — smooth sailing from here.',
-    });
-  }
-
-  if (wins.length === 0) return null;
-  const active = wins.find(w => w.id === picked);
-
-  return (
-    <section className={s.winsWrap} data-wide aria-label={id ? 'Pencapaian siklus ini' : 'Cycle wins'}>
-      <div className={s.winsStrip}>
-        <span className={s.winsLabel}>{id ? 'Pencapaian' : 'Wins'}</span>
-        {wins.map(w => (
-          <button
-            key={w.id}
-            type="button"
-            className={s.winBadge}
-            data-active={picked === w.id || undefined}
-            aria-pressed={picked === w.id}
-            onClick={() => setPicked(p => (p === w.id ? null : w.id))}
-          >
-            {w.icon}
-            <span>{w.label}</span>
-          </button>
-        ))}
+      <div className={s.vigBody}>
+        {!settings.quietMode && <span className={s.vigTag}>{sceneInfo.label}</span>}
+        <p className={s.mxGreetingText}>{line}</p>
+        {hasMetaRow && (
+          <div className={s.vigMetaRow}>
+            {wins.map(w => (
+              <button
+                key={w.id}
+                type="button"
+                className={s.winBadge}
+                data-active={pickedWin === w.id || undefined}
+                aria-pressed={pickedWin === w.id}
+                onClick={() => setPickedWin(p => (p === w.id ? null : w.id))}
+              >
+                {w.icon}
+                <span>{w.label}</span>
+              </button>
+            ))}
+            {todaySpend === 0 && (
+              <button
+                type="button"
+                className={s.mxPledgeBtn}
+                data-active={pledged || undefined}
+                aria-pressed={pledged}
+                onClick={togglePledge}
+              >
+                {pledged ? <Icon d={IC.check} size={12} strokeWidth={2.4} /> : <TargetIcon size={13} />}
+                {pledged
+                  ? id
+                    ? 'Hari nol pengeluaran aktif'
+                    : 'Zero-spend day active'
+                  : id
+                    ? 'Target hari nol pengeluaran'
+                    : 'Aim for a zero-spend day'}
+              </button>
+            )}
+            {quickAsk && (
+              <button type="button" className={s.sxAttnPill} onClick={() => onAskMaxie(quickAsk)}>
+                <Icon d={IC.sparkle} size={12} /> {id ? 'Tanya Maxie' : 'Ask Maxie'}
+              </button>
+            )}
+          </div>
+        )}
+        {activeWin && <p className={s.winDetail}>{activeWin.detail}</p>}
       </div>
-      {active && <p className={s.winDetail}>{active.detail}</p>}
+      {b.txs.length > 0 && (
+        <button type="button" className={s.btnOutlineSm} onClick={onOpenStory}>
+          <Icon d={IC.sparkle} size={13} />
+          Cycle story
+        </button>
+      )}
     </section>
   );
 }
