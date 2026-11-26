@@ -107,33 +107,33 @@ export function streaks(allTxs: TxView[], cycle: Cycle, limits: Record<string, n
 
 // ---- colour icons for streaks and challenges (drawn, so they match on every device) ----
 
-/** A two-tone flame: red-orange outside, gold inside. */
+/** A two-tone flame: clay outside, ochre inside. */
 export const FlameIcon = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ flex: 'none' }}>
-    <path d="M12 2c.6 3.2 2.6 5.3 4.4 7.3C18 11 19 12.9 19 15a7 7 0 1 1-14 0c0-2.1 1-3.7 2.2-5 .3 1.6 1.2 2.7 2.5 3.1C9 9.3 10.2 5.2 12 2z" fill="#e8552b" />
-    <path d="M12 11.5c.4 1.6 1.4 2.6 2.3 3.6.7.8 1.2 1.6 1.2 2.6a3.5 3.5 0 1 1-7 0c0-1.3.6-2.2 1.4-3 .2.8.7 1.3 1.3 1.5-.1-1.7.3-3.3.8-4.7z" fill="#f6b73c" />
+    <path d="M12 2c.6 3.2 2.6 5.3 4.4 7.3C18 11 19 12.9 19 15a7 7 0 1 1-14 0c0-2.1 1-3.7 2.2-5 .3 1.6 1.2 2.7 2.5 3.1C9 9.3 10.2 5.2 12 2z" fill="var(--clay)" />
+    <path d="M12 11.5c.4 1.6 1.4 2.6 2.3 3.6.7.8 1.2 1.6 1.2 2.6a3.5 3.5 0 1 1-7 0c0-1.3.6-2.2 1.4-3 .2.8.7 1.3 1.3 1.5-.1-1.7.3-3.3.8-4.7z" fill="var(--category-4)" />
   </svg>
 );
 
-/** A target: red and white rings with a blue dart. */
+/** A target: danger and surface rings with a denim dart. */
 export const TargetIcon = ({ size = 14, muted }: { size?: number; muted?: boolean }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ flex: 'none' }}>
-    <circle cx="11" cy="13" r="9" fill={muted ? '#9aa3a0' : '#e04f4f'} />
-    <circle cx="11" cy="13" r="6.2" fill="#ffffff" />
-    <circle cx="11" cy="13" r="3.6" fill={muted ? '#9aa3a0' : '#e04f4f'} />
-    <path d="M11 13 20.5 3.5" stroke={muted ? '#6e7774' : '#3b74c4'} strokeWidth="2" strokeLinecap="round" />
-    <path d="M17.6 3.2 20.5 3.5 20.8 6.4" stroke={muted ? '#6e7774' : '#3b74c4'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    <circle cx="11" cy="13" r="9" fill={muted ? 'var(--line-strong)' : 'var(--danger)'} />
+    <circle cx="11" cy="13" r="6.2" fill="var(--surface-000)" />
+    <circle cx="11" cy="13" r="3.6" fill={muted ? 'var(--line-strong)' : 'var(--danger)'} />
+    <path d="M11 13 20.5 3.5" stroke={muted ? 'var(--ink-muted)' : 'var(--category-7)'} strokeWidth="2" strokeLinecap="round" />
+    <path d="M17.6 3.2 20.5 3.5 20.8 6.4" stroke={muted ? 'var(--ink-muted)' : 'var(--category-7)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
   </svg>
 );
 
-/** A gold trophy with a darker base. */
+/** An ochre trophy with an umber base. */
 export const TrophyIcon = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ flex: 'none' }}>
-    <path d="M5 4h2v3a3 3 0 0 1-3-3H3v1a4 4 0 0 0 4 4h.4M19 4h-2v3a3 3 0 0 0 3-3h1v1a4 4 0 0 1-4 4h-.4" stroke="#d39a1c" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-    <path d="M7 3h10v5a5 5 0 0 1-10 0z" fill="#f2c043" />
-    <path d="M10.5 13h3v3.5h-3z" fill="#d39a1c" />
-    <rect x="7.5" y="16.5" width="9" height="4" rx="1.2" fill="#9a6a12" />
-    <path d="M9.5 5.2v2.6" stroke="#fff6d8" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M5 4h2v3a3 3 0 0 1-3-3H3v1a4 4 0 0 0 4 4h.4M19 4h-2v3a3 3 0 0 0 3-3h1v1a4 4 0 0 1-4 4h-.4" stroke="var(--category-8)" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+    <path d="M7 3h10v5a5 5 0 0 1-10 0z" fill="var(--category-4)" />
+    <path d="M10.5 13h3v3.5h-3z" fill="var(--category-8)" />
+    <rect x="7.5" y="16.5" width="9" height="4" rx="1.2" fill="var(--ink-muted)" />
+    <path d="M9.5 5.2v2.6" stroke="var(--category-4-soft)" strokeWidth="1.4" strokeLinecap="round" />
   </svg>
 );
 

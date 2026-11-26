@@ -383,7 +383,7 @@ function WhereMap({ cycle, budget: b, onOpenCategory }: { cycle: Cycle; budget: 
   // Biggest first, Other too, so the boxes read largest to smallest.
   const items = [
     ...main.map(c => ({ name: c.name, value: c.spent, color: c.color, on: onColor(c.color) })),
-    ...(rest > 0 ? [{ name: 'Other', value: rest, color: 'var(--category-other)', on: 'var(--on-category-other)' }] : []),
+    ...(rest > 0 ? [{ name: 'Other', value: rest, color: 'var(--category-other-fill)', on: 'var(--on-category-other)' }] : []),
   ].sort((x, y) => y.value - x.value);
   const cells = W ? squarify(items, W, H) : [];
   const pct = (v: number) => {

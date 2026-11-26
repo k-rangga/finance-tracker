@@ -58,21 +58,21 @@ export const setSavingsTarget = (pct: number) => {
  * dark step (styles/global.css). A new category takes the first hue no category uses yet.
  */
 export const HUES: Hue[] = [
-  { color: 'var(--category-1)', tint: 'var(--category-1-soft)', ink: 'var(--category-1)' }, // Terracotta
-  { color: 'var(--category-2)', tint: 'var(--category-2-soft)', ink: 'var(--category-2)' }, // Spruce
-  { color: 'var(--category-3)', tint: 'var(--category-3-soft)', ink: 'var(--category-3)' }, // Heather
-  { color: 'var(--category-4)', tint: 'var(--category-4-soft)', ink: 'var(--category-4)' }, // Ochre
-  { color: 'var(--category-5)', tint: 'var(--category-5-soft)', ink: 'var(--category-5)' }, // Fig
-  { color: 'var(--category-6)', tint: 'var(--category-6-soft)', ink: 'var(--category-6)' }, // Moss
-  { color: 'var(--category-7)', tint: 'var(--category-7-soft)', ink: 'var(--category-7)' }, // Denim
-  { color: 'var(--category-8)', tint: 'var(--category-8-soft)', ink: 'var(--category-8)' }, // Umber
-  { color: 'var(--category-other)', tint: 'var(--category-other-soft)', ink: 'var(--category-other)' }, // Other
-  { color: 'var(--category-9)', tint: 'var(--category-9-soft)', ink: 'var(--category-9)' }, // Slate
-  { color: 'var(--category-10)', tint: 'var(--category-10-soft)', ink: 'var(--category-10)' }, // Gold
-  { color: 'var(--category-11)', tint: 'var(--category-11-soft)', ink: 'var(--category-11)' }, // Walnut
-  { color: 'var(--category-12)', tint: 'var(--category-12-soft)', ink: 'var(--category-12)' }, // Lagoon
-  { color: 'var(--category-13)', tint: 'var(--category-13-soft)', ink: 'var(--category-13)' }, // Plum
-  { color: 'var(--category-14)', tint: 'var(--category-14-soft)', ink: 'var(--category-14)' }, // Rose
+  { color: 'var(--category-1)', tint: 'var(--category-1-soft)', ink: 'var(--ink)' }, // Terracotta
+  { color: 'var(--category-2)', tint: 'var(--category-2-soft)', ink: 'var(--ink)' }, // Spruce
+  { color: 'var(--category-3)', tint: 'var(--category-3-soft)', ink: 'var(--ink)' }, // Heather
+  { color: 'var(--category-4)', tint: 'var(--category-4-soft)', ink: 'var(--ink)' }, // Ochre
+  { color: 'var(--category-5)', tint: 'var(--category-5-soft)', ink: 'var(--ink)' }, // Fig
+  { color: 'var(--category-6)', tint: 'var(--category-6-soft)', ink: 'var(--ink)' }, // Moss
+  { color: 'var(--category-7)', tint: 'var(--category-7-soft)', ink: 'var(--ink)' }, // Denim
+  { color: 'var(--category-8)', tint: 'var(--category-8-soft)', ink: 'var(--ink)' }, // Umber
+  { color: 'var(--category-other)', tint: 'var(--category-other-soft)', ink: 'var(--ink)' }, // Other
+  { color: 'var(--category-9)', tint: 'var(--category-9-soft)', ink: 'var(--ink)' }, // Slate
+  { color: 'var(--category-10)', tint: 'var(--category-10-soft)', ink: 'var(--ink)' }, // Gold
+  { color: 'var(--category-11)', tint: 'var(--category-11-soft)', ink: 'var(--ink)' }, // Walnut
+  { color: 'var(--category-12)', tint: 'var(--category-12-soft)', ink: 'var(--ink)' }, // Lagoon
+  { color: 'var(--category-13)', tint: 'var(--category-13-soft)', ink: 'var(--ink)' }, // Plum
+  { color: 'var(--category-14)', tint: 'var(--category-14-soft)', ink: 'var(--ink)' }, // Rose
 ];
 export const HUE_NAMES = ["Terracotta", "Spruce", "Heather", "Ochre", "Fig", "Moss", "Denim", "Umber", "Other", "Slate", "Gold", "Walnut", "Lagoon", "Plum", "Rose"];
 

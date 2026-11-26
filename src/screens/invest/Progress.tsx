@@ -165,7 +165,7 @@ export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
               height: 12,
               borderRadius: '50%',
               background: C.accent700,
-              border: '2px solid #fff',
+              border: '2px solid var(--surface-000)',
               transform: 'translate(-50%,-50%)',
               left: pc(X(hp.dt) / 10),
               top: pc(Y(hp.v) / 3),

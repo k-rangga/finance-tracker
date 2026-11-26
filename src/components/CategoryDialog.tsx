@@ -238,7 +238,7 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
             borderColor: preview.color,
           }}
         >
-          ● {draft.name}
+          <span style={{ color: preview.color }} aria-hidden="true">●</span> {draft.name}
         </span>
       </div>
       <label className={s.field}>
@@ -412,7 +412,7 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
                 opacity: used.has(h.color) && color !== h.color ? 0.45 : 1,
               }}
             >
-              {color === h.color && <Icon d="M20 6 9 17l-5-5" size={14} color="#fff" />}
+              {color === h.color && <Icon d="M20 6 9 17l-5-5" size={14} color={h.color.replace('var(--category-', 'var(--on-category-')} />}
             </button>
           ))}
         </div>

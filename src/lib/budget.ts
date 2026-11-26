@@ -318,8 +318,8 @@ export function changeBadge(cur: number, last: number) {
   return ch < 0 ? { label: '↓ ' + r + '%', bg: C.goodTint, ink: C.good } : { label: '↑ ' + r + '%', bg: C.redTint, ink: C.redInk };
 }
 
-/** Icon chip colours: a faint wash of the category's colour; transfers, income and the like stay neutral grey. */
+/** Icon chip colours: the category's soft tint with primary ink; transfers, income and the like stay neutral. */
 export function iconChip(category?: string) {
   const c = category ? categoryByName(category) : undefined;
-  return c ? { bg: `color-mix(in srgb, ${c.color} 15%, transparent)`, ink: c.color } : { bg: C.divider, ink: C.textSoft };
+  return c ? { bg: c.tint, ink: 'var(--ink)' } : { bg: 'var(--surface-200)', ink: 'var(--ink)' };
 }

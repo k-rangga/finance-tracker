@@ -217,7 +217,7 @@ export function BudgetCard({
   return (
     <section id={'cat-' + c.name} className={s.mxCard} data-over={over > 0 || undefined} aria-label={`${c.name} budget`}>
       <button type="button" className={s.mxHead} aria-expanded={open} onClick={onToggle}>
-        <span className={s.mxIcon} style={{ background: c.tint, color: c.ink }}>
+        <span className={s.mxIcon} style={{ background: c.tint, color: 'var(--ink)' }}>
           <Icon d={c.icon} size={19} />
         </span>
         <span className={s.mxTitles}>
