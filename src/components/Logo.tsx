@@ -16,6 +16,7 @@ const MASK =
 const BROWS = 'M20.8 22.0Q24.0 19.2 27.2 21.2Q24.2 23.0 20.8 22.0Z M43.2 22.0Q40.0 19.2 36.8 21.2Q39.8 23.0 43.2 22.0Z';
 const NOSE = 'M26.8 41.2Q32 39.6 37.2 41.2Q36.8 44.8 32 46.6Q27.2 44.8 26.8 41.2Z';
 const EYES = 'M18.6 32.2Q23.5 27.6 28.4 32.8Q23.3 37.0 18.6 32.2Z M45.4 32.2Q40.5 27.6 35.6 32.8Q40.7 37.0 45.4 32.2Z';
+const EYE_FILL = 'M20.4 32.4Q23.6 29.6 26.8 32.8Q23.4 35.4 20.4 32.4Z M43.6 32.4Q40.4 29.6 37.2 32.8Q40.6 35.4 43.6 32.4Z';
 const EYES_SMALL = 'M18 32Q23.5 27.6 28.8 32.8Q23 37 18 32Z M46 32Q40.5 27.6 35.2 32.8Q41 37 46 32Z';
 const NOSE_SMALL = 'M26.2 41Q32 39.2 37.8 41Q37.4 45.4 32 47.6Q26.6 45.4 26.2 41Z';
 
@@ -78,16 +79,9 @@ export function Logo({
             <path d={small ? EYES_SMALL : EYES} fill={cap} />
             {!small && (
               <>
-                {tone === 'clay' && (
-                  <>
-                    <circle cx={23.6} cy={32.4} r={2.05} fill="var(--mark-eye)" />
-                    <circle cx={40.4} cy={32.4} r={2.05} fill="var(--mark-eye)" />
-                    <circle cx={23.6} cy={32.4} r={0.95} fill={cap} />
-                    <circle cx={40.4} cy={32.4} r={0.95} fill={cap} />
-                  </>
-                )}
-                <circle cx={24.35} cy={31.65} r={tone === 'clay' ? 0.65 : 1.05} fill={face} />
-                <circle cx={41.15} cy={31.65} r={tone === 'clay' ? 0.65 : 1.05} fill={face} />
+                {tone === 'clay' && <path d={EYE_FILL} fill="var(--mark-eye)" />}
+                <circle cx={24.5} cy={31.9} r={tone === 'clay' ? 0.85 : 1.05} fill={face} />
+                <circle cx={39.5} cy={31.9} r={tone === 'clay' ? 0.85 : 1.05} fill={face} />
               </>
             )}
             <path d={small ? NOSE_SMALL : NOSE} fill={cap} />

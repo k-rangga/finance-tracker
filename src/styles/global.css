@@ -26,7 +26,7 @@
   --danger-soft: #f6dcd8;
   --mark-face: #f7f4ec;
   --mark-ink: #1f1d1a;
-  --mark-eye: #74bde6;
+  --mark-eye: #7da9cf;
   --chat-user: var(--surface-200);
   --focus-ring: var(--clay);
   /* Category slots 1-8 (Maxie), Other, and six extra earth tones for categories past eight. */
@@ -157,7 +157,7 @@
     --danger-soft: #47211f;
     --mark-face: #f2eee6;
     --mark-ink: #1f1d1a;
-    --mark-eye: #8bc6eb;
+    --mark-eye: var(--sky);
     --chat-user: var(--surface-000);
     --category-1: #d57858;
     --category-2: #29a8af;
@@ -246,7 +246,7 @@
   --danger-soft: #47211f;
   --mark-face: #f2eee6;
   --mark-ink: #1f1d1a;
-  --mark-eye: #8bc6eb;
+  --mark-eye: var(--sky);
   --chat-user: var(--surface-000);
   --category-1: #d57858;
   --category-2: #29a8af;
