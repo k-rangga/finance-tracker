@@ -14,7 +14,17 @@ import { PIN_LENGTH, setPin, signOut } from './SignIn';
 
 type NumKey = 'income' | 'savingsPct' | 'investPct' | 'idxCap' | 'usCap' | 'cryptoCap' | 'fxRate';
 
-export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: () => void; email: string | null; onEditCategory: (name: string) => void }) {
+export function SettingsDialog({
+  onClose,
+  email,
+  onEditCategory,
+  onReplayOnboarding,
+}: {
+  onClose: () => void;
+  email: string | null;
+  onEditCategory: (name: string) => void;
+  onReplayOnboarding?: () => void;
+}) {
   const { settings, update, full } = useSettings();
   const [d, setD] = useState<Settings>(settings);
   const [txt, setTxt] = useState<Record<NumKey, string>>(() => ({
@@ -323,13 +333,26 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
 
       <div className={s.setFoot}>
         {err && <span className={s.error}>{err}</span>}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <button type="button" className={s.btnPrimary} onClick={save}>
             Save settings
           </button>
           <button type="button" className={s.btnGhost} onClick={onClose}>
             Cancel
           </button>
+          {onReplayOnboarding && (
+            <button
+              type="button"
+              className={s.textBtnSm}
+              style={{ marginLeft: 'auto' }}
+              onClick={() => {
+                onClose();
+                onReplayOnboarding();
+              }}
+            >
+              Open setup guide
+            </button>
+          )}
         </div>
       </div>
     </Modal>

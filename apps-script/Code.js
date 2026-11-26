@@ -175,6 +175,7 @@ const ACTIONS = {
   removeReceipt: p => removeReceipt_(p),
 
   listLabels: () => listLabels_(),
+  previewGmail: p => previewGmail_(p && p.name),
   chooseLabel: p => chooseLabel_(p.name),
   syncNow: () => syncGmail_(),
   syncRange: () => syncRange_(),

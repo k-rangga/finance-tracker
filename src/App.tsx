@@ -6,6 +6,7 @@ import { Logo } from './components/Logo';
 import { SettingsDialog } from './components/SettingsDialog';
 import { CategoryDialog } from './components/CategoryDialog';
 import { GmailDialog, syncedAgo } from './components/GmailDialog';
+import { ONBOARDING_STEP_KEY, OnboardingWizard } from './components/OnboardingWizard';
 import { KEYS, storage } from './lib/storage';
 import { getCycle, paydayRule } from './lib/cycle';
 import { computeBudget, txViews } from './lib/budget';
@@ -59,9 +60,18 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Create (no name) or edit one of your categories; opened from Settings or a Categories row. */
   const [catDialog, setCatDialog] = useState<{ editing?: string } | null>(null);
-  // Back from Google's consent screen (Vercel): open Gmail sync with what happened.
+  // Back from Google's consent screen (Vercel): resume Onboarding Step 2 if started there, else open Gmail sync.
   const [googleNotice] = useState(() => new URLSearchParams(location.search).get('google') ?? undefined);
-  const [gmailOpen, setGmailOpen] = useState(!!googleNotice);
+  const [resumeOnboarding, setResumeOnboarding] = useState(() => {
+    try {
+      return !!new URLSearchParams(location.search).get('google') && sessionStorage.getItem(ONBOARDING_STEP_KEY) === '2';
+    } catch {
+      return false;
+    }
+  });
+  const [gmailOpen, setGmailOpen] = useState(() => !!googleNotice && !resumeOnboarding);
+  const [onboardingReplay, setOnboardingReplay] = useState(false);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   useEffect(() => {
     if (googleNotice) history.replaceState(null, '', location.pathname);
   }, [googleNotice]);
@@ -473,8 +483,8 @@ export default function App() {
             <div className={s.note} style={{ background: 'var(--accent-tint)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ marginRight: 'auto' }}>
                 {!ready
-                  ? 'Choose the Gmail label that holds your receipts. Spending, categories and the savings plan fill in from them.'
-                  : 'No receipts in this pay cycle yet. Check the label, or press Sync now.'}
+                  ? 'Connect Gmail to auto-scan your bank & app receipts — zero labels or filters needed.'
+                  : 'No receipts in this pay cycle yet. Press Sync now or check Gmail settings.'}
               </span>
               <button type="button" className={s.btnPrimary} onClick={() => setGmailOpen(true)}>
                 {!ready ? 'Connect Gmail' : 'Open Gmail sync'}
@@ -543,6 +553,17 @@ export default function App() {
         </div>
       </main>
 
+      {(onboardingReplay || resumeOnboarding || (!onboardingDismissed && !settings.onboardingDone && txRows.length === 0 && !gmail.label_name)) && (
+        <OnboardingWizard
+          initialStep={resumeOnboarding ? 2 : 1}
+          googleNotice={googleNotice}
+          onDone={() => {
+            setOnboardingReplay(false);
+            setResumeOnboarding(false);
+            setOnboardingDismissed(true);
+          }}
+        />
+      )}
       {gmailOpen && <GmailDialog notice={googleNotice} onClose={() => setGmailOpen(false)} />}
       {billUndo && (
         <Toast
@@ -560,6 +581,7 @@ export default function App() {
         <SettingsDialog
           email={email}
           onClose={() => setSettingsOpen(false)}
+          onReplayOnboarding={() => setOnboardingReplay(true)}
           onEditCategory={name => {
             // Settings keeps its own copy of every setting, so close it rather than stacking dialogs.
             setSettingsOpen(false);

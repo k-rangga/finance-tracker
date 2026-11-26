@@ -7,6 +7,11 @@
 const FIRST_SYNC_DAYS = 62; // first import covers this pay cycle and the previous one
 const RANGE_SYNC_DAYS = 62; // "Sync last 2 months"
 const OVERLAP_DAYS = 2;
+/** Special label value meaning "scan bank & receipt emails directly via Gmail search — no label required". */
+const AUTO_LABEL = '__auto__';
+/** Read-only Gmail search matching Indonesian banks, e-wallets, ride apps, marketplaces, brokers, and receipt subjects. */
+const SMART_RECEIPT_QUERY =
+  '(from:(bca.co.id OR klikbca.com OR blubybcadigital.id OR bankmandiri.co.id OR superbank.id OR jago.com OR seabank.co.id OR bni.co.id OR bri.co.id OR cimbniaga.co.id OR permatabank.com OR jenius.com OR ocbc.id OR danamon.co.id OR grab.com OR gojek.com OR gopay.co.id OR ovo.id OR dana.id OR flip.id OR tokopedia.com OR shopee.co.id OR blibli.com OR traveloka.com OR tiket.com OR pluang.com OR bibit.id OR ajaib.co.id OR stockbit.com) OR subject:("Internet Transaction Journal" OR "Credit Card Transaction" OR "Transaksi Berhasil" OR "Bukti Transaksi" OR "E-Receipt" OR "Incoming Transaction"))';
 /** Automatic sync hours, Asia/Jakarta (TZ): every 2 hours (00:00, 02:00, …, 22:00). The trigger fires hourly; other hours do nothing. */
 const SYNC_HOURS = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22];
 
@@ -31,9 +36,20 @@ function listLabels_() {
     .sort((a, b) => a.localeCompare(b));
 }
 
-/** Choose the label and import its last 62 days right away. */
+/** Fast dry-run count of matching emails in the last 62 days (for onboarding / GmailDialog preview). */
+function previewGmail_(name) {
+  const target = name || AUTO_LABEL;
+  const token = canFetch_() ? ScriptApp.getOAuthToken() : null;
+  const labelId = target === AUTO_LABEL ? null : labelIdByName_(token, target);
+  const since = Math.floor((Date.now() - FIRST_SYNC_DAYS * 864e5) / 1000);
+  const ids = listMessageIds_(token, labelId, since);
+  return { count: ids.length, label: target, days: FIRST_SYNC_DAYS };
+}
+
+/** Choose a label (or Smart Receipt Scan '__auto__') and import its last 62 days right away. */
 function chooseLabel_(name) {
-  if (!name || !GmailApp.getUserLabelByName(name)) throw new Error('Gmail label "' + name + '" not found.');
+  if (!name) throw new Error('Choose a Gmail label or Smart Receipt Scan first.');
+  if (name !== AUTO_LABEL && !GmailApp.getUserLabelByName(name)) throw new Error('Gmail label "' + name + '" not found.');
   setProps_('gmail', { label: name });
   return syncGmail_();
 }
@@ -103,7 +119,7 @@ function syncGmail_(opts) {
   let parsed = [];
   try {
     const token = canFetch_() ? ScriptApp.getOAuthToken() : null;
-    const labelId = labelIdByName_(token, g.label);
+    const labelId = g.label === AUTO_LABEL ? null : labelIdByName_(token, g.label);
     // An explicit window, or an unfinished one (continueSync), wins over "since the last sync".
     const range = (opts && opts.since) || (g.rangeSince ? new Date(g.rangeSince).getTime() : 0);
     const since = range || (g.lastSyncedAt ? new Date(g.lastSyncedAt).getTime() - OVERLAP_DAYS * 864e5 : Date.now() - FIRST_SYNC_DAYS * 864e5);
@@ -564,10 +580,18 @@ function labelIdByName_(token, name) {
 function listMessageIds_(token, labelId, afterEpoch) {
   const ids = [];
   let page = '';
+  const q = labelId ? 'after:' + afterEpoch : 'after:' + afterEpoch + ' ' + SMART_RECEIPT_QUERY;
   do {
     const r = token
-      ? gmailGet_(token, 'messages?maxResults=500&labelIds=' + encodeURIComponent(labelId) + '&q=' + encodeURIComponent('after:' + afterEpoch) + (page ? '&pageToken=' + page : ''))
-      : Gmail.Users.Messages.list('me', { labelIds: [labelId], q: 'after:' + afterEpoch, maxResults: 500, pageToken: page || undefined });
+      ? gmailGet_(
+          token,
+          'messages?maxResults=500' +
+            (labelId ? '&labelIds=' + encodeURIComponent(labelId) : '') +
+            '&q=' +
+            encodeURIComponent(q) +
+            (page ? '&pageToken=' + page : ''),
+        )
+      : Gmail.Users.Messages.list('me', Object.assign({ q: q, maxResults: 500, pageToken: page || undefined }, labelId ? { labelIds: [labelId] } : {}));
     (r.messages || []).forEach(m => ids.push(m.id));
     page = r.nextPageToken || '';
   } while (page && ids.length < 5000);

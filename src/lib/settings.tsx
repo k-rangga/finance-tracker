@@ -72,6 +72,8 @@ export type Settings = {
   quietMode?: boolean;
   /** Comma-separated names (or last-4+ account digits) printed on your own bank accounts, for auto-detecting own transfers. */
   ownAccountNames?: string;
+  /** True once the user has completed or skipped the first-time welcome setup wizard. */
+  onboardingDone?: boolean;
 };
 
 export type ChatFeedback = { q: string; a: string; good: boolean; at: string };

@@ -7677,8 +7677,244 @@ button.sxTile:active:not(:disabled),
   .storyMaxieRun,
   .storyBg,
   .storyCopy,
-  .storyReveal {
+  .storyReveal,
+  .gmProgressFill {
     animation: none;
+  }
+}
+
+/* ---- Smooth Gmail Sync & Onboarding Wizard ---- */
+.gmPreHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.gmTrustRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gmTrustPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--divider);
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text-soft);
+}
+.gmTipBox {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--clay) 6%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--clay) 18%, var(--divider));
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.gmBannerGood {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--good);
+  background: var(--good-soft);
+  border: 1px solid color-mix(in srgb, var(--good) 24%, transparent);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.gmModes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.gmModeCard {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 13px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+}
+.gmModeCard:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+.gmModeCard[data-active] {
+  border-color: color-mix(in srgb, var(--clay) 55%, var(--border));
+  background: color-mix(in srgb, var(--clay) 8%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--clay) 24%, transparent);
+}
+.gmRecTag {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--clay-soft);
+  color: var(--clay-ink);
+}
+.gmPreviewRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  background: var(--bg);
+  border: 1px solid var(--divider);
+  font-size: 13px;
+  color: var(--text-soft);
+}
+.gmProgressBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 13px;
+  background: var(--bg);
+  border: 1px solid color-mix(in srgb, var(--clay) 24%, var(--divider));
+}
+.gmProgressTrack {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--divider);
+  overflow: hidden;
+  position: relative;
+}
+.gmProgressFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--clay);
+  transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.gmProgressFill[data-indeterminate] {
+  width: 38%;
+  animation: gmSlide 1.4s ease-in-out infinite;
+}
+@keyframes gmSlide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(280%); }
+}
+
+.onbOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(14, 13, 12, 0.56);
+  backdrop-filter: blur(6px);
+  overflow-y: auto;
+}
+.onbCard {
+  width: min(100%, 540px);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 24px 22px;
+  border-radius: 22px;
+  background-color: var(--surface);
+  background-image: radial-gradient(460px 220px at 8% -10%, color-mix(in srgb, var(--clay) 10%, transparent), transparent 68%);
+  border: 1px solid color-mix(in srgb, var(--clay) 22%, var(--border-strong));
+  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.34), var(--card-glow);
+}
+.onbTop {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.onbSteps {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+}
+.onbStepBar {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--divider);
+  transition: background-color 0.25s ease;
+}
+.onbStepBar[data-active],
+.onbStepBar[data-done] {
+  background: var(--clay);
+}
+.onbStepBar[data-done] {
+  opacity: 0.45;
+}
+.onbBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.onbHero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.onbTitle {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.onbSub {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.onbGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.onbBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.onbChipRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.onbFoot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--divider);
+}
+@media (max-width: 560px) {
+  .gmModes,
+  .onbGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .onbCard {
+    padding: 18px 18px 20px;
+    border-radius: 20px;
+  }
+  .onbTitle {
+    font-size: 22px;
   }
 }
 

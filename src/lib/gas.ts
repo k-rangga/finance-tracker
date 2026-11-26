@@ -307,6 +307,8 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       delete d.googleMissing;
       save();
       return { url: '/?google=connected' };
+    case 'previewGmail':
+      return { count: 24, label: q.name || '__auto__', days: 62 };
     case 'chooseLabel':
       d.label = q.name;
       save();

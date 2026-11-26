@@ -32,7 +32,7 @@ const PREFETCH: Record<string, string[]> = {
   setRules: ['category_rules'],
 };
 /** Actions that read Gmail or Drive. */
-const GOOGLE = new Set(['listLabels', 'chooseLabel', 'syncNow', 'syncRange', 'reimportGmail', 'attachReceipt', 'getReceipt', 'removeReceipt']);
+const GOOGLE = new Set(['listLabels', 'previewGmail', 'chooseLabel', 'syncNow', 'syncRange', 'reimportGmail', 'attachReceipt', 'getReceipt', 'removeReceipt']);
 
 export async function runForUser(user: User, action: string, payload: unknown, timeBudgetMs = 240_000) {
   const s = store(user.id);
