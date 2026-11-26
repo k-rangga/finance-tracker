@@ -6,6 +6,7 @@ import { useIsPhone } from './media';
 import type { TrackedInstallment } from './installments';
 import { applyCategorySettings, DEFAULT_SUBCATEGORIES, setSavingsTarget, type CustomCategory } from '../data/categories';
 import { currentCycleKey, type CyclePlan } from './cyclePlans';
+import type { FixedBill, FixedBillCycleState } from './fixedBills';
 
 export type Settings = {
   /** What the Summary greeting calls you; empty for a greeting without a name. */
@@ -61,6 +62,12 @@ export type Settings = {
   payday?: PaydayRule;
   /** Per credit card (account name, e.g. "CC BCA"): the day its statement closes and the day the bill is due. */
   cards: Record<string, CardDates>;
+  /** Individual recurring fixed bills (rent, utilities, insurance) in fixed currency amounts. */
+  fixedBills?: FixedBill[];
+  /** Per-cycle fixed bill verifications, manual marks, skips, and one-cycle amount overrides (by cycle start ISO). */
+  fixedBillCycles?: Record<string, FixedBillCycleState>;
+  /** Merchant keys dismissed from automatic fixed-bill suggestions. */
+  notFixedBills?: string[];
 };
 
 export type ChatFeedback = { q: string; a: string; good: boolean; at: string };

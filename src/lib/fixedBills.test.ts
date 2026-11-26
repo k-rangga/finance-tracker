@@ -1,0 +1,111 @@
+/**
+ * Fixed bills verification tests: due-date scheduling, auto-matching receipts, possible-match detection from
+ * Buffer/Transfer, overdue detection, double-claim prevention, manual links, cash marks, and skips.
+ * Run with `npm run test:bills`.
+ */
+import assert from 'node:assert/strict';
+import { getCycle } from './cycle';
+import { toISO } from './format';
+import { txViews } from './budget';
+import { type Transaction } from '../data/transactions';
+import {
+  dueDateInCycle,
+  fixedBillCategoryLimits,
+  fixedBillDueItems,
+  matchFixedBills,
+  type FixedBill,
+} from './fixedBills';
+
+const day = (y: number, m: number, d: number) => new Date(y, m, d);
+const tx = (id: string, date: Date, title: string, amount: number, category: string, type: Transaction['type'] = 'expense'): Transaction => ({
+  id,
+  date,
+  time: '10:00',
+  title,
+  category,
+  amount,
+  source: 'Gmail',
+  account: 'BCA',
+  type,
+});
+
+let passed = 0;
+const test = (name: string, fn: () => void) => {
+  fn();
+  passed++;
+  console.log('ok  ', name);
+};
+
+// Cycle: 25 Oct 2026 – 24 Nov 2026; today = 12 Nov 2026
+const today = day(2026, 10, 12);
+const cycle = getCycle(today);
+
+const rent: FixedBill = { id: 'b1', name: 'Rent', category: 'Housing', amount: 3_500_000, dueDay: 1, merchant: 'ibu kos' };
+const pln: FixedBill = { id: 'b2', name: 'Electricity (PLN)', category: 'Utilities', amount: 400_000, dueDay: 5, merchant: 'pln', varies: true };
+const wifi: FixedBill = { id: 'b3', name: 'Internet', category: 'Utilities', amount: 385_000, dueDay: 18, merchant: 'indihome' };
+const insurance: FixedBill = { id: 'b4', name: 'Insurance', category: 'Insurance', amount: 600_000, dueDay: 7 };
+const yearly: FixedBill = { id: 'b5', name: 'Car tax', category: 'Insurance', amount: 2_000_000, dueDay: 15, every: 'year', anchorMonth: 3 };
+
+test('schedules due dates inside the pay cycle and skips non-matching yearly months', () => {
+  assert.equal(toISO(dueDateInCycle(rent, cycle)!), '2026-11-01');
+  assert.equal(toISO(dueDateInCycle(wifi, cycle)!), '2026-11-18');
+  assert.equal(dueDateInCycle(yearly, cycle), null);
+});
+
+test('auto-verifies variable utility bills by merchant keyword and computes variance', () => {
+  const raw = [tx('t1', day(2026, 10, 4), 'TOKOPEDIA PLN PASCABAYAR', 465_000, 'Utilities')];
+  const views = txViews(raw, raw, { recat: {}, links: {}, shares: {}, cycle }).txs;
+  const res = matchFixedBills([pln, wifi], views, cycle);
+  assert.equal(res[0].status, 'paid');
+  assert.equal(res[0].matchKind, 'auto');
+  assert.equal(res[0].actual, 465_000);
+  assert.equal(res[0].variance, 65_000);
+  // Wi-Fi is still unpaid (does NOT get falsely marked paid just because Utilities has a tx!)
+  assert.equal(res[1].status, 'due');
+  assert.equal(res[1].matchedTx, undefined);
+});
+
+test('detects overdue unpaid bills and suggests possible match from Transfer / Buffer', () => {
+  const raw = [
+    tx('t_rent', day(2026, 10, 2), 'TRANSFER TO IBU KOS', 3_500_000, 'Transfer', 'transfer'),
+    tx('t_other', day(2026, 10, 8), 'COFFEE SHOP', 45_000, 'Cafe'),
+  ];
+  const views = txViews(raw, raw, { recat: {}, links: {}, shares: {}, cycle }).txs;
+  const res = matchFixedBills([rent, insurance], views, cycle);
+  assert.equal(res[0].status, 'overdue');
+  assert.equal(res[0].possibleTx?.id, 't_rent');
+  assert.equal(res[1].status, 'overdue');
+  assert.equal(res[1].possibleTx, undefined);
+});
+
+test('manual link, cash mark-paid, and skip all clear bill from fixedBillDueItems', () => {
+  const raw = [tx('t_rent', day(2026, 10, 2), 'TRANSFER TO IBU KOS', 3_500_000, 'Housing')];
+  const views = txViews(raw, raw, { recat: {}, links: {}, shares: {}, cycle }).txs;
+  const res = matchFixedBills([rent, insurance, wifi], views, cycle, {
+    linked: { b1: 't_rent' },
+    paid: ['b4'],
+    skipped: ['b3'],
+  });
+  assert.equal(res[0].status, 'paid');
+  assert.equal(res[0].matchKind, 'linked');
+  assert.equal(res[1].status, 'paid');
+  assert.equal(res[1].matchKind, 'manual');
+  assert.equal(res[2].status, 'skipped');
+  assert.equal(fixedBillDueItems(res, cycle).length, 0);
+  const limits = fixedBillCategoryLimits(res);
+  assert.equal(limits.Housing, 3_500_000);
+  assert.equal(limits.Insurance, 600_000);
+  assert.equal(limits.Utilities, undefined); // skipped bill doesn't reserve budget
+});
+
+test('one transaction cannot verify two bills simultaneously', () => {
+  const bA: FixedBill = { id: 'a', name: 'Utilities A', category: 'Utilities', amount: 300_000, dueDay: 5 };
+  const bB: FixedBill = { id: 'b', name: 'Utilities B', category: 'Utilities', amount: 300_000, dueDay: 6 };
+  const raw = [tx('t1', day(2026, 10, 5), 'UTILITY CHARGE', 300_000, 'Utilities')];
+  const views = txViews(raw, raw, { recat: {}, links: {}, shares: {}, cycle }).txs;
+  const res = matchFixedBills([bA, bB], views, cycle);
+  assert.equal(res.filter(x => x.status === 'paid').length, 1);
+  assert.equal(res.filter(x => x.status === 'overdue').length, 1);
+});
+
+console.log(`\nall passed (${passed})`);

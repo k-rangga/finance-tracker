@@ -5,6 +5,7 @@ import { Logo } from './Logo';
 import { askGemini, chatContext, modelLabel, type ChatAction, type ChatMessage } from '../lib/chat';
 import type { Budget, TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
+import type { FixedBillStatus } from '../lib/fixedBills';
 import { useData } from '../lib/data';
 import { useSettings } from '../lib/settings';
 import { useSetLimits } from '../lib/limits';
@@ -104,6 +105,8 @@ type Props = {
   budget: Budget;
   /** Every synced transaction, so suggested moves can find theirs. */
   allTxs: TxView[];
+  /** Individual fixed bills and their verification status this cycle. */
+  fixedBills?: FixedBillStatus[];
   /** Asked as soon as the panel opens (e.g. from Summary's greeting or alerts). */
   ask?: string | null;
   onClose: () => void;
@@ -113,7 +116,7 @@ type Props = {
  * Chat with Maxie about this cycle. Persists across panel close/reopen within this browser session, supports Quick vs
  * Deep reasoning modes, context-aware starters, one-tap follow-up chips, and safe Apply/Undo action cards.
  */
-export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
+export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props) {
   const { settings, update, short } = useSettings();
   const { notes } = useData();
   const sessionKey = 'maxie.chat.' + toISO(cycle.start);
@@ -149,7 +152,7 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
     const id = ++asking.current;
     const timeout = new Promise<'slow'>(r => setTimeout(() => r('slow'), TIMEOUT_MS));
     try {
-      const a = await Promise.race([askGemini(convo, chatContext({ cycle, budget, settings, notes, withNotes }), useDeep), timeout]);
+      const a = await Promise.race([askGemini(convo, chatContext({ cycle, budget, settings, notes, withNotes, fixedBills }), useDeep), timeout]);
       if (id !== asking.current) return;
       if (a === 'slow') setProblem({ kind: 'slow' });
       else if ('error' in a) setProblem({ kind: a.error, detail: a.detail });

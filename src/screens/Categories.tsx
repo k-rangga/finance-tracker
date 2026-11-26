@@ -13,7 +13,10 @@ import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
 import { useSetLimits } from '../lib/limits';
+import type { FixedBillStatus } from '../lib/fixedBills';
+import type { Transaction } from '../data/transactions';
 import { ChallengeBox, challengeState, SectionHead, startChallenge, Summary } from './categoriesExtras';
+import { FixedBillsList } from './FixedBills';
 
 type Mode = 'cycle' | 'week';
 
@@ -22,6 +25,11 @@ type Props = {
   budget: Budget;
   /** Every transaction, for streaks across cycles and no-spend challenges. */
   allTxs: TxView[];
+  /** Every raw transaction, for suggesting recurring fixed bills. */
+  allRaw: Transaction[];
+  /** Individual fixed bills with verification statuses for this cycle. */
+  fixedBillStatuses: FixedBillStatus[];
+  catOf: (t: Transaction) => string;
   open: string | null;
   setOpen: (n: string | null) => void;
   onShowTransactions: (cat: string) => void;
@@ -48,15 +56,15 @@ const makeView = (mode: Mode, wi: number, warnAt: number, txs: TxView[]) => (c: 
 };
 
 
-export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransactions, onEditCategory, onNewCategory }: Props) {
+export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, catOf, open, setOpen, onShowTransactions, onEditCategory, onNewCategory }: Props) {
   const { settings, update, full, short, ofIncome } = useSettings();
   const phone = useIsPhone();
   const fit = phone ? short : full;
   const setLimits = useSetLimits();
   const [mode, setMode] = useState<Mode>('cycle');
   const [showUnused, setShowUnused] = useState(false);
-  /** The last limit change, with a way to take it back, for a few seconds. */
-  const [toast, setToast] = useState<{ text: string; undo: () => void } | null>(null);
+  /** The last limit or bill change, with a way to take it back, for a few seconds. */
+  const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
   const wi = cycle.weekIdx;
 
   useEffect(() => {
@@ -76,13 +84,12 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
   const used = variable.filter(r => r.cur > 0 || r.st.key !== 'ok');
   const unused = variable.filter(r => !used.includes(r));
   const fixedAll = mode === 'cycle' ? budget.cats.filter(c => c.type === 'fixed').map(view) : [];
-  /** A fixed bill shows once it has an amount, a payment or a bill coming; the rest wait under "Add a fixed bill". */
-  const isSet = (r: Row) => r.lim > 0 || r.cur > 0 || budget.bills.some(b => b.category === r.c.name);
+  /** Categories already covered by individual FixedBill items don't also show as legacy category buckets. */
+  const managedFixedCats = new Set((settings.fixedBills ?? []).filter(b => !b.paused).map(b => b.category));
+  /** A legacy fixed category shows once it has an amount, a payment or a bill coming (unless covered by individual bills). */
+  const isSet = (r: Row) => !managedFixedCats.has(r.c.name) && (r.lim > 0 || r.cur > 0 || budget.bills.some(b => b.category === r.c.name));
   // Installments are a group of plans (InstallmentsGroup), their payments counted in their own categories.
   const fixed = fixedAll.filter(r => isSet(r) && !r.c.auto);
-  // Installments plan themselves from your plans, so they're never added by hand.
-  const addable = fixedAll.filter(r => !isSet(r) && !r.c.auto);
-  const [adding, setAdding] = useState<string | null>(null);
   /** A fixed bill's monthly amount, as its limit (% of income); 0 hides it again. */
   const setAmount = (name: string, amount: number, before: number) => {
     setLimits({ [name]: settings.income > 0 ? (amount / settings.income) * 100 : 0 });
@@ -235,91 +242,83 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
         </section>
 
         {mode === 'cycle' && <FoundInstallments />}
-        {mode === 'cycle' && (
-          <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <SectionHead
-              title="Fixed bills"
-              right={
-                fixed.length > 0 || inst.planned > 0 ? (
-                  fixed.every(isPaid) && inst.paid >= inst.planned ? (
-                    <span style={{ color: C.good, fontWeight: 600 }}>All paid</span>
-                  ) : (
-                    `${short(sum(fixed.filter(isPaid).map(r => r.cur || r.lim)) + inst.paid)} of ${short(sum(fixed.map(r => Math.max(r.lim, r.cur))) + inst.planned)} paid`
-                  )
-                ) : undefined
-              }
-            />
-            <Celebrate id={'bills-' + cycleKey} when={fixed.length > 0 && fixed.every(isPaid)} />
-            {fixed.length > 0 && fixed.every(isPaid) && inst.paid >= inst.planned && (
-              <div className={s.mxGreeting}>
-                <Logo size={32} mood="happy" />
-                <p className={s.mxGreetingText}>Every fixed bill is taken care of this cycle. Everything left is yours to spend or save.</p>
-              </div>
-            )}
-            <div className={s.mxBills}>
-              {fixed.length === 0 && inst.planned === 0 && (
-                <div style={{ padding: '16px 20px', fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>
-                  No fixed bills yet. Add what you pay every month (rent, electricity, insurance) so your plan sets it aside.
+        {mode === 'cycle' && (() => {
+          const activeIndividual = fixedBillStatuses.filter(x => x.status !== 'inactive' && x.status !== 'skipped');
+          const paidIndividual = activeIndividual.filter(x => x.status === 'paid');
+          const overdueCount = activeIndividual.filter(x => x.status === 'overdue').length;
+          const indivPaidAmt = sum(paidIndividual.map(x => x.actual));
+          const indivTotalAmt = sum(activeIndividual.map(x => (x.status === 'paid' ? Math.max(x.actual, x.expected) : x.expected)));
+          const totalItems = activeIndividual.length + fixed.length;
+          const allBillsPaid = totalItems > 0 && paidIndividual.length === activeIndividual.length && fixed.every(isPaid) && inst.paid >= inst.planned;
+          const hasAny = fixedBillStatuses.length > 0 || fixed.length > 0 || inst.planned > 0;
+          const totalPaidAmt = indivPaidAmt + sum(fixed.filter(isPaid).map(r => r.cur || r.lim)) + inst.paid;
+          const totalPlannedAmt = indivTotalAmt + sum(fixed.map(r => Math.max(r.lim, r.cur))) + inst.planned;
+
+          return (
+            <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <SectionHead
+                title="Fixed bills"
+                right={
+                  hasAny ? (
+                    allBillsPaid ? (
+                      <span style={{ color: C.good, fontWeight: 600 }}>All paid</span>
+                    ) : (
+                      <span>
+                        {overdueCount > 0 && (
+                          <span style={{ color: C.redInk, fontWeight: 600, marginRight: 8 }}>
+                            {overdueCount} overdue
+                          </span>
+                        )}
+                        {activeIndividual.length > 0
+                          ? `${paidIndividual.length} of ${activeIndividual.length} paid · ${short(totalPaidAmt)} / ${short(totalPlannedAmt)}`
+                          : `${short(totalPaidAmt)} of ${short(totalPlannedAmt)} paid`}
+                      </span>
+                    )
+                  ) : undefined
+                }
+              />
+              <Celebrate id={'bills-' + cycleKey} when={allBillsPaid} />
+              {allBillsPaid && (
+                <div className={s.mxGreeting}>
+                  <Logo size={32} mood="happy" />
+                  <p className={s.mxGreetingText}>Every fixed bill is taken care of this cycle — everything left is yours to spend or save!</p>
                 </div>
               )}
-              {billOrder(fixed, budget, isPaid).map(r => (
-                <BillItem
-                  key={r.c.name}
-                  r={r}
-                  cycle={cycle}
-                  due={budget.bills.filter(x => x.category === r.c.name).sort((x, y) => x.date.getTime() - y.date.getTime())}
-                  open={open === r.c.name}
-                  onToggle={() => toggle(r.c.name)}
-                  marked={marked.has(r.c.name)}
-                  onMark={() => toggleMarked(r.c.name)}
-                  onAmount={amount => setAmount(r.c.name, amount, r.lim)}
-                  editor={<AmountEditor key={r.lim} label="Each month" initial={r.lim} onSave={amount => setAmount(r.c.name, amount, r.lim)} onRemove={() => setAmount(r.c.name, 0, r.lim)} />}
-                  onShowTransactions={onShowTransactions}
-                />
-              ))}
-              <InstallmentsGroup cycle={cycle} open={instOpen} onToggle={() => setInstOpen(!instOpen)} />
-              <button
-                type="button"
-                className={s.catFold}
-                aria-expanded={adding != null}
-                onClick={() => setAdding(adding == null ? '' : null)}
-                style={{ color: C.clayInk, fontWeight: 600, borderTop: '1px solid var(--line)' }}
-              >
-                <Icon d={IC.plus} size={14} />
-                Add a fixed bill
-              </button>
-              {adding != null && (
-                <div className={s.billAdd}>
-                  <div className={s.tplGrid}>
-                    {addable.map(r => (
-                      <button key={r.c.name} type="button" className={s.tplOpt} aria-pressed={adding === r.c.name} onClick={() => setAdding(r.c.name)}>
-                        <Icon d={r.c.icon} size={14} />
-                        {r.c.name}
-                      </button>
-                    ))}
-                    <button type="button" className={s.tplOpt} onClick={onNewCategory}>
-                      <Icon d={IC.plus} size={14} />
-                      Other…
-                    </button>
+              <div className={s.mxBills}>
+                {!hasAny && (
+                  <div style={{ padding: '16px 20px', fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>
+                    No fixed bills yet. Add what you pay every month (rent, electricity, internet, insurance) so Maxie checks when each receipt lands.
                   </div>
-                  {adding && (
-                    <AmountEditor
-                      key={adding}
-                      label={`${adding} each month`}
-                      initial={0}
-                      onSave={amount => {
-                        setAmount(adding, amount, 0);
-                        setAdding(null);
-                      }}
-                      onCancel={() => setAdding('')}
-                    />
-                  )}
-                  {!adding && <span style={{ fontSize: 13, color: C.textMuted }}>Pick one, or Other… to name your own (choose Fixed bill as its type).</span>}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
+                )}
+                <FixedBillsList
+                  cycle={cycle}
+                  budget={budget}
+                  allRaw={allRaw}
+                  statuses={fixedBillStatuses}
+                  catOf={catOf}
+                  onShowTransactions={onShowTransactions}
+                  onToast={setToast}
+                />
+                {billOrder(fixed, budget, isPaid).map(r => (
+                  <BillItem
+                    key={r.c.name}
+                    r={r}
+                    cycle={cycle}
+                    due={budget.bills.filter(x => x.category === r.c.name).sort((x, y) => x.date.getTime() - y.date.getTime())}
+                    open={open === r.c.name}
+                    onToggle={() => toggle(r.c.name)}
+                    marked={marked.has(r.c.name)}
+                    onMark={() => toggleMarked(r.c.name)}
+                    onAmount={amount => setAmount(r.c.name, amount, r.lim)}
+                    editor={<AmountEditor key={r.lim} label="Each month" initial={r.lim} onSave={amount => setAmount(r.c.name, amount, r.lim)} onRemove={() => setAmount(r.c.name, 0, r.lim)} />}
+                    onShowTransactions={onShowTransactions}
+                  />
+                ))}
+                <InstallmentsGroup cycle={cycle} open={instOpen} onToggle={() => setInstOpen(!instOpen)} />
+              </div>
+            </section>
+          );
+        })()}
         {mode === 'week' && <span style={{ fontSize: 13, color: C.textMuted, padding: '0 4px' }}>Fixed bills are monthly, so they're only in the cycle view.</span>}
       </div>
 
@@ -328,11 +327,15 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
       {toast && (
         <Toast
           text={toast.text}
-          action="Undo"
-          onAction={() => {
-            toast.undo();
-            setToast(null);
-          }}
+          action={toast.undo ? 'Undo' : undefined}
+          onAction={
+            toast.undo
+              ? () => {
+                  toast.undo?.();
+                  setToast(null);
+                }
+              : undefined
+          }
           onClose={() => setToast(null)}
         />
       )}

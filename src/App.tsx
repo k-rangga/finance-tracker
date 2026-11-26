@@ -18,6 +18,7 @@ import { InstallmentsAhead } from './screens/InstallmentsAhead';
 import { PlansProvider, ScheduleModal } from './components/Plans';
 import { detectInstallments, matchTracked, planBills, planViews, trackFound, withTrackedPlans } from './lib/installments';
 import { cycleKey, matchCosts, nextCycleOf, plannedCostBills } from './lib/cyclePlans';
+import { fixedBillCategoryLimits, fixedBillDueItems, matchFixedBills } from './lib/fixedBills';
 import { Summary } from './screens/Summary';
 import { Categories } from './screens/Categories';
 import { Activity, type ActivityFilter } from './screens/Activity';
@@ -101,7 +102,18 @@ export default function App() {
   const subCharges = useMemo(() => chargesBySub(subscriptions, all), [subscriptions, all]);
   const subStates = useMemo(() => Object.fromEntries(Object.entries(subscriptions).map(([id, x]) => [id, subState(x, subCharges.get(id) ?? [], today)])), [subscriptions, subCharges, today]);
   const catOf = useCallback((t: { id: string; category: string }) => recat[t.id] ?? t.category, [recat]);
+  /** This cycle's transaction views (before budget), used to verify individual fixed bills cleanly. */
+  const cycleTxViews = useMemo(
+    () => txViews(transactions, [...transactions, ...prevTransactions], { recat, links, shares, cycle, subs }).txs,
+    [transactions, prevTransactions, recat, links, shares, cycle, subs],
+  );
+  /** Verification status of each individual fixed bill against actual transactions in this cycle. */
+  const fixedBillStatuses = useMemo(
+    () => matchFixedBills(settings.fixedBills ?? [], cycleTxViews, cycle, settings.fixedBillCycles?.[toISO(cycle.start)]),
+    [settings.fixedBills, settings.fixedBillCycles, cycleTxViews, cycle],
+  );
   const bills = useMemo(() => {
+    const cycleId = toISO(cycle.start);
     // A subscription's billing dates replace the guess from last cycle's charge of the same merchant.
     const subKeys = Object.values(subscriptions).map(x => merchantKey(x.merchant)).filter(Boolean);
     const isSub = (title: string) => subKeys.some(k => ` ${merchantKey(title)} `.includes(` ${k} `));
@@ -109,17 +121,23 @@ export default function App() {
       const last = subCharges.get(id)?.[0];
       return last ? catOf(last) : 'Subscriptions';
     };
+    // Categories already tracked via individual fixed bills (or manually ticked off in legacy paidBills) don't also guess from last cycle.
+    const managedCats = new Set((settings.fixedBills ?? []).filter(b => !b.paused).map(b => b.category));
+    const paidCats = new Set((settings.paidBills ?? []).filter(k => k.startsWith(cycleId + '|')).map(k => k.slice(cycleId.length + 1)));
     // One-off costs planned for this cycle, until a matching payment comes in.
     const costs = settings.cyclePlans?.[cycleKey(cycle)]?.costs ?? [];
     const spending = transactions.filter(t => t.type === 'expense').map(t => ({ id: t.id, date: t.date, amount: t.amount, cat: recat[t.id] ?? t.category }));
     return [
-      ...expectedBills(prevTransactions, prevCycle, transactions, cycle, recat).filter(b => !isSub(b.title) && !settings.dismissedBills.includes(billKey(toISO(cycle.start), b))),
+      ...expectedBills(prevTransactions, prevCycle, transactions, cycle, recat).filter(
+        b => !isSub(b.title) && !managedCats.has(b.category) && !paidCats.has(b.category) && !settings.dismissedBills.includes(billKey(cycleId, b)),
+      ),
+      ...fixedBillDueItems(fixedBillStatuses, cycle),
       ...planBills(plans, cycle),
       ...subscriptionBills(subscriptions, subStates, cycle, subCat),
       ...plannedCostBills(costs, cycle, matchCosts(costs, spending)),
     ].sort((x, y) => x.date.getTime() - y.date.getTime());
     // Custom categories change which categories are fixed bills.
-  }, [prevTransactions, prevCycle, transactions, cycle, recat, plans, settings.customCategories, settings.dismissedBills, settings.cyclePlans, subscriptions, subStates, subCharges, catOf]);
+  }, [prevTransactions, prevCycle, transactions, cycle, recat, plans, settings.customCategories, settings.dismissedBills, settings.cyclePlans, settings.fixedBills, settings.paidBills, fixedBillStatuses, subscriptions, subStates, subCharges, catOf]);
   /** What the next cycle already holds: installment payments and subscription charges due in it. */
   const nextCycle = useMemo(() => nextCycleOf(cycle), [cycle]);
   const nextKnown = useMemo(() => {
@@ -190,9 +208,10 @@ export default function App() {
       // Planned expenses you added for this cycle: money set aside in their category.
       const plannedCosts: Record<string, number> = {};
       for (const c of settings.cyclePlans?.[cycleKey(cycle)]?.costs ?? []) plannedCosts[c.category] = (plannedCosts[c.category] ?? 0) + c.amount;
-      return computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, cycle, income: settings.income, warnAt: settings.warnAt, plannedCosts });
+      const fixedBillLimits = fixedBillCategoryLimits(fixedBillStatuses);
+      return computeBudget({ transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, cycle, income: settings.income, warnAt: settings.warnAt, plannedCosts, fixedBillLimits });
     },
-    [transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, cycle, settings.income, settings.warnAt, settings.cyclePlans, settings.savingsPct, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
+    [transactions, prevTransactions, prevCycle, bills, fixedBillStatuses, recat, links, shares, subs, cycle, settings.income, settings.warnAt, settings.cyclePlans, settings.savingsPct, settings.customCategories, settings.limitOverrides, settings.colorOverrides],
   );
   /** Every synced transaction, for the Transactions screen's own date range. */
   const allTxs = useMemo(() => txViews(all, all, { recat, links, shares, cycle, subs }).txs, [all, recat, links, shares, cycle, subs]);
@@ -431,7 +450,19 @@ export default function App() {
               />
             )}
             {tab === 'categories' && (
-              <Categories cycle={cycle} budget={budget} allTxs={allTxs} open={openCat} setOpen={setOpenCat} onShowTransactions={showTransactions} onEditCategory={name => setCatDialog({ editing: name })} onNewCategory={() => setCatDialog({})} />
+              <Categories
+                cycle={cycle}
+                budget={budget}
+                allTxs={allTxs}
+                allRaw={all}
+                fixedBillStatuses={fixedBillStatuses}
+                catOf={catOf}
+                open={openCat}
+                setOpen={setOpenCat}
+                onShowTransactions={showTransactions}
+                onEditCategory={name => setCatDialog({ editing: name })}
+                onNewCategory={() => setCatDialog({})}
+              />
             )}
             {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} onDismissBill={dismissBill} />}
             {tab === 'plan' && (
@@ -466,7 +497,7 @@ export default function App() {
           onClose={() => setBillUndo(null)}
         />
       )}
-      {chat && <Chat cycle={cycle} budget={budget} allTxs={allTxs} ask={chat.ask} onClose={() => setChat(null)} />}
+      {chat && <Chat cycle={cycle} budget={budget} allTxs={allTxs} fixedBills={fixedBillStatuses} ask={chat.ask} onClose={() => setChat(null)} />}
       {settingsOpen && (
         <SettingsDialog
           email={email}

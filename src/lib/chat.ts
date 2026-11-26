@@ -5,6 +5,7 @@ import type { Settings } from './settings';
 import { tidyName, toISO } from './format';
 import { CATEGORIES, OTHER_CATEGORIES, SAVINGS_TARGET_PCT } from '../data/categories';
 import { merchantKey } from '../data/transactions';
+import type { FixedBillStatus } from './fixedBills';
 
 /** A change Gemini suggests; shown as a card you apply yourself (see askGemini_ in apps-script/Gemini.js). */
 export type ChatAction =
@@ -51,7 +52,21 @@ const MAX_OTHER_TXS = 45;
  * categories (with sub-categories and last cycle at the same point), bills still due, and recent transactions.
  * Notes only when you allow them.
  */
-export function chatContext({ cycle, budget: b, settings, notes, withNotes }: { cycle: Cycle; budget: Budget; settings: Settings; notes: Record<string, string>; withNotes: boolean }) {
+export function chatContext({
+  cycle,
+  budget: b,
+  settings,
+  notes,
+  withNotes,
+  fixedBills,
+}: {
+  cycle: Cycle;
+  budget: Budget;
+  settings: Settings;
+  notes: Record<string, string>;
+  withNotes: boolean;
+  fixedBills?: FixedBillStatus[];
+}) {
   const r = Math.round;
   const name = settings.name.trim();
 
@@ -88,6 +103,16 @@ export function chatContext({ cycle, budget: b, settings, notes, withNotes }: { 
   const bufferTxs = b.txs.filter(t => t.cat === 'Buffer' && !t.isIncome && !t.isTransfer).slice(0, MAX_BUFFER_TXS);
   const bufferIds = new Set(bufferTxs.map(t => t.id));
   const recentTxs = [...bufferTxs, ...b.txs.filter(t => !bufferIds.has(t.id)).slice(0, MAX_OTHER_TXS)];
+  const trackedFixed = (fixedBills ?? [])
+    .filter(x => x.status !== 'inactive')
+    .map(x => ({
+      name: x.bill.name,
+      category: x.bill.category,
+      expected: r(x.expected),
+      status: x.status,
+      ...(x.dueDate ? { due: toISO(x.dueDate).slice(5) } : {}),
+      ...(x.status === 'paid' ? { actual: r(x.actual), verified: !!x.matchedTx } : {}),
+    }));
 
   return {
     today: toISO(cycle.today),
@@ -110,6 +135,7 @@ export function chatContext({ cycle, budget: b, settings, notes, withNotes }: { 
     perDayToFinishOnBudget: r(b.safeDay),
     bufferCount,
     ...(cards.length ? { cards } : {}),
+    ...(trackedFixed.length ? { fixedBills: trackedFixed } : {}),
     ...(topMerchants.length ? { topMerchants } : {}),
     categoryNames: [...CATEGORIES.map(c => c.name), ...OTHER_CATEGORIES],
     categories: b.cats.map(c => ({

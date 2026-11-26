@@ -231,8 +231,10 @@ export function computeBudget(args: {
   warnAt: number;
   /** Planned expenses this cycle by category (paid or not): each category's plan grows by them. */
   plannedCosts?: Record<string, number>;
+  /** Exact totals from individual fixed bills per category (fixed currency amount, immune to income % drift). */
+  fixedBillLimits?: Record<string, number>;
 }): Budget {
-  const { transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, cycle, income, warnAt, plannedCosts = {} } = args;
+  const { transactions, prevTransactions, prevCycle, bills, recat, links, shares, subs, cycle, income, warnAt, plannedCosts = {}, fixedBillLimits = {} } = args;
   const ofIncome = (p: number) => (p / 100) * income;
   const { txs, netOf } = txViews(transactions, [...transactions, ...prevTransactions], { recat, links, shares, cycle, subs });
 
@@ -246,11 +248,13 @@ export function computeBudget(args: {
     // Installment payments count in their own category, and its plan grows by them (paid so far plus still due),
     // so a payment you already committed to never reads as overspending.
     const planned = sum(mine.filter(t => t.plan && cycle.offsetOf(t.date) >= 0).map(t => t.net)) + sum(bills.filter(b => b.source === 'Installment' && b.category === c.name).map(b => b.amount));
-    const limit = c.auto ? spent + sum(bills.filter(b => b.category === c.name).map(b => b.amount)) : ofIncome(c.limitPct) + planned + (plannedCosts[c.name] ?? 0);
+    const fixedAmt = fixedBillLimits[c.name] ?? 0;
+    const base = fixedAmt > 0 ? fixedAmt : ofIncome(c.limitPct);
+    const limit = c.auto ? spent + sum(bills.filter(b => b.category === c.name).map(b => b.amount)) : base + planned + (plannedCosts[c.name] ?? 0);
     const used = limit ? (spent / limit) * 100 : 0;
     const lastSameDays = sum(prev.slice(0, cycle.weekIdx)) + prev[cycle.weekIdx] * weekFrac;
-    // An auto plan reads as its share of income too, so the plan's percentages add up.
-    const limitPct = c.auto ? (income ? (limit / income) * 100 : 0) : c.limitPct;
+    // An auto or fixed-bill-driven plan reads as its share of income too, so the plan's percentages add up.
+    const limitPct = c.auto || fixedAmt > 0 ? (income ? (limit / income) * 100 : 0) : c.limitPct;
     return { ...c, limitPct, limit, cur, prev, spent, lastSameDays, remaining: limit - spent, used, status: categoryStatus(used, c, warnAt) };
   });
 
