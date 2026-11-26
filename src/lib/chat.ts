@@ -120,7 +120,7 @@ export function chatContext({
     currency: settings.currency,
     ...(name ? { name } : {}),
     ...(settings.city ? { city: settings.city } : {}),
-    language: settings.maxieLanguage === 'id' ? 'Bahasa Indonesia' : 'English',
+    language: 'English',
     income: r(settings.income),
     savingsTargetPct: SAVINGS_TARGET_PCT,
     savingsTarget: r(b.savingsTarget),

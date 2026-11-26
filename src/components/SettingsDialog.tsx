@@ -123,6 +123,7 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
             onChange={v => setD(p => ({ ...p, maxieLanguage: v === 'Bahasa Indonesia' ? 'id' : 'en' }))}
           />
         </Row>
+        <span className={s.setHint}>Used for greetings and plan checks. Ask Maxie chat defaults to English and automatically answers in Bahasa Indonesia when you chat in Indonesian.</span>
         <Row label="Currency">
           <Options label="Currency" items={['IDR', 'USD'] as const} value={d.currency} onChange={setCurrency} />
         </Row>
