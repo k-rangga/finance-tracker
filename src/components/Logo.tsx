@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import s from '../styles/ui.module.css';
 import { reducedMotion } from './Delight';
 
@@ -11,6 +12,8 @@ const PET_CHEERS = [
   'Got your back!',
   'Smooth sailing!',
 ];
+
+type BubblePos = { text: string; style: CSSProperties; place: 'right' | 'bottom' | 'top' };
 
 /**
  * Maxie, the Siberian husky mark: upright closer-set husky ears, double-tuft wolf cheeks, ivory mask with thin
@@ -48,18 +51,20 @@ export function Logo({
   label?: string;
 }) {
   const [perked, setPerked] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [bubble, setBubble] = useState<BubblePos | null>(null);
   const tapCount = useRef(0);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     if (!perked) return;
     const t = setTimeout(() => setPerked(false), 750);
     return () => clearTimeout(t);
   }, [perked]);
   useEffect(() => {
-    if (!note) return;
-    const t = setTimeout(() => setNote(null), 1800);
+    if (!bubble) return;
+    const t = setTimeout(() => setBubble(null), 1900);
     return () => clearTimeout(t);
-  }, [note]);
+  }, [bubble]);
 
   const small = size <= 24;
   const activeMood: MaxieMood = perked ? 'happy' : mood;
@@ -119,13 +124,26 @@ export function Logo({
   if (!interactive) return svg;
   const onPet = () => {
     const idx = tapCount.current++;
-    const line = idx === 0 && cheer ? cheer : PET_CHEERS[idx % PET_CHEERS.length];
+    const text = idx === 0 && cheer ? cheer : PET_CHEERS[idx % PET_CHEERS.length];
     setPerked(true);
-    setNote(line);
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const vw = window.innerWidth;
+    if (rect.top < 64 && rect.left < 140) {
+      // Near top-left (e.g. sidebar brand mark): pop neatly to the right.
+      setBubble({ text, place: 'right', style: { left: rect.right + 10, top: rect.top + rect.height / 2 } });
+    } else if (rect.top < 64) {
+      // Near the top edge elsewhere (mobile header, chat header): pop cleanly below.
+      setBubble({ text, place: 'bottom', style: { left: Math.max(12, Math.min(rect.left, vw - 220)), top: rect.bottom + 8 } });
+    } else {
+      // Room above: pop above, clamped safely inside the viewport.
+      setBubble({ text, place: 'top', style: { left: Math.max(12, Math.min(rect.left, vw - 220)), top: rect.top - 8 } });
+    }
   };
   return (
     <span className={s.mxLogoWrap}>
       <button
+        ref={btnRef}
         type="button"
         onClick={onPet}
         aria-label={label ?? 'Say hi to Maxie'}
@@ -134,11 +152,14 @@ export function Logo({
       >
         {svg}
       </button>
-      {note && (
-        <span className={s.mxSpeech} role="status" aria-live="polite">
-          {note}
-        </span>
-      )}
+      {bubble &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <span key={tapCount.current} className={s.mxSpeech} data-place={bubble.place} style={bubble.style} role="status" aria-live="polite">
+            {bubble.text}
+          </span>,
+          document.body,
+        )}
     </span>
   );
 }

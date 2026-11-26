@@ -14,16 +14,16 @@ const DAY = 864e5;
 const isSpend = (t: TxView) => !t.isIncome && !t.isTransfer;
 
 /** How the cycle is going: under the pace for today, on it, or past it (colours the bar and the line under it). */
-export function moodOf(spent: number, limit: number, expected: number): { label: string; ink: string; bar: string; face: MaxieMood } {
-  if (limit > 0 && spent > limit) return { label: 'Over the plan', ink: C.redInk, bar: C.red, face: 'steady' };
-  if (expected > 0 && spent > expected * 1.1) return { label: 'Spending faster than planned', ink: C.amberInk, bar: C.amber, face: 'steady' };
-  if (expected > 0 && spent < expected * 0.8) return { label: 'Nicely under pace', ink: C.good, bar: 'var(--category-1)', face: 'happy' };
-  return { label: 'On pace', ink: C.good, bar: 'var(--category-1)', face: 'calm' };
+export function moodOf(spent: number, limit: number, expected: number): { label: string; cheer: string; tone: 'good' | 'warn' | 'over'; ink: string; bar: string; face: MaxieMood } {
+  if (limit > 0 && spent > limit) return { label: 'A little over plan', cheer: 'Totally fixable together!', tone: 'over', ink: C.redInk, bar: C.red, face: 'steady' };
+  if (expected > 0 && spent > expected * 1.1) return { label: 'Running a bit warm', cheer: 'Easy to ease back from here!', tone: 'warn', ink: C.amberInk, bar: C.amber, face: 'steady' };
+  if (expected > 0 && spent < expected * 0.85) return { label: 'Nicely under pace', cheer: 'Plenty of breathing room!', tone: 'good', ink: C.good, bar: 'var(--category-1)', face: 'happy' };
+  return { label: 'Steady groove', cheer: 'Right on track!', tone: 'good', ink: C.good, bar: 'var(--category-1)', face: 'happy' };
 }
 
 /**
- * The top of Categories: one big number, what it's out of, a bar with where you should be by today, and how much
- * a day is safe from here.
+ * The top of Categories: one big number, warm mood badge, a bar with interactive pace tick for today,
+ * how much a day is safe from here, and a quick Ask Maxie button.
  */
 export function Summary({
   spent,
@@ -32,6 +32,7 @@ export function Summary({
   period,
   footnote,
   switcher,
+  onAskMaxie,
 }: {
   spent: number;
   limit: number;
@@ -40,31 +41,56 @@ export function Summary({
   period: string;
   footnote: string;
   switcher: ReactNode;
+  onAskMaxie?: () => void;
 }) {
   const { full, short } = useSettings();
   const phone = useIsPhone();
+  const [showPace, setShowPace] = useState(false);
   const shown = useCountUp(spent);
-  const mood = moodOf(spent, limit, limit * todayFrac);
+  const expected = limit * todayFrac;
+  const mood = moodOf(spent, limit, expected);
   const width = limit > 0 ? Math.min(100, (spent / limit) * 100) : 0;
+  const paceDelta = expected - spent;
   return (
     <section className={s.sumCard} aria-label="This cycle at a glance">
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-        <span className={s.sumCat} role="img" aria-label={mood.label} title={mood.label}>
-          <Logo size={44} mood={mood.face} interactive />
+        <span className={s.sumCat}>
+          <Logo size={44} mood={mood.face} interactive cheer={mood.cheer} />
         </span>
-        <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0, flex: '1 1 180px' }}>
-          <span className={s.sumBig}>{(phone ? short : full)(shown)} spent</span>
+        <span style={{ display: 'flex', flexDirection: 'column', gap: 3, marginRight: 'auto', minWidth: 0, flex: '1 1 180px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span className={s.sumBig}>{(phone ? short : full)(shown)} spent</span>
+            <span className={s.catMoodPill} data-tone={mood.tone}>
+              {mood.label}
+            </span>
+          </span>
           <span style={{ fontSize: 14, color: C.textMuted }}>
             of {(phone ? short : full)(limit)} {period}
           </span>
         </span>
         {switcher}
       </div>
-      <span className={s.sumTrack}>
-        <span className={s.sumFill} style={{ width: width + '%', background: mood.bar }} />
-        {limit > 0 && todayFrac > 0 && todayFrac < 1 && <span className={s.todayMark} style={{ left: todayFrac * 100 + '%' }} title="Where you'd be today on plan" />}
-      </span>
-      <span style={{ fontSize: 14, color: mood.ink, fontWeight: 500 }}>{footnote}</span>
+      <div className={s.sumTrackWrap} onMouseEnter={() => setShowPace(true)} onMouseLeave={() => setShowPace(false)} onClick={() => setShowPace(v => !v)}>
+        <span className={s.sumTrack}>
+          <span className={s.sumFill} style={{ width: width + '%', background: mood.bar }} />
+          {limit > 0 && todayFrac > 0 && todayFrac < 1 && (
+            <span className={s.todayMark} style={{ left: todayFrac * 100 + '%' }} title={`On-plan pace today: ${full(expected)}`} />
+          )}
+        </span>
+        {showPace && limit > 0 && todayFrac > 0 && todayFrac < 1 && (
+          <span className={s.sumPaceTip}>
+            On-plan pace today: <strong>{full(expected)}</strong> ({paceDelta >= 0 ? `${short(paceDelta)} under pace` : `${short(-paceDelta)} over pace`})
+          </span>
+        )}
+      </div>
+      <div className={s.sumFootRow}>
+        <span style={{ fontSize: 14, color: mood.ink, fontWeight: 500 }}>{footnote}</span>
+        {onAskMaxie && (
+          <button type="button" className={s.sxAttnPill} onClick={onAskMaxie}>
+            <Icon d={IC.sparkle} size={12} /> Ask Maxie
+          </button>
+        )}
+      </div>
     </section>
   );
 }

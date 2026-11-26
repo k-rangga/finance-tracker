@@ -288,8 +288,8 @@ export default function App() {
     setCollapsed(mini);
   };
   const showTransactions = useCallback(
-    (cat: string) => {
-      setTxFilter({ range: 'cycle', cat, q: '' });
+    (cat: string, extra?: { q?: string; date?: string }) => {
+      setTxFilter(extra?.date ? { range: 'custom', from: extra.date, to: extra.date, cat, q: extra.q ?? '' } : { range: 'cycle', cat, q: extra?.q ?? '' });
       setTab('tx');
     },
     [setTab],
@@ -483,6 +483,7 @@ export default function App() {
                 onShowTransactions={showTransactions}
                 onEditCategory={name => setCatDialog({ editing: name })}
                 onNewCategory={() => setCatDialog({})}
+                onAskMaxie={ask => setChat({ ask })}
               />
             )}
             {tab === 'tx' && <Activity cycle={cycle} budget={budget} allTxs={allTxs} removedTxs={removedTxs} onRemove={setRemoved} filter={txFilter} setFilter={setTxFilter} onRecat={setOverride} onLink={setLink} onShare={setShare} onDismissBill={dismissBill} />}

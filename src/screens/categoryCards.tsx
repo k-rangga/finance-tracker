@@ -8,9 +8,10 @@ import s from '../styles/ui.module.css';
 import { IC, Icon } from '../components/Icon';
 import { Logo } from '../components/Logo';
 import { usePlans } from '../components/Plans';
+import { FlameIcon } from './categoriesExtras';
 import type { CatView, TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { dayMonth, sum, tidyName } from '../lib/format';
+import { dayMonth, sum, tidyName, toISO } from '../lib/format';
 import { leftAfter } from '../lib/installments';
 import { useData } from '../lib/data';
 import { useSettings } from '../lib/settings';
@@ -86,15 +87,25 @@ function topPlaces(mine: TxView[]) {
   return [...by.values()].sort((a, b) => b.amount - a.amount).slice(0, 3);
 }
 
-function PlaceList({ places }: { places: { what: string; count: number; amount: number }[] }) {
+function PlaceList({ places, onPick }: { places: { what: string; count: number; amount: number }[]; onPick?: (merchant: string) => void }) {
   const { full } = useSettings();
   return (
     <ul className={s.mxList}>
       {places.map(p => (
         <li key={p.what}>
-          <span className={s.mxWhat}>{p.what}</span>
-          {p.count > 1 && <span className={s.mxCount}>{p.count}×</span>}
-          <span className={s.mxAmt}>{full(p.amount)}</span>
+          {onPick ? (
+            <button type="button" className={s.mxPlaceBtn} onClick={() => onPick(p.what)} title={`See ${p.what} transactions`}>
+              <span className={s.mxWhat}>{p.what}</span>
+              {p.count > 1 && <span className={s.mxCount}>{p.count}×</span>}
+              <span className={s.mxAmt}>{full(p.amount)}</span>
+            </button>
+          ) : (
+            <>
+              <span className={s.mxWhat}>{p.what}</span>
+              {p.count > 1 && <span className={s.mxCount}>{p.count}×</span>}
+              <span className={s.mxAmt}>{full(p.amount)}</span>
+            </>
+          )}
         </li>
       ))}
     </ul>
@@ -104,17 +115,21 @@ function PlaceList({ places }: { places: { what: string; count: number; amount: 
 // ---------------------------------------------------------------------------------------------- everyday
 
 /**
- * An everyday category as a card: icon, name and "spent of limit", then what's left or how much over, and a
- * meter. Opened: the last 7 days, the top expenses, and one suggestion from Maxie (move a top-up out, or cover
- * an overspend from the category with the most room).
+ * An everyday category as a card: icon, name, streak badge, "spent of limit", remaining or over, and a pace-marked
+ * meter. Opened: clickable 7-day bars, clickable top merchants, inline limit nudge / share-room rebalance, and Maxie's note.
  */
 export function BudgetCard({
   r,
   cycle,
   open,
   onToggle,
+  streak = 0,
+  todayFrac,
   donors,
+  shareTargets = [],
   onMove,
+  onShareRoom,
+  onNudgeLimit,
   onShowTransactions,
   onEditCategory,
   extra,
@@ -123,19 +138,31 @@ export function BudgetCard({
   cycle: Cycle;
   open: boolean;
   onToggle: () => void;
+  /** Consecutive past cycles kept within limit (shown at 2+). */
+  streak?: number;
+  /** Fraction of the cycle/week elapsed today (0–1), drawn as a subtle tick on the meter. */
+  todayFrac?: number;
   donors: { name: string; room: number }[];
+  /** Other variable categories that can receive spare budget room from this category. */
+  shareTargets?: { name: string; room: number; over: number }[];
   onMove: (from: string, amount: number) => void;
-  onShowTransactions: (cat: string) => void;
+  onShareRoom?: (to: string, amount: number) => void;
+  onNudgeLimit?: (delta: number) => void;
+  onShowTransactions: (cat: string, extra?: { q?: string; date?: string }) => void;
   onEditCategory: (name: string) => void;
   /** Anything more for the opened card (sub-categories, the no-spend challenge). */
   extra?: ReactNode;
 }) {
-  const { full, short } = useSettings();
+  const { settings, full, short } = useSettings();
   const { setOverride } = useData();
   const { c, cur, lim, mine } = r;
   const over = lim > 0 && cur > lim ? cur - lim : 0;
+  const room = Math.max(0, lim - cur);
+  const pctUsed = lim > 0 ? Math.round((cur / lim) * 100) : 0;
   const [choosing, setChoosing] = useState(false);
   const [srcIdx, setSrc] = useState(0);
+  const [sharing, setSharing] = useState(false);
+  const step = settings.currency === 'USD' ? 25 : 100_000;
 
   // The last 7 days, today last.
   const days = Array.from({ length: 7 }, (_, i) => new Date(cycle.today.getFullYear(), cycle.today.getMonth(), cycle.today.getDate() - 6 + i));
@@ -171,12 +198,12 @@ export function BudgetCard({
   else if (over > 0 && src)
     suggestion = (
       <div className={s.mxNote}>
-        <Logo size={24} />
+        <Logo size={24} mood="steady" />
         <div className={s.mxNoteMain}>
           <p>
             {coverAmt < over
               ? `Cover part of it from ${src.name}? It has ${full(src.room)} left, which brings you to ${full(over - coverAmt)} over.`
-              : `Cover it from ${src.name}? It has ${full(src.room)} left, so you'd be back on budget.`}
+              : `Cover it from ${src.name}? It has ${full(src.room)} left, so you'd be right back on budget.`}
           </p>
           {choosing && (
             <div className={s.mxSources} role="radiogroup" aria-label="Take budget from">
@@ -215,6 +242,9 @@ export function BudgetCard({
 
   const places = topPlaces(mine);
   const one = mine.length === 1 ? mine[0] : null;
+  const smoothUnder = cur > 0 && lim > 0 && todayFrac != null && todayFrac > 0.15 && cur < lim * todayFrac * 0.85;
+  const shareAmt = Math.min(room, step);
+
   return (
     <section id={'cat-' + c.name} className={s.mxCard} data-over={over > 0 || undefined} aria-label={`${c.name} budget`}>
       <button type="button" className={s.mxHead} aria-expanded={open} onClick={onToggle}>
@@ -222,51 +252,142 @@ export function BudgetCard({
           <Icon d={c.icon} size={19} />
         </span>
         <span className={s.mxTitles}>
-          <span className={s.mxLabel}>{c.name}</span>
+          <span className={s.mxLabelRow}>
+            <span className={s.mxLabel}>{c.name}</span>
+            {streak >= 2 && (
+              <span className={s.mxStreakBadge} title={`${streak} consecutive cycles within limit`}>
+                <FlameIcon size={12} /> {streak} cycles
+              </span>
+            )}
+          </span>
           <span className={s.mxSub}>
             {short(cur)} of {short(lim)}
+            {smoothUnder && <span className={s.mxSmoothNote}> · Smooth sailing ({pctUsed}%)</span>}
           </span>
         </span>
         <span className={s.mxStatus} data-over={over > 0 || undefined}>
           {over > 0 && <Icon d={IC.alert} size={15} />}
-          {over > 0 ? `${full(over)} over` : `${full(Math.max(0, lim - cur))} left`}
+          {over > 0 ? `${full(over)} over` : `${full(room)} left`}
         </span>
         <Icon d={IC.chevDown} size={18} color={C.textMuted} style={{ flex: 'none', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.16s ease-out' }} />
       </button>
-      <div className={s.mxMeter} style={{ background: over > 0 ? 'var(--danger-soft)' : c.tint }} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((cur / (lim || 1)) * 100)} aria-label={`${c.name} budget used`}>
-        <span style={{ width: Math.min(100, (cur / (lim || 1)) * 100) + '%', background: over > 0 ? 'var(--danger)' : c.color }} />
+      <div
+        className={s.mxMeter}
+        style={{ background: over > 0 ? 'var(--danger-soft)' : c.tint }}
+        role="meter"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pctUsed}
+        aria-label={`${c.name} budget used`}
+      >
+        <span className={s.mxMeterFill} style={{ width: Math.min(100, (cur / (lim || 1)) * 100) + '%', background: over > 0 ? 'var(--danger)' : c.color }} />
+        {lim > 0 && todayFrac != null && todayFrac > 0 && todayFrac < 1 && (
+          <span className={s.mxMeterPace} style={{ left: todayFrac * 100 + '%' }} title={`On-plan pace today: ${full(lim * todayFrac)}`} />
+        )}
       </div>
       {open && (
         <div className={s.mxBody}>
           {spendDays >= 3 && (
             <div className={s.mxWeek} aria-label="Last 7 days">
-              {week.map(x => (
-                <div key={x.d.getTime()} className={s.mxDay} title={`${DAY_NAME[x.d.getDay()]}: ${full(x.value)}`}>
-                  <span className={s.mxDayVal} data-zero={!x.value || undefined}>
-                    {x.value ? short(x.value) : '–'}
-                  </span>
-                  <span className={s.mxDayBar} style={{ height: Math.max(2, (x.value / wMax) * 56), background: x.value ? c.color : 'var(--line)' }} />
-                  <span className={s.mxDayLabel}>{DAY_LETTER[x.d.getDay()]}</span>
-                </div>
-              ))}
+              {week.map(x => {
+                const iso = toISO(x.d);
+                return (
+                  <button
+                    key={x.d.getTime()}
+                    type="button"
+                    className={s.mxDayBtn}
+                    disabled={!x.value}
+                    title={x.value ? `${DAY_NAME[x.d.getDay()]}: ${full(x.value)} (tap to view)` : `${DAY_NAME[x.d.getDay()]}: no spend`}
+                    onClick={() => x.value && onShowTransactions(c.name, { date: iso })}
+                  >
+                    <span className={s.mxDayVal} data-zero={!x.value || undefined}>
+                      {x.value ? short(x.value) : '–'}
+                    </span>
+                    <span className={s.mxDayBar} style={{ height: Math.max(2, (x.value / wMax) * 56), background: x.value ? c.color : 'var(--line)' }} />
+                    <span className={s.mxDayLabel}>{DAY_LETTER[x.d.getDay()]}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
           {one ? (
             <p className={s.mxSummary}>
-              One expense: <strong>{tidyName(one.title)}</strong>, {full(one.net)} on {DAY_NAME[one.date.getDay()]}.
+              One expense:{' '}
+              <button type="button" className={s.mxInlineLink} onClick={() => onShowTransactions(c.name, { q: tidyName(one.title) })}>
+                <strong>{tidyName(one.title)}</strong>
+              </button>
+              , {full(one.net)} on {DAY_NAME[one.date.getDay()]}.
             </p>
           ) : (
-            places.length > 0 && <PlaceList places={places} />
+            places.length > 0 && <PlaceList places={places} onPick={merchant => onShowTransactions(c.name, { q: merchant })} />
           )}
-          {mine.length === 0 && <p className={s.mxSummary}>Nothing spent here this cycle.</p>}
+          {mine.length === 0 && <p className={s.mxSummary}>Nothing spent here yet — clean slate.</p>}
           {suggestion}
+          {onNudgeLimit && (
+            <div className={s.mxNudgeBar}>
+              <span className={s.mxNudgeLabel}>
+                Limit <strong>{full(lim)}</strong>
+              </span>
+              <span className={s.mxNudgeBtns}>
+                <button
+                  type="button"
+                  className={s.mxNudgeBtn}
+                  disabled={lim <= 0}
+                  aria-label={`Decrease ${c.name} limit by ${short(step)}`}
+                  title={`-${short(step)}`}
+                  onClick={() => onNudgeLimit(-Math.min(step, lim))}
+                >
+                  <Icon d={IC.minus} size={13} /> {short(step)}
+                </button>
+                <button
+                  type="button"
+                  className={s.mxNudgeBtn}
+                  aria-label={`Increase ${c.name} limit by ${short(step)}`}
+                  title={`+${short(step)}`}
+                  onClick={() => onNudgeLimit(step)}
+                >
+                  <Icon d={IC.plus} size={13} /> {short(step)}
+                </button>
+              </span>
+            </div>
+          )}
+          {sharing && onShareRoom && shareTargets.length > 0 && shareAmt > 0 && (
+            <div className={s.mxShareBox}>
+              <span style={{ fontSize: 13, color: C.textMuted }}>
+                Share <strong>{short(shareAmt)}</strong> of {c.name}&apos;s room with:
+              </span>
+              <div className={s.mxSources}>
+                {shareTargets.slice(0, 5).map(t => (
+                  <button
+                    key={t.name}
+                    type="button"
+                    className={s.mxSource}
+                    onClick={() => {
+                      onShareRoom(t.name, shareAmt);
+                      setSharing(false);
+                    }}
+                  >
+                    <span>{t.name}</span>
+                    <span className={s.mxSourceLeft} style={t.over > 0 ? { color: C.redInk, fontWeight: 600 } : undefined}>
+                      {t.over > 0 ? `${short(t.over)} over` : `${short(t.room)} left`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {extra}
           <div className={s.mxLinks}>
             <button type="button" className={s.mxLink} onClick={() => onShowTransactions(c.name)}>
               {one ? 'See the expense' : 'See transactions'}
             </button>
+            {onShareRoom && room >= step / 2 && shareTargets.length > 0 && (
+              <button type="button" className={s.mxLink} onClick={() => setSharing(v => !v)}>
+                {sharing ? 'Close share' : 'Share room'}
+              </button>
+            )}
             <button type="button" className={s.mxLink} onClick={() => onEditCategory(c.name)}>
-              Adjust limit
+              Edit category
             </button>
           </div>
         </div>
