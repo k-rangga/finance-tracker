@@ -22,14 +22,14 @@ const VAR_INK = 'var(--category-3)';
  * This cycle against last cycle by the same day (not all of last cycle, which would always look far lower early
  * on): ▲ spending more, ▼ less. Nothing when last cycle had no spending to compare with.
  */
-function vsLast(now: number, before: number): { text: string; ink: string } | undefined {
+function vsLast(now: number, before: number): { dir?: 'up' | 'down'; text: string; ink: string } | undefined {
   if (before <= 0) return undefined;
   const d = ((now - before) / before) * 100;
   if (Math.abs(d) < 5) return { text: '≈ same', ink: C.textMuted };
-  if (d < 0) return { text: `▼ ${Math.round(-d)}%`, ink: C.good };
-  // Double or more reads better as times: "▲ 2.6×", not "▲ 160%".
+  if (d < 0) return { dir: 'down', text: `${Math.round(-d)}%`, ink: C.good };
+  // Double or more reads better as times: "2.6×", not "160%".
   const x = now / before;
-  return { text: d < 100 ? `▲ ${Math.round(d)}%` : `▲ ${x < 10 ? Math.round(x * 10) / 10 : Math.round(x)}×`, ink: C.redInk };
+  return { dir: 'up', text: d < 100 ? `${Math.round(d)}%` : `${x < 10 ? Math.round(x * 10) / 10 : Math.round(x)}×`, ink: C.redInk };
 }
 
 /** What a spending transaction counts for this cycle. */
@@ -320,13 +320,19 @@ function Row({
   last?: string;
   now?: string;
   nowInk?: string;
-  vs?: { text: string; ink: string };
+  vs?: { dir?: 'up' | 'down'; text: string; ink: string };
   open?: boolean;
   onToggle?: () => void;
   flag?: ReactNode;
   phone: boolean;
   total?: boolean;
 }) {
+  const vsEl = vs && (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: vs.ink, fontWeight: 600 }}>
+      {vs.dir && <Icon d={vs.dir === 'up' ? IC.arrowUp : IC.arrowDown} size={13} />}
+      {vs.text}
+    </span>
+  );
   const label = (
     <span className={s.mpName} style={{ paddingLeft: level * 18 }}>
       {open !== undefined ? (
@@ -361,7 +367,7 @@ function Row({
             {has(now) && (
               <>
                 this cycle <span style={{ color: nowInk }}>{now}</span>
-                {vs && <span style={{ color: vs.ink, fontWeight: 600 }}> {vs.text}</span>}
+                {vsEl && <> {vsEl}</>}
               </>
             )}
           </span>
@@ -382,8 +388,8 @@ function Row({
         <span className={s.mpNum} style={{ color: nowInk, fontWeight: level === 0 ? 600 : 500 }}>
           {now ?? ''}
         </span>
-        <span className={s.mpNum} style={{ color: vs?.ink, fontSize: 13, fontWeight: 600 }}>
-          {vs?.text ?? ''}
+        <span className={s.mpNum} style={{ fontSize: 13 }}>
+          {vsEl ?? ''}
         </span>
       </div>
       {flag && <span style={{ paddingLeft: level * 18 + 20 }}>{flag}</span>}

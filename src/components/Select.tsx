@@ -85,9 +85,15 @@ export function Select<V extends string>({ value, onChange, options, ariaLabel, 
         style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', cursor: disabled ? 'default' : 'pointer', ...style, marginLeft: undefined }}
       >
         {current?.dot && <span aria-hidden="true" style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: current.dot }} />}
-        <span className={s.ellipsis} style={{ color: current ? undefined : C.textMuted }}>
+        <span className={s.ellipsis} style={{ flex: 1, minWidth: 0, color: current ? undefined : C.textMuted }}>
           {current?.label ?? placeholder}
         </span>
+        <Icon
+          d={IC.chevDown}
+          size={16}
+          color={open ? 'var(--ink)' : C.textMuted}
+          style={{ marginLeft: 'auto', transform: open ? 'rotate(180deg)' : undefined, transition: 'transform 160ms ease' }}
+        />
       </button>
       {open && (
         <div className={s.picker} style={{ width: 'max(100%, 240px)', maxWidth: 'calc(100vw - 32px)', ...(align === 'right' ? { left: 'auto', right: 0 } : {}) }}>
@@ -111,24 +117,26 @@ export function Select<V extends string>({ value, onChange, options, ariaLabel, 
           </label>
           <div ref={list} id={id} role="listbox" aria-label={ariaLabel} className={s.pickList} style={{ maxHeight: 320 }}>
             {shown.length === 0 && <div style={{ padding: '8px 10px', fontSize: 14, color: C.textMuted }}>No matches.</div>}
-            {shown.map((o, n) => (
-              <div key={o.value}>
-                {o.group && o.group !== shown[n - 1]?.group && <div className={s.menuGroup}>{o.group}</div>}
-                <div
-                  id={`${id}-${n}`}
-                  role="option"
-                  aria-selected={o.value === value}
-                  className={s.pickRow + (n === at ? ' ' + s.pickRowActive : '') + (o.value === value ? ' ' + s.pickRowOn : '')}
-                  onMouseEnter={() => setActive(n)}
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={() => pick(o)}
-                >
-                  {o.dot && <span aria-hidden="true" style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: o.dot }} />}
-                  <span style={{ marginRight: 'auto', fontSize: 14, fontWeight: 600, color: C.text }}>{o.label}</span>
-                  {o.value === value && <Icon d="M20 6 9 17l-5-5" size={16} color={C.accent600} />}
+            {shown.map((o, n) => {
+              const selected = o.value === value;
+              return (
+                <div key={o.value}>
+                  {o.group && o.group !== shown[n - 1]?.group && <div className={s.menuGroup}>{o.group}</div>}
+                  <div
+                    id={`${id}-${n}`}
+                    role="option"
+                    aria-selected={selected}
+                    className={s.pickRow + (n === at ? ' ' + s.pickRowActive : '') + (selected ? ' ' + s.pickRowOn : '')}
+                    onMouseEnter={() => setActive(n)}
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => pick(o)}
+                  >
+                    {o.dot && <span aria-hidden="true" style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: o.dot }} />}
+                    <span style={{ marginRight: 'auto', fontSize: 14, fontWeight: selected ? 600 : 500, color: selected ? C.clayInk : C.text }}>{o.label}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -169,8 +169,13 @@
 }
 .navItemActive {
   composes: navItem;
-  color: var(--text);
-  background: var(--border);
+  color: var(--clay-ink);
+  background: var(--clay-soft);
+  font-weight: 600;
+}
+.navItemActive:hover {
+  background: var(--clay-soft);
+  color: var(--clay-ink);
 }
 
 .railBtn {
@@ -510,12 +515,12 @@ button.chip:hover {
 .btnOutline {
   font-size: 14px;
   font-weight: 600;
-  color: var(--accent-600);
-  background: var(--surface);
-  border: 1.5px solid var(--accent-600);
-  border-radius: 10px;
-  padding: 9px 18px;
-  min-height: 44px;
+  color: var(--ink);
+  background: var(--surface-000);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  padding: 9px 16px;
+  min-height: 40px;
   /* An icon sits centred beside the label, not on its baseline. */
   display: inline-flex;
   align-items: center;
@@ -523,32 +528,33 @@ button.chip:hover {
   gap: 6px;
 }
 .btnOutline:hover {
-  background: var(--accent-tint);
+  background: var(--surface-200);
 }
 .btnGhost {
   font-size: 15px;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--ink);
   background: none;
   border: none;
-  padding: 12px 8px;
-  min-height: 44px;
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  min-height: 40px;
 }
 .btnGhost:hover {
-  color: var(--text);
+  background: var(--surface-200);
 }
 .btnSecondary {
   font-size: 15px;
-  font-weight: 500;
-  color: var(--text);
-  background: var(--surface);
-  border: 1.5px solid var(--border-strong);
-  border-radius: 999px;
-  padding: 13px;
-  min-height: 44px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface-000);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  min-height: 40px;
 }
 .btnSecondary:hover {
-  background: var(--accent-hover);
+  background: var(--surface-200);
 }
 .iconBtn {
   width: 44px;
@@ -640,10 +646,8 @@ textarea.input {
   composes: input;
   appearance: none;
   -webkit-appearance: none;
-  padding-right: 44px;
-  background: var(--surface)
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238a877e' stroke-width='2.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
-    no-repeat right 16px center;
+  padding-right: 12px;
+  background: var(--surface-000);
   cursor: pointer;
 }
 .error {
@@ -734,18 +738,29 @@ textarea.input {
   overflow-y: auto;
 }
 .dialog {
-  background: var(--surface);
-  border-radius: 14px;
+  background: var(--surface-000);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
   width: 100%;
   box-sizing: border-box;
-  padding: 24px;
+  padding: var(--space-5);
   display: flex;
   flex-direction: column;
   gap: 18px;
 }
-@media (max-width: 759px) {
+@media (max-width: 640px) {
+  .overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
   .dialog {
+    max-width: none !important;
+    max-height: 90vh;
+    overflow-y: auto;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     padding: 20px;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
   }
 }
 
@@ -950,14 +965,14 @@ textarea.input {
 }
 .pickRowOn,
 .pickRowOn:hover {
-  background: var(--accent-tint);
+  background: var(--clay-soft);
+  color: var(--clay-ink);
 }
 .pickSuggest {
   font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--accent-600);
+  letter-spacing: 0.01em;
+  color: var(--clay-ink);
 }
 
 /* The 📎 on a row with a receipt: opens it. */
@@ -1138,8 +1153,8 @@ textarea.input {
   width: max-content;
   max-width: calc(100vw - 32px);
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
   padding: 16px 18px;
   box-shadow: var(--shadow-md);
   display: flex;
@@ -1166,6 +1181,12 @@ textarea.input {
   gap: 8px;
   min-height: 32px;
   font-size: 15px;
+}
+.calHead strong {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 500;
 }
 .calNav {
   display: flex;
@@ -1341,6 +1362,20 @@ textarea.input {
   padding: 10px 10px 10px 18px;
   box-shadow: var(--shadow-md);
 }
+.toast[data-tone='success'] {
+  background: var(--success-soft);
+  color: var(--ink);
+}
+.toast[data-tone='danger'] {
+  background: var(--danger-soft);
+  color: var(--ink);
+}
+.toast[data-tone='success'] .toastBtn,
+.toast[data-tone='danger'] .toastBtn,
+.toast[data-tone='success'] .toastClose,
+.toast[data-tone='danger'] .toastClose {
+  color: var(--ink);
+}
 .toastBtn {
   flex: none;
   border: none;
@@ -1355,6 +1390,21 @@ textarea.input {
 }
 .toastBtn:hover {
   opacity: 0.8;
+}
+.toastClose {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--surface-100);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.toastClose:hover {
+  opacity: 0.75;
 }
 /* Above the phone tab bar. */
 @media (max-width: 759px) {
@@ -2134,11 +2184,19 @@ textarea.input {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   padding-top: 2px;
   font-family: var(--font-serif);
-  font-size: 17px;
-  line-height: 26px;
+  font-size: 18px;
+  line-height: 28px;
+}
+.chatName {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--ink);
 }
 .chatTheirs button,
 .chatTheirs .chatMeta {
@@ -2367,8 +2425,10 @@ textarea.input {
   cursor: pointer;
 }
 .segment button[aria-pressed='true'] {
-  background: var(--accent-strong);
-  color: var(--on-accent);
+  background: var(--clay-soft);
+  color: var(--clay-ink);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--clay);
 }
 .tagRow {
   display: flex;
@@ -2746,38 +2806,63 @@ textarea.input {
   border-top: 1px solid var(--divider);
   background: var(--bg);
 }
+.chatComposer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  background: var(--surface-000);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-xl);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  box-shadow: var(--shadow-sm);
+}
+.chatComposer:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
 .chatInput {
   flex: 1;
   min-width: 0;
   resize: none;
-  max-height: 120px;
+  min-height: 40px;
+  max-height: 168px;
   font: inherit;
-  font-size: 15px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  border: 1.5px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
-}
-.chatInput:focus {
+  font-size: 16px;
+  line-height: 24px;
+  padding: var(--space-2) 0;
+  border: 0;
   outline: none;
-  border-color: var(--accent-500);
+  background: transparent;
+  color: var(--ink);
+}
+.chatInput::placeholder {
+  color: var(--ink-muted);
 }
 .chatSend {
   flex: none;
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border: none;
-  border-radius: 12px;
-  background: var(--accent-strong);
-  color: var(--on-accent);
+  border-radius: var(--radius-pill);
+  background: var(--clay);
+  color: var(--on-clay);
   cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.chatSend:hover:not(:disabled) {
+  background: var(--clay-ink);
 }
 .chatSend:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+  background: var(--surface-200);
+  color: var(--ink-muted);
+  cursor: default;
+}
+.chatNotesCheck {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-muted);
 }
 @media (max-width: 759px) {
   .chatPanel {
@@ -3582,7 +3667,7 @@ button.sxTile:hover {
   left: 0;
   right: 0;
   height: 0;
-  border-top: 1.5px dashed var(--text-faint);
+  border-top: 1px solid var(--ink-muted);
   pointer-events: none;
   z-index: 1;
 }
@@ -4559,3 +4644,329 @@ button.sxTile:hover {
   color: var(--clay-ink);
   font-weight: 600;
 }
+
+/* ---------- Maxie Checkbox ---------- */
+.mxCheck {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 20px;
+}
+.mxCheck input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+.mxCheckBox {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-000);
+  display: grid;
+  place-items: center;
+  color: transparent;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.mxCheck input:checked + .mxCheckBox {
+  background: var(--clay);
+  border-color: var(--clay);
+  color: var(--on-clay);
+}
+.mxCheck input:focus-visible + .mxCheckBox {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.mxCheckLabel {
+  flex: 1;
+  min-width: 0;
+}
+.mxCheckDisabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---------- Maxie Chart Tooltip ---------- */
+.mxTip {
+  position: absolute;
+  transform: translate(-50%, 0);
+  pointer-events: none;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--surface-000);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+.mxTipVal {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.mxTipLabel {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-muted);
+}
+
+/* ---------- Maxie Toolbar (Transactions) ---------- */
+.mxToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.mxToolbarLeft,
+.mxToolbarRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.mxToolbarRight {
+  flex: 1 1 180px;
+  justify-content: flex-end;
+}
+.mxPopWrap {
+  position: relative;
+  display: inline-flex;
+}
+.mxTbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-000);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.mxTbtn svg {
+  color: var(--ink-muted);
+}
+.mxTbtn:hover {
+  background: var(--surface-200);
+}
+.mxTbtn[data-open] {
+  border-color: var(--line-strong);
+}
+.mxTbtn[data-active] {
+  background: var(--clay-soft);
+  border-color: var(--clay-soft);
+  color: var(--clay-ink);
+  font-weight: 600;
+}
+.mxTbtn[data-active] svg {
+  color: var(--clay-ink);
+}
+.mxCount {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: var(--radius-pill);
+  background: var(--clay);
+  color: var(--on-clay);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.mxPop {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  z-index: 40;
+  box-sizing: border-box;
+  background: var(--surface-000);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-3);
+  color: var(--ink);
+}
+.mxPopFilter {
+  width: min(460px, calc(100vw - 32px));
+}
+.mxPopSort {
+  width: 220px;
+}
+.mxPopHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-1) var(--space-2);
+}
+.mxPopTitle {
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+.mxRules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.mxRule {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.mxRuleJoin {
+  width: 48px;
+  flex: none;
+  padding-left: var(--space-1);
+  font-size: 13px;
+  line-height: 16px;
+  color: var(--ink-muted);
+}
+.mxRuleLabel {
+  flex: none;
+  font-size: 14px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.mxRuleValue {
+  flex: 1;
+  min-width: 0;
+}
+.mxSortList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mxSortOpt {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.mxSortOpt:hover {
+  background: var(--surface-200);
+}
+.mxSortOpt[data-selected] {
+  background: var(--clay-soft);
+  color: var(--clay-ink);
+  font-weight: 600;
+}
+.mxSearch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-000);
+  color: var(--ink-muted);
+  width: min(220px, 100%);
+}
+.mxSearch:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-color: var(--line-strong);
+}
+.mxSearch input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+.mxSearch input::placeholder {
+  color: var(--ink-muted);
+}
+.mxSearchClear {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  padding: 2px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.mxSearchClear:hover {
+  color: var(--ink);
+  background: var(--surface-200);
+}
+
+@media (max-width: 640px) {
+  .mxToolbarRight {
+    flex-basis: 100%;
+    justify-content: stretch;
+  }
+  .mxSearch {
+    width: 100%;
+  }
+  .mxPop,
+  .calPop {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    margin-top: 0;
+    width: auto;
+    max-width: none;
+    max-height: 85vh;
+    overflow-y: auto;
+    z-index: 65;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom));
+  }
+  .mxPopFilter,
+  .mxPopSort {
+    width: auto;
+    padding: var(--space-4);
+    padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom));
+  }
+  .mxRule {
+    flex-wrap: wrap;
+  }
+  .mxRuleJoin {
+    width: 100%;
+  }
+}
+

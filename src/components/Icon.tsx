@@ -38,15 +38,27 @@ export const IC = {
   trend: 'M22 7 13.5 15.5 8.5 10.5 2 17 M16 7h6v6',
   trendDown: 'M22 17 13.5 8.5 8.5 13.5 2 7 M16 17h6v-6',
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9',
-  chevLeft: 'M15 18l-6-6 6-6',
-  chevRight: 'M9 18l6-6-6-6',
-  chevDown: 'm6 9 6 6 6-6',
-  refresh: 'M21 12a9 9 0 1 1-3-6.7L21 8 M21 3v5h-5',
-  search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z M21 21l-4.3-4.3',
+  chevLeft: 'M15 6l-6 6 6 6',
+  chevRight: 'M9 6l6 6-6 6',
+  chevDown: 'M6 9l6 6 6-6',
+  chevUp: 'M6 15l6-6 6 6',
+  chevronsLeft: 'M11.5 6l-6 6 6 6 M18.5 6l-6 6 6 6',
+  chevronsRight: 'M5.5 6l6 6-6 6 M12.5 6l6 6-6 6',
+  filter: 'M4 6.5h16 M7 12h10 M10 17.5h4',
+  sort: 'M7.5 4.5v15 M4 8l3.5-3.5L11 8 M16.5 19.5v-15 M13 16l3.5 3.5L20 16',
+  arrowUp: 'M12 19V5 M6 11l6-6 6 6',
+  arrowDown: 'M12 5v14 M6 13l6 6 6-6',
+  minus: 'M5 12h14',
+  copy: 'M15.5 5.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h.5 M10 8.5h9a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 8.5 19v-9A1.5 1.5 0 0 1 10 8.5z',
+  tag: 'M3.5 12V5a1.5 1.5 0 0 1 1.5-1.5h7l8.4 8.4a1.5 1.5 0 0 1 0 2.1l-6.5 6.5a1.5 1.5 0 0 1-2.1 0z M8 8h.01',
+  leaf: 'M5 19C5 11 10 5.5 19.5 4.5C19 14 13.5 19 5 19z M5 19l6.5-6.5',
+  cart: 'M3.5 4.5h2l2.1 10h10.2l1.9-7.5H6.4 M9 19a1 1 0 1 0 0 .01 M16.5 19a1 1 0 1 0 0 .01',
+  refresh: 'M19.5 12a7.5 7.5 0 1 1-2.2-5.3 M19.5 4.5V9H15',
+  search: 'M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z M15.5 15.5l4.5 4.5',
   alert: 'm21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3 M12 9v4 M12 17h.01',
   plus: 'M12 5v14 M5 12h14',
-  check: 'M20 6 9 17l-5-5',
-  close: 'M18 6 6 18 M6 6l12 12',
+  check: 'M5 12.5l4.5 4.5L19 7.5',
+  close: 'M6.5 6.5l11 11 M17.5 6.5l-11 11',
   info: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 16v-4 M12 8h.01',
   sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z M19 15l.7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7z',
   send: 'M22 2 11 13 M22 2l-7 20-4-9-9-4z',
@@ -64,7 +76,7 @@ export type IconName = keyof typeof IC;
 
 type Props = { d: string; size?: number; strokeWidth?: number; style?: CSSProperties; color?: string };
 
-export function Icon({ d, size = 24, strokeWidth = 2.75, style, color = 'currentColor' }: Props) {
+export function Icon({ d, size = 20, strokeWidth = 1.75, style, color = 'currentColor' }: Props) {
   return (
     <svg
       width={size}

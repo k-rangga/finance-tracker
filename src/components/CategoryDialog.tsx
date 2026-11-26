@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import s from '../styles/ui.module.css';
-import { IconChip, Modal, Options } from './ui';
+import { Checkbox, IconChip, Modal, Options } from './ui';
 import { IC, Icon } from './Icon';
 import { Select } from './Select';
 import {
@@ -216,14 +216,11 @@ export function CategoryDialog({ editing, initialName = '', onClose, onSaved }: 
             ))}
           </div>
           {tpl && tpl.merchants.length > 0 && (
-            <label className={s.tplMerchants}>
-              <input type="checkbox" checked={tplMerchants} onChange={e => setTplMerchants(e.target.checked)} />
-              <span>
-                Sort these merchants here automatically:{' '}
-                <span style={{ color: C.textMuted }}>{tpl.merchants.map(m => m.replace(/\b\w/g, c => c.toUpperCase())).join(', ')}</span>
-                {tplNew.length < tpl.merchants.length && <span style={{ color: C.textMuted }}> (ones you already have a rule for stay as they are)</span>}
-              </span>
-            </label>
+            <Checkbox className={s.tplMerchants} checked={tplMerchants} onChange={setTplMerchants}>
+              Sort these merchants here automatically:{' '}
+              <span style={{ color: C.textMuted }}>{tpl.merchants.map(m => m.replace(/\b\w/g, c => c.toUpperCase())).join(', ')}</span>
+              {tplNew.length < tpl.merchants.length && <span style={{ color: C.textMuted }}> (ones you already have a rule for stay as they are)</span>}
+            </Checkbox>
           )}
           <span style={{ fontSize: 13, color: C.textMuted }}>Or name your own below.</span>
         </div>

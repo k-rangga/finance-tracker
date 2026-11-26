@@ -75,16 +75,16 @@ export function DateRangePicker({ from, to, min, max, cycleStart, onChange, onCl
             {side === 'prev' ? (
               <>
                 <button type="button" aria-label="Back a year" disabled={!canBack} onClick={() => go(-12)}>
-                  «
+                  <Icon d={IC.chevronsLeft} size={16} />
                 </button>
                 <button type="button" aria-label="Previous month" disabled={!canBack} onClick={() => go(-1)}>
-                  <Icon d={IC.chevLeft} size={15} strokeWidth={2.5} />
+                  <Icon d={IC.chevLeft} size={16} />
                 </button>
               </>
             ) : (
               <span className={s.calNavPhone}>
                 <button type="button" aria-label="Previous month" disabled={!canBack} onClick={() => go(-1)}>
-                  <Icon d={IC.chevLeft} size={15} strokeWidth={2.5} />
+                  <Icon d={IC.chevLeft} size={16} />
                 </button>
               </span>
             )}
@@ -94,10 +94,10 @@ export function DateRangePicker({ from, to, min, max, cycleStart, onChange, onCl
             {side === 'cur' && (
               <>
                 <button type="button" aria-label="Next month" disabled={!canFwd} onClick={() => go(1)}>
-                  <Icon d={IC.chevRight} size={15} strokeWidth={2.5} />
+                  <Icon d={IC.chevRight} size={16} />
                 </button>
                 <button type="button" aria-label="Forward a year" disabled={!canFwd} onClick={() => go(12)}>
-                  »
+                  <Icon d={IC.chevronsRight} size={16} />
                 </button>
               </>
             )}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { IC, Icon } from './Icon';
+import { Checkbox } from './ui';
 import { Logo } from './Logo';
 import { askGemini, chatContext, type ChatAction, type ChatMessage } from '../lib/chat';
 import type { Budget, TxView } from '../lib/budget';
@@ -141,7 +142,7 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
             </button>
           )}
           <button type="button" className={s.iconBtn} onClick={onClose} aria-label="Close" title="Close">
-            <Icon d={IC.close} size={18} strokeWidth={2.5} />
+            <Icon d={IC.close} size={18} />
           </button>
         </header>
 
@@ -167,6 +168,7 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
               <div key={i} className={s.chatTheirsRow}>
                 <Logo size={28} />
                 <div className={s.chatTheirs}>
+                  <span className={s.chatName}>Maxie</span>
                   <Rich text={m.text} />
                   {(m.actions ?? []).map((a, j) => (
                     <ActionCard key={j} action={a} allTxs={allTxs} />
@@ -210,7 +212,7 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
             void send(text);
           }}
         >
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <div className={s.chatComposer}>
             <textarea
               ref={input}
               className={s.chatInput}
@@ -228,13 +230,12 @@ export function Chat({ cycle, budget, allTxs, ask, onClose }: Props) {
               }}
             />
             <button type="submit" className={s.chatSend} disabled={!text.trim() || busy} aria-label="Send">
-              <Icon d={IC.send} size={17} />
+              <Icon d={IC.arrowUp} size={18} strokeWidth={2.25} />
             </button>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.textMuted }}>
-            <input type="checkbox" checked={withNotes} onChange={e => setWithNotes(e.target.checked)} />
+          <Checkbox checked={withNotes} onChange={setWithNotes} className={s.chatNotesCheck}>
             Include my notes. Maxie runs on Google Gemini: this cycle's spending summary is sent there
-          </label>
+          </Checkbox>
           <span className={s.chatDisclosure}>Maxie is AI and can get things wrong, so double-check anything important.</span>
         </form>
       </section>
@@ -401,7 +402,7 @@ export function ActionCard({ action: a, allTxs }: { action: ChatAction; allTxs: 
           </button>
         ) : (
           <>
-            <span style={{ fontSize: 13, fontWeight: 600, color: C.good }}>✓ Applied</span>
+            <span className={s.mxTag} data-tone="success">Applied</span>
             {undo && (
               <button
                 type="button"

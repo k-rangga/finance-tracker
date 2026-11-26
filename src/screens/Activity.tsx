@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
-import { DismissBill, DueChip, IconChip } from '../components/ui';
+import { Checkbox, DismissBill, DueChip, IconChip, Toast } from '../components/ui';
 import { Logo } from '../components/Logo';
 import { IC, Icon } from '../components/Icon';
 import { CategoryDialog } from '../components/CategoryDialog';
@@ -25,8 +25,16 @@ import { useGuesses, type Guess } from '../lib/guesses';
 import { SortQueue } from './SortQueue';
 
 export type Range = 'today' | 'week' | 'last' | 'cycle' | 'custom';
+export type TxSort = 'newest' | 'oldest' | 'highest' | 'lowest';
 /** `from` / `to` (YYYY-MM-DD, inclusive) are the dates picked for the `custom` range. */
-export type ActivityFilter = { range: Range; cat: string; q: string; from?: string; to?: string; hideTransfers?: boolean };
+export type ActivityFilter = { range: Range; cat: string; q: string; from?: string; to?: string; hideTransfers?: boolean; sort?: TxSort };
+
+const SORT_LABELS: Record<TxSort, string> = {
+  newest: 'Newest first',
+  oldest: 'Oldest first',
+  highest: 'Highest first',
+  lowest: 'Lowest first',
+};
 
 type Props = {
   cycle: Cycle;
@@ -71,16 +79,25 @@ function useFlipUp<T extends HTMLElement>(style?: CSSProperties) {
   return { ref, style: up ? { ...style, top: 'auto', bottom: '100%', marginTop: 0, marginBottom: 6 } : style };
 }
 
-/** Square icon button in the phone filter row. */
-const iconPill = { flex: 'none', width: 44, height: 44, minHeight: 44, padding: 0, display: 'grid', placeItems: 'center' } as const;
-
 export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, setFilter, onRecat, onLink, onShare, onDismissBill }: Props) {
   const { full, settings } = useSettings();
   /** The row with an open popover: an income's "paid back for" picker or an expense's "my share" editor. */
   const [open, setOpen] = useState<{ id: string; kind: Popover } | null>(null);
   /** "New category" dialog, opened from a row's category menu; the new category is applied to that row. */
   const [creating, setCreating] = useState<{ name: string; tx: TxView } | null>(null);
-  const [calOpen, setCalOpen] = useState(false);
+  const [panel, setPanel] = useState<'cal' | 'filter' | 'sort' | null>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!panel || panel === 'cal') return;
+    const onDown = (e: MouseEvent) => !toolbarRef.current?.contains(e.target as Node) && setPanel(null);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setPanel(null);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [panel]);
   const { installments, setInstallment, notes, rules, ruleSubs, setRules, setSub, receipts, recat } = useData();
   /** The purchase whose installment plan is open in the dialog. */
   const [planFor, setPlanFor] = useState<string | null>(null);
@@ -94,8 +111,7 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   const [toast, setToast] = useState<{ text: string; action?: string; run?: () => void } | null>(null);
   const [showRemoved, setShowRemoved] = useState(false);
   const phone = useIsPhone();
-  /** Phones: search sits behind an icon, and the recap is folded. */
-  const [searchOpen, setSearchOpen] = useState(false);
+  /** Phones: the recap is folded. */
   const [recapOpen, setRecapOpen] = useState(false);
   /** Height of the pinned bar, so day headings pin just below it. */
   const bar = useRef<HTMLDivElement>(null);
@@ -215,12 +231,22 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   /** What the list shows: the same, minus transfers between your accounts when you hide them. */
   const txs = filter.hideTransfers ? inRange.filter(t => !t.isTransfer) : inRange;
 
+  const sort: TxSort = filter.sort ?? 'newest';
   const groups: { label: string; items: TxView[] }[] = [];
-  for (const t of txs) {
-    const label = dayLabel(t.date) + (t.offset === cycle.dayIdx ? ' (Today)' : '');
-    let g = groups.find(x => x.label === label);
-    if (!g) groups.push((g = { label, items: [] }));
-    g.items.push(t);
+  if (sort === 'highest' || sort === 'lowest') {
+    if (txs.length > 0) {
+      const valueOf = (t: TxView) => (t.isIncome ? t.amount : t.net);
+      const sorted = [...txs].sort((a, b) => (sort === 'highest' ? valueOf(b) - valueOf(a) : valueOf(a) - valueOf(b)));
+      groups.push({ label: SORT_LABELS[sort], items: sorted });
+    }
+  } else {
+    const ordered = sort === 'oldest' ? [...txs].reverse() : txs;
+    for (const t of ordered) {
+      const label = dayLabel(t.date) + (t.offset === cycle.dayIdx ? ' (Today)' : '');
+      let g = groups.find(x => x.label === label);
+      if (!g) groups.push((g = { label, items: [] }));
+      g.items.push(t);
+    }
   }
   const spending = inRange.filter(t => !t.isIncome && !t.isTransfer);
   const out = spending.reduce((a, t) => a + t.net, 0);
@@ -256,6 +282,27 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   const fromTo = (a: Date, b: Date) =>
     // Phones: "26–29 Oct" when both ends share a month.
     phone && a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear() ? `${a.getDate()}–${dayMonth(b)}` : `${dayMonth(a)} – ${dayMonth(b)}`;
+  const dateChipLabel =
+    range === 'today'
+      ? 'Today'
+      : range === 'week'
+        ? 'This week'
+        : range === 'last'
+          ? 'Last week'
+          : range === 'cycle'
+            ? 'This cycle'
+            : from === to
+              ? dayMonth(parseISO(from))
+              : fromTo(parseISO(from), parseISO(to));
+  const activeFilterCount = (cat ? 1 : 0) + (filter.hideTransfers ? 1 : 0);
+  const categoryOptions = [
+    { value: '', label: 'All categories' },
+    ...CATEGORIES.flatMap(c => [
+      { value: c.name, label: c.name, dot: c.color, group: 'Spending' },
+      ...(settings.subcategories[c.name] ?? []).map(sub => ({ value: catFilter(c.name, sub), label: catFilter(c.name, sub), dot: c.color, group: 'Spending' })),
+    ]),
+    ...[...OTHER_CATEGORIES, CC_PAYMENT_CATEGORY].map(c => ({ value: c, label: categoryLabel(c), group: 'Not spending' })),
+  ];
   const removedHere = removedTxs.filter(t => t.offset >= lo && t.offset <= hi);
 
   const recap = (
@@ -283,113 +330,152 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
   return (
     <div className={s.splitGrid} style={{ ['--bar-h' as string]: barH + 'px' }}>
       <div className={s.splitMain}>
-        {/* Dates, search and totals stay pinned while you scroll the list. */}
+        {/* Maxie Toolbar: date chip, Filter, Sort on the left; Search on the right. */}
         <div ref={bar} className={s.stickyBar}>
-          <div style={{ position: 'relative', display: 'flex', flexWrap: phone ? 'nowrap' : 'wrap', alignItems: 'center', gap: 8 }}>
-            <button
-              type="button"
-              className={s.pillActive}
-              aria-label={`Date range: ${rangeLabel}. Change dates`}
-              aria-haspopup="dialog"
-              aria-expanded={calOpen}
-              onClick={() => setCalOpen(!calOpen)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: 'none', whiteSpace: 'nowrap', paddingInline: phone ? 12 : 16 }}
-            >
-              <Icon d={IC.calendar} size={16} />
-              {from === to ? dayMonth(parseISO(from)) : fromTo(parseISO(from), parseISO(to))}
-              <Icon d={IC.chevDown} size={14} style={{ transform: calOpen ? 'rotate(180deg)' : undefined }} />
-            </button>
-            {!phone && (
-              <button
-                type="button"
-                className={filter.hideTransfers ? s.pillActive : s.pill}
-                aria-pressed={!!filter.hideTransfers}
-                onClick={() => setFilter({ ...filter, hideTransfers: !filter.hideTransfers })}
-                title="Transfers between your own accounts aren't spending"
-                style={{ marginLeft: 'auto', flex: 'none', whiteSpace: 'nowrap', minHeight: 44, paddingInline: 14 }}
-              >
-                {filter.hideTransfers ? 'Transfers hidden' : 'Hide transfers'}
-              </button>
-            )}
-            <Select
-              value={cat}
-              onChange={v => setFilter({ ...filter, cat: v })}
-              ariaLabel="Filter by category"
-              align="right"
-              options={[
-                { value: '', label: phone ? 'All' : 'All categories' },
-                ...CATEGORIES.flatMap(c => [
-                  { value: c.name, label: c.name, dot: c.color, group: 'Spending' },
-                  ...(settings.subcategories[c.name] ?? []).map(sub => ({ value: catFilter(c.name, sub), label: catFilter(c.name, sub), dot: c.color, group: 'Spending' })),
-                ]),
-                ...[...OTHER_CATEGORIES, CC_PAYMENT_CATEGORY].map(c => ({ value: c, label: categoryLabel(c), group: 'Not spending' })),
-              ]}
-              style={{ width: 'auto', minWidth: 0, maxWidth: phone ? 140 : 220, borderRadius: 8, fontSize: 14, padding: phone ? '9px 34px 9px 12px' : '9px 40px 9px 16px', minHeight: 44 }}
-            />
-            {/* Phones: search and "hide transfers" as icons on the same row. */}
-            {phone && (
-              <>
+          <div ref={toolbarRef} className={s.mxToolbar} role="toolbar" aria-label="Transaction view controls">
+            <div className={s.mxToolbarLeft}>
+              <div className={s.mxPopWrap}>
                 <button
                   type="button"
-                  className={searchOpen || q ? s.pillActive : s.pill}
-                  aria-label="Search transactions"
-                  aria-expanded={searchOpen || !!q}
-                  onClick={() => {
-                    if (searchOpen || q) setFilter({ ...filter, q: '' });
-                    setSearchOpen(!(searchOpen || q));
-                  }}
-                  style={{ marginLeft: 'auto', ...iconPill }}
+                  className={s.mxTbtn}
+                  data-open={panel === 'cal' || undefined}
+                  aria-label={`Date range: ${rangeLabel}. Change dates`}
+                  title={rangeLabel}
+                  aria-haspopup="dialog"
+                  aria-expanded={panel === 'cal'}
+                  onClick={() => setPanel(panel === 'cal' ? null : 'cal')}
                 >
-                  <Icon d={searchOpen || q ? IC.close : IC.search} size={17} />
+                  <Icon d={IC.calendar} size={15} />
+                  <span>{dateChipLabel}</span>
+                  <Icon d={IC.chevDown} size={14} style={{ transform: panel === 'cal' ? 'rotate(180deg)' : undefined, transition: 'transform 160ms ease' }} />
                 </button>
+                {panel === 'cal' && (
+                  <DateRangePicker
+                    from={from}
+                    to={to}
+                    min={earliestISO}
+                    max={todayISO}
+                    cycleStart={toISO(cycle.start)}
+                    onChange={(a, b) => setFilter({ ...filter, range: 'custom', from: a, to: b })}
+                    onClose={() => setPanel(null)}
+                  />
+                )}
+              </div>
+
+              <div className={s.mxPopWrap}>
                 <button
                   type="button"
-                  className={filter.hideTransfers ? s.pillActive : s.pill}
-                  aria-pressed={!!filter.hideTransfers}
-                  aria-label="Hide transfers between your accounts"
-                  title={filter.hideTransfers ? 'Transfers hidden' : 'Hide transfers'}
-                  onClick={() => setFilter({ ...filter, hideTransfers: !filter.hideTransfers })}
-                  style={iconPill}
+                  className={s.mxTbtn}
+                  data-open={panel === 'filter' || undefined}
+                  data-active={activeFilterCount > 0 || undefined}
+                  aria-haspopup="dialog"
+                  aria-expanded={panel === 'filter'}
+                  onClick={() => setPanel(panel === 'filter' ? null : 'filter')}
                 >
-                  <Icon d={IC.transfer} size={17} />
+                  <Icon d={IC.filter} size={15} />
+                  <span>Filter</span>
+                  {activeFilterCount > 0 && <span className={s.mxCount}>{activeFilterCount}</span>}
                 </button>
-              </>
-            )}
-            {calOpen && (
-              <DateRangePicker
-                from={from}
-                to={to}
-                min={earliestISO}
-                max={todayISO}
-                cycleStart={toISO(cycle.start)}
-                onChange={(a, b) => setFilter({ ...filter, range: 'custom', from: a, to: b })}
-                onClose={() => setCalOpen(false)}
-              />
-            )}
-          </div>
-          {(!phone || searchOpen || q) && (
-            <div style={{ display: 'flex' }}>
-              <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-                <Icon d={IC.search} size={16} color={C.textMuted} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                {panel === 'filter' && (
+                  <div className={`${s.mxPop} ${s.mxPopFilter}`} role="dialog" aria-label="Filter transactions">
+                    <div className={s.mxPopHead}>
+                      <span className={s.mxPopTitle}>Filters</span>
+                      {activeFilterCount > 0 && (
+                        <button type="button" className={s.mxLinkBtn} onClick={() => setFilter({ ...filter, cat: '', hideTransfers: false })}>
+                          Clear all
+                        </button>
+                      )}
+                    </div>
+                    <div className={s.mxRules}>
+                      <div className={s.mxRule}>
+                        <span className={s.mxRuleJoin}>Where</span>
+                        <span className={s.mxRuleLabel}>Category is</span>
+                        <div className={s.mxRuleValue}>
+                          <Select value={cat} onChange={v => setFilter({ ...filter, cat: v })} ariaLabel="Category" options={categoryOptions} style={{ minHeight: 36, fontSize: 14, padding: '6px 10px' }} />
+                        </div>
+                        {cat && (
+                          <button type="button" className={s.iconBtnSm} aria-label="Clear category filter" onClick={() => setFilter({ ...filter, cat: '' })}>
+                            <Icon d={IC.close} size={14} />
+                          </button>
+                        )}
+                      </div>
+                      <div className={s.mxRule}>
+                        <span className={s.mxRuleJoin}>and</span>
+                        <Checkbox checked={!!filter.hideTransfers} onChange={on => setFilter({ ...filter, hideTransfers: on })}>
+                          Hide transfers between your own accounts
+                        </Checkbox>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className={s.mxPopWrap}>
+                <button
+                  type="button"
+                  className={s.mxTbtn}
+                  data-open={panel === 'sort' || undefined}
+                  data-active={sort !== 'newest' || undefined}
+                  aria-haspopup="dialog"
+                  aria-expanded={panel === 'sort'}
+                  onClick={() => setPanel(panel === 'sort' ? null : 'sort')}
+                >
+                  <Icon d={IC.sort} size={15} />
+                  <span>{sort === 'newest' ? 'Sort' : `Sort: ${SORT_LABELS[sort]}`}</span>
+                </button>
+                {panel === 'sort' && (
+                  <div className={`${s.mxPop} ${s.mxPopSort}`} role="dialog" aria-label="Sort transactions">
+                    <div className={s.mxPopHead}>
+                      <span className={s.mxPopTitle}>Sort by</span>
+                    </div>
+                    <div className={s.mxSortList} role="listbox" aria-label="Sort order">
+                      {(Object.keys(SORT_LABELS) as TxSort[]).map(k => (
+                        <button
+                          key={k}
+                          type="button"
+                          role="option"
+                          aria-selected={sort === k}
+                          className={s.mxSortOpt}
+                          data-selected={sort === k || undefined}
+                          onClick={() => {
+                            setFilter({ ...filter, sort: k });
+                            setPanel(null);
+                          }}
+                        >
+                          {SORT_LABELS[k]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className={s.mxToolbarRight}>
+              <label className={s.mxSearch}>
+                <Icon d={IC.search} size={15} />
                 <input
-                  className={s.input}
                   type="search"
                   value={q}
                   onChange={e => setFilter({ ...filter, q: e.target.value })}
-                  placeholder="Search merchant, category or note"
+                  placeholder="Search"
                   aria-label="Search transactions"
-                  autoFocus={phone}
-                  style={{ borderRadius: 8, paddingLeft: 42, fontSize: 14 }}
                 />
-              </div>
+                {q && (
+                  <button type="button" className={s.mxSearchClear} aria-label="Clear search" onClick={() => setFilter({ ...filter, q: '' })}>
+                    <Icon d={IC.close} size={14} />
+                  </button>
+                )}
+              </label>
             </div>
-          )}
+          </div>
+
           {/* Narrow screens: the recap as one short line (wide screens have the recap panel instead). */}
           <div className={s.txSummaryLine} aria-live="polite">
             <strong style={{ color: C.text, fontWeight: 600 }}>{full(out)} spent</strong>
-            {/* Phones: the date chip already says the dates. */}
-            {phone ? '' : `, ${rangeLabel}`}, {inRange.length} {inRange.length === 1 ? 'transaction' : 'transactions'}
-            {filter.hideTransfers && phone ? ', transfers hidden' : ''}
+            {`, ${rangeLabel}`}, {inRange.length} {inRange.length === 1 ? 'transaction' : 'transactions'}
+            {cat ? `, ${cat}` : ''}
+            {filter.hideTransfers ? ', transfers hidden' : ''}
             {guesses.toSort.length > 0 && (
               <>
                 {', '}
@@ -406,11 +492,11 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
           {groups.length === 0 && (
             <div style={{ padding: '40px 24px', textAlign: 'center', fontSize: 14, color: C.textMuted, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
               <Logo size={44} />
-            <span>
-              {!cat && !needle && range === 'today' ? 'No spending yet today — nice!' : !cat && !needle ? 'Nothing here for these dates.' : 'No transactions match these filters.'}
-            </span>
+              <span>
+                {!cat && !needle && range === 'today' ? 'No spending yet today.' : !cat && !needle ? 'Nothing here for these dates.' : 'No transactions match these filters.'}
+              </span>
               {(cat || needle || lo !== 0 || hi !== cycle.dayIdx) && (
-                <button type="button" className={s.btnOutline} onClick={() => setFilter({ range: 'cycle', cat: '', q: '' })}>
+                <button type="button" className={s.btnOutline} onClick={() => setFilter({ range: 'cycle', cat: '', q: '', sort: 'newest' })}>
                   Show the whole cycle
                 </button>
               )}
@@ -528,21 +614,19 @@ export function Activity({ cycle, budget, allTxs, removedTxs, onRemove, filter, 
         recap
       )}
       {toast && (
-        <div className={s.toast} role="status">
-          <span style={{ marginRight: 'auto', minWidth: 0 }}>{toast.text}</span>
-          {toast.action && (
-            <button
-              type="button"
-              className={s.toastBtn}
-              onClick={() => {
-                toast.run?.();
-                setToast(null);
-              }}
-            >
-              {toast.action}
-            </button>
-          )}
-        </div>
+        <Toast
+          text={toast.text}
+          action={toast.action}
+          onAction={
+            toast.action
+              ? () => {
+                  toast.run?.();
+                  setToast(null);
+                }
+              : undefined
+          }
+          onClose={() => setToast(null)}
+        />
       )}
       {planTx && (
         <InstallmentDialog

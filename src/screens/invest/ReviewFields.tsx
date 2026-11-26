@@ -134,8 +134,8 @@ export function useAutosave(initial: ReviewDraft, save: (d: ReviewDraft) => void
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
-  const label = state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved ✓' : '';
+  const label = state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved' : '';
   return { draft, change, label };
 }
 
-export const SavedLabel = ({ label }: { label: string }) => (label ? <span style={{ fontSize: 12, color: label === 'Saved ✓' ? C.good : C.textMuted }}>{label}</span> : null);
+export const SavedLabel = ({ label }: { label: string }) => (label ? <span style={{ fontSize: 12, color: label === 'Saved' ? C.good : C.textMuted }}>{label}</span> : null);

@@ -66,9 +66,10 @@ export function MaxieNote({ text, actions }: { text: ReactNode; actions: { label
   );
 }
 
-/** Paid / Due 28 Nov / Not paid yet, as a small tag. */
-export function StatusTag({ status, due }: { status: 'paid' | 'due' | 'none'; due?: Date }) {
+/** Paid / Due 28 Nov / Overdue since 20 Nov / Not paid yet, as a small tag. */
+export function StatusTag({ status, due }: { status: 'paid' | 'due' | 'overdue' | 'none'; due?: Date }) {
   if (status === 'paid') return <span className={s.mxTag} data-tone="success">Paid</span>;
+  if (status === 'overdue') return <span className={s.mxTag} data-tone="danger">{due ? `Overdue since ${dayMonth(due)}` : 'Overdue'}</span>;
   return <span className={s.mxTag}>{status === 'due' && due ? `Due ${dayMonth(due)}` : 'Not paid yet'}</span>;
 }
 

@@ -53,25 +53,12 @@ export function Summary({ cycle, budget: b, onOpenCategory, onDismissBill, onSho
 
 // ---- shared bits ----
 
-/** A chart card: a short title, an info icon whose one-line explanation shows on hover (or tap), and the chart. */
-function ChartCard({ title, info, right, sub, children, wide }: { title: string; info: string | string[]; right?: ReactNode; sub?: ReactNode; children: ReactNode; wide?: boolean }) {
-  const lines = typeof info === 'string' ? [info] : info;
-  const [open, setOpen] = useState(false);
+/** A chart card: serif title, optional right header figure and subtitle, and the chart. */
+function ChartCard({ title, right, sub, children, wide }: { title: string; right?: ReactNode; sub?: ReactNode; children: ReactNode; wide?: boolean }) {
   return (
     <section className={s.sxChartCard} data-wide={wide || undefined} aria-label={title}>
       <div className={s.sxChartHead}>
         <h2 className={s.sxChartTitle}>{title}</h2>
-        <span className={s.sxInfo} data-open={open || undefined} onMouseLeave={() => setOpen(false)}>
-          <button type="button" className={s.sxInfoBtn} aria-label={`About ${title}: ${lines.join(' ')}`} onClick={() => setOpen(!open)} onBlur={() => setOpen(false)}>
-            <Icon d={IC.info} size={14} />
-          </button>
-          <span className={s.sxInfoTip} role="tooltip">
-            <strong className={s.sxInfoTipTitle}>{title}</strong>
-            {lines.map(l => (
-              <span key={l}>{l}</span>
-            ))}
-          </span>
-        </span>
         {right != null && <span className={s.sxChartRight}>{right}</span>}
       </div>
       {sub != null && <span className={s.sxChartSub}>{sub}</span>}
@@ -122,11 +109,7 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
     setHover(Math.round(((e.clientX - r.left) / r.width) * (days - 1)));
   };
   return (
-    <ChartCard
-      title="This cycle"
-      info={['Solid line: what you\'ve spent so far, bills included.', 'Dashed line: your pace carried on to payday, with bills still to come.', 'Flat line: your plan.']}
-      right={`${cycle.daysLeft + 1} ${cycle.daysLeft === 0 ? 'day' : 'days'} to payday`}
-    >
+    <ChartCard title="This cycle" right={`${cycle.daysLeft + 1} ${cycle.daysLeft === 0 ? 'day' : 'days'} to payday`}>
       <div className={s.sxLeftHead}>
         <span className={s.sxLeftBig} style={{ color: left < 0 ? C.redInk : C.text }}>
           {short(shownLeft)}
@@ -211,8 +194,8 @@ function Tiles({ cycle, budget: b, onSavings }: { cycle: Cycle; budget: Budget; 
 }
 
 /**
- * By day (Maxie design): every day's spending, with the average as a dashed line, the three biggest days labelled,
- * today marked, and a note on a spike (what it was), so one big day explains itself.
+ * By day (Maxie DailyBarChart): spending per day ending at today, solid labelled average line, the three biggest
+ * days and today labelled, period total in header, hover/keyboard tooltip, and a visually hidden data table.
  */
 function DailyBars({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
   const { short, full } = useSettings();
@@ -229,8 +212,8 @@ function DailyBars({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
   const sofar = perDay.slice(0, cycle.dayIdx + 1);
   const total = sum(sofar);
   const avg = total / Math.max(1, cycle.dayN);
-  const top = Math.max(avg * 1.6, ...perDay, 1);
-  // The three biggest days so far get their amount on top.
+  const top = Math.max(avg * 1.6, ...sofar, 1);
+  // Label only the three biggest days (two on phones) and today.
   const labelled = new Set(
     sofar
       .map((v, i) => ({ v, i }))
@@ -239,6 +222,7 @@ function DailyBars({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
       .slice(0, phone ? 2 : 3)
       .map(x => x.i),
   );
+  if (sofar[cycle.dayIdx] > 0) labelled.add(cycle.dayIdx);
   // A spike: a day over 2.5× the average, named by its two biggest categories.
   const spikeIdx = sofar.reduce((m, v, i) => (v > (sofar[m] ?? 0) ? i : m), 0);
   const spike = sofar[spikeIdx] > avg * 2.5 && cycle.dayN >= 5 ? spikeIdx : null;
@@ -247,22 +231,17 @@ function DailyBars({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
     const cats = Object.entries(catsByDay[spike]).sort((x, y) => y[1] - x[1]).slice(0, 2).map(([c]) => c);
     return `${dayMonth(cycle.dateOf(spike))}: ${cats.length === 2 ? `${cats[0]} and ${cats[1].toLowerCase()}` : cats[0]}, ${short(sofar[spike])}`;
   })();
-  const shown = hover;
+  const shown = hover != null && hover < sofar.length ? hover : null;
+  const tipPct = shown != null ? Math.min(88, Math.max(12, ((shown + 0.5) / Math.max(1, sofar.length)) * 100)) : 50;
   return (
     <ChartCard
       title="By day"
       wide
-      info="What you spent each day, bills included. The dashed line is your average day so far."
+      sub={`${dayMonth(cycle.start)} – ${dayMonth(cycle.today)}`}
       right={
-        shown != null ? (
-          <span>
-            {dayMonth(cycle.dateOf(shown))} <strong style={{ color: C.text }}>{full(perDay[shown])}</strong>
-          </span>
-        ) : (
-          <span>
-            {dayMonth(cycle.start)} – {dayMonth(cycle.end)} <strong style={{ color: C.text }}>{full(total)}</strong>
-          </span>
-        )
+        <span>
+          <strong style={{ color: C.text }}>{full(total)}</strong> in {cycle.dayN} {cycle.dayN === 1 ? 'day' : 'days'}
+        </span>
       }
     >
       {spikeText && (
@@ -271,47 +250,66 @@ function DailyBars({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
           {spikeText}
         </span>
       )}
-      <div className={s.sxDayBars} style={{ height: phone ? 150 : 180 }} onMouseLeave={() => setHover(null)} role="img" aria-label={`Spending by day, ${full(total)} so far, average ${full(avg)} a day`}>
+      <div className={s.sxDayBars} style={{ height: phone ? 150 : 180 }} onMouseLeave={() => setHover(null)} role="img" aria-label={`Spending by day, ${full(total)} in ${cycle.dayN} days, average ${full(avg)} a day`}>
         {avg > 0 && (
           <span className={s.sxPlanLineMark} style={{ bottom: (avg / top) * 100 + '%' }} aria-hidden="true">
-            <span className={s.sxAvgLabel}>avg {short(avg)}</span>
+            <span className={s.sxAvgLabel}>Avg {short(avg)}</span>
           </span>
         )}
-        {perDay.map((v, i) => {
-          const future = i > cycle.dayIdx;
-          return (
-            <button
-              key={i}
-              type="button"
-              className={s.sxDayBar}
-              data-active={i === shown || undefined}
-              onMouseEnter={() => setHover(i)}
-              onFocus={() => setHover(i)}
-              onClick={() => setHover(i)}
-              aria-label={`${dayMonth(cycle.dateOf(i))}: ${full(v)}`}
-              tabIndex={future ? -1 : 0}
+        {shown != null && (
+          <div className={s.mxTip} style={{ left: tipPct + '%', bottom: Math.min(92, Math.max(16, (sofar[shown] / top) * 100 + 8)) + '%' }} role="tooltip">
+            <strong className={s.mxTipVal}>{full(sofar[shown])}</strong>
+            <span className={s.mxTipLabel}>{dayMonth(cycle.dateOf(shown))}</span>
+          </div>
+        )}
+        {sofar.map((v, i) => (
+          <button
+            key={i}
+            type="button"
+            className={s.sxDayBar}
+            data-active={i === shown || undefined}
+            onMouseEnter={() => setHover(i)}
+            onFocus={() => setHover(i)}
+            onBlur={() => setHover(null)}
+            onClick={() => setHover(i)}
+            aria-label={`${dayMonth(cycle.dateOf(i))}: ${full(v)}`}
+          >
+            <span
+              className={s.sxDayBarFill}
+              style={{
+                position: 'relative',
+                height: v > 0 ? Math.max(4, (v / top) * 100) + '%' : 3,
+                background: v === 0 ? C.divider : 'var(--category-1)',
+                outline: i === spike ? '2px solid var(--category-1)' : undefined,
+                outlineOffset: i === spike ? 2 : undefined,
+              }}
             >
-              <span
-                className={s.sxDayBarFill}
-                style={{
-                  position: 'relative',
-                  height: !future && v > 0 ? Math.max(4, (v / top) * 100) + '%' : 3,
-                  background: future || v === 0 ? C.divider : 'var(--category-1)',
-                  outline: i === spike ? '2px solid var(--category-1)' : undefined,
-                  outlineOffset: i === spike ? 2 : undefined,
-                }}
-              >
-                {labelled.has(i) && <span className={s.sxBarTop}>{short(v)}</span>}
-              </span>
-            </button>
-          );
-        })}
+              {labelled.has(i) && <span className={s.sxBarTop}>{short(v)}</span>}
+            </span>
+          </button>
+        ))}
       </div>
       <div className={s.sxDayAxis} aria-hidden="true">
         <span>{dayMonth(cycle.start)}</span>
         <span style={{ fontWeight: 600, color: C.text }}>Today, {dayMonth(cycle.today)}</span>
-        <span>{dayMonth(cycle.end)}</span>
       </div>
+      <table className="sr-only">
+        <caption>Daily spending</caption>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Spent</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sofar.map((v, i) => (
+            <tr key={i}>
+              <td>{dayMonth(cycle.dateOf(i))}</td>
+              <td>{full(v)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </ChartCard>
   );
 }
@@ -362,17 +360,18 @@ function squarify(items: Omit<Cell, 'x' | 'y' | 'w' | 'h'>[], W: number, H: numb
   return out;
 }
 
-/** Whether a box has room for its label (name and share, one size everywhere); small boxes go in the legend. */
+/** Whether a box has room for its label (name and value/share); small boxes go in the legend. */
 const labelFits = (w: number, h: number, name: string) => name.length * 7.6 + 24 <= w && h >= 46;
 
 /**
- * Where it went, as a treemap: boxes sized by spending, split by thin gaps, each with its name and share when it
- * fits. Small boxes are named in the legend under it. Tap a box to open the category.
+ * Where it went (Maxie CategoryTreemap): flush boxes sized by spending (outer corners radius-md only, no inner gaps
+ * or borders), whole percentages, hover/keyboard tooltip, legend for small boxes, and a visually hidden table.
  */
 function WhereMap({ cycle, budget: b, onOpenCategory }: { cycle: Cycle; budget: Budget; onOpenCategory: (name: string) => void }) {
-  const { full } = useSettings();
+  const { full, short } = useSettings();
   const phone = useIsPhone();
   const [box, setBox] = useState<HTMLDivElement | null>(null);
+  const [hover, setHover] = useState<Cell | null>(null);
   const W = useWidth(box);
   const H = phone ? 240 : 300;
   const cats = b.cats.filter(c => c.spent > 0).sort((x, y) => y.spent - x.spent);
@@ -387,14 +386,13 @@ function WhereMap({ cycle, budget: b, onOpenCategory }: { cycle: Cycle; budget: 
   ].sort((x, y) => y.value - x.value);
   const cells = W ? squarify(items, W, H) : [];
   const pct = (v: number) => {
-    const x = (v / total) * 100;
-    return (x < 1 ? '<1' : x < 10 ? x.toFixed(1).replace(/\.0$/, '') : Math.round(x)) + '%';
+    const p = Math.round((v / total) * 100);
+    return p < 1 ? '<1%' : `${p}%`;
   };
+  // Flush cells: no gaps, borders, or inner rounding; only outer corners (radius-md on container).
   const laid = cells.map(c => {
-    // 2px gap between boxes: each inner edge gives up 1px.
-    const L = Math.round(c.x), T = Math.round(c.y), R = Math.round(c.x + c.w), B = Math.round(c.y + c.h);
-    const x = L + (L > 0 ? 1 : 0), y = T + (T > 0 ? 1 : 0);
-    const w = R - (R < W ? 1 : 0) - x, h = B - (B < H ? 1 : 0) - y;
+    const x = Math.round(c.x), y = Math.round(c.y);
+    const w = Math.round(c.x + c.w) - x, h = Math.round(c.y + c.h) - y;
     return { ...c, x, y, w, h, label: labelFits(w, h, c.name) };
   });
   const unlabelled = laid.filter(c => !c.label);
@@ -402,43 +400,83 @@ function WhereMap({ cycle, budget: b, onOpenCategory }: { cycle: Cycle; budget: 
     <ChartCard
       title="Where it went"
       wide
-      info="This cycle's spending by category: the bigger the box, the bigger its share. Tap one to open it."
-      sub={total > 0 ? `${full(total)} spent, ${dayMonth(cycle.start)} – ${dayMonth(cycle.end)}` : undefined}
+      sub={total > 0 ? `${full(total)} spent, ${dayMonth(cycle.start)} – ${dayMonth(cycle.today)}` : undefined}
     >
       {total === 0 ? (
         <span className={s.sxChartEmpty}>Nothing spent yet</span>
       ) : (
         <>
-          <div ref={setBox} className={s.sxTreemap} style={{ height: H }} role="img" aria-label={items.map(d => `${d.name} ${full(d.value)} (${pct(d.value)})`).join(', ')}>
-            {laid.map(c => (
-              <button
-                key={c.name}
-                type="button"
-                className={s.sxTmCell}
-                disabled={c.name === 'Other'}
-                onClick={() => onOpenCategory(c.name)}
-                title={`${c.name}: ${full(c.value)}, ${pct(c.value)}`}
-                aria-label={`${c.name}: ${full(c.value)}, ${pct(c.value)}`}
-                style={{ left: c.x, top: c.y, width: Math.max(0, c.w), height: Math.max(0, c.h), background: c.color, color: c.on }}
+          <div style={{ position: 'relative' }} onMouseLeave={() => setHover(null)}>
+            <div ref={setBox} className={s.sxTreemap} style={{ height: H }} role="img" aria-label={items.map(d => `${d.name} ${full(d.value)} (${pct(d.value)})`).join(', ')}>
+              {laid.map(c => (
+                <button
+                  key={c.name}
+                  type="button"
+                  className={s.sxTmCell}
+                  disabled={c.name === 'Other'}
+                  onClick={() => onOpenCategory(c.name)}
+                  onMouseEnter={() => setHover(c)}
+                  onFocus={() => setHover(c)}
+                  onBlur={() => setHover(null)}
+                  aria-label={`${c.name}: ${full(c.value)} (${pct(c.value)})`}
+                  style={{ left: c.x, top: c.y, width: Math.max(0, c.w), height: Math.max(0, c.h), background: c.color, color: c.on }}
+                >
+                  {c.label && (
+                    <>
+                      <span className={s.sxTmName}>{c.name}</span>
+                      <span className={s.sxTmPct}>
+                        {c.w >= 120 ? `${short(c.value)} (${pct(c.value)})` : pct(c.value)}
+                      </span>
+                    </>
+                  )}
+                </button>
+              ))}
+            </div>
+            {hover && W > 0 && (
+              <div
+                className={s.mxTip}
+                style={{
+                  left: Math.min(86, Math.max(14, ((hover.x + hover.w / 2) / W) * 100)) + '%',
+                  top: Math.max(8, hover.y - 6),
+                }}
+                role="tooltip"
               >
-                {c.label && (
-                  <>
-                    <span className={s.sxTmName}>{c.name}</span>
-                    <span className={s.sxTmPct}>{pct(c.value)}</span>
-                  </>
-                )}
-              </button>
-            ))}
+                <strong className={s.mxTipVal}>
+                  {full(hover.value)} ({pct(hover.value)})
+                </strong>
+                <span className={s.mxTipLabel}>{hover.name}</span>
+              </div>
+            )}
           </div>
-          <div className={s.sxTmFoot}>
-            {unlabelled.map(p => (
-              <button key={p.name} type="button" className={s.sxTmKey} disabled={p.name === 'Other'} onClick={() => onOpenCategory(p.name)} title={full(p.value)}>
-                <span className={s.sxLegendDot} style={{ background: p.color }} />
-                {p.name} {pct(p.value)}
-              </button>
-            ))}
-            <span className={s.sxTmCaption}>Box size is share of spending, tap one to open</span>
-          </div>
+          {unlabelled.length > 0 && (
+            <div className={s.sxTmFoot}>
+              {unlabelled.map(p => (
+                <button key={p.name} type="button" className={s.sxTmKey} disabled={p.name === 'Other'} onClick={() => onOpenCategory(p.name)} title={full(p.value)}>
+                  <span className={s.sxLegendDot} style={{ background: p.color }} />
+                  {p.name} {short(p.value)} ({pct(p.value)})
+                </button>
+              ))}
+            </div>
+          )}
+          <table className="sr-only">
+            <caption>Spending by category</caption>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Spent</th>
+                <th>Share</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map(d => (
+                <tr key={d.name}>
+                  <td>{d.name}</td>
+                  <td>{full(d.value)}</td>
+                  <td>{pct(d.value)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           <WhereFlag cycle={cycle} budget={b} onOpenCategory={onOpenCategory} />
         </>
       )}
@@ -507,7 +545,6 @@ function BillsTimeline({ cycle, budget: b, onDismissBill }: { cycle: Cycle; budg
     <ChartCard
       title="Bills to come"
       wide
-      info="Bills due before payday, on a line from today to payday. Tap a dot for its details."
       right={bills.length ? short(sum(bills.map(x => x.amount))) : undefined}
     >
       {bills.length === 0 ? (
@@ -563,7 +600,6 @@ function Recent({ budget: b, cycle, onSeeAll }: { budget: Budget; cycle: Cycle; 
     <ChartCard
       title="Today"
       wide
-      info="Your latest transactions today."
       right={
         <button type="button" className={s.textBtnSm} style={{ padding: 0 }} onClick={onSeeAll}>
           {all.length > 3 ? `+${all.length - 3} more` : 'See all'}
@@ -580,7 +616,7 @@ function Recent({ budget: b, cycle, onSeeAll }: { budget: Budget; cycle: Cycle; 
               {tidyName(t.title)}
             </span>
             <span style={{ fontWeight: 600, whiteSpace: 'nowrap', color: t.isIncome ? C.good : C.text }}>
-              {t.isIncome ? '+ ' : '− '}
+              {t.isIncome ? '+' : '−'}
               {full(t.isIncome ? t.amount : t.net)}
             </span>
           </div>

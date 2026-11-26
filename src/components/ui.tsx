@@ -171,12 +171,68 @@ export function Modal({ title, onClose, children, width = 520 }: { title: string
             {title}
           </h2>
           <button type="button" data-close className={s.iconBtn} onClick={onClose} aria-label="Close" title="Close">
-            <Icon d={IC.close} size={18} strokeWidth={2.5} />
+            <Icon d={IC.close} size={18} />
           </button>
         </div>
         {children}
       </div>
     </div>
+  );
+}
+
+/** Maxie Toast: passing feedback message with an optional undo/action button and dismiss control. */
+export function Toast({
+  text,
+  action,
+  onAction,
+  onClose,
+  tone = 'neutral',
+}: {
+  text: string;
+  action?: string;
+  onAction?: () => void;
+  onClose?: () => void;
+  tone?: 'neutral' | 'success' | 'danger';
+}) {
+  return (
+    <div className={s.toast} data-tone={tone !== 'neutral' ? tone : undefined} role={tone === 'danger' ? 'alert' : 'status'}>
+      <span style={{ marginRight: 'auto', minWidth: 0 }}>{text}</span>
+      {action && onAction && (
+        <button type="button" className={s.toastBtn} onClick={onAction}>
+          {action}
+        </button>
+      )}
+      {onClose && (
+        <button type="button" className={s.toastClose} onClick={onClose} aria-label="Dismiss">
+          <Icon d={IC.close} size={15} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Maxie Checkbox: custom 20×20 rounded checkbox with clay fill when checked. */
+export function Checkbox({
+  checked,
+  onChange,
+  children,
+  disabled,
+  className,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  children: ReactNode;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <label className={`${s.mxCheck} ${disabled ? s.mxCheckDisabled : ''} ${className ?? ''}`}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={e => onChange(e.target.checked)} />
+      <span className={s.mxCheckBox} aria-hidden="true">
+        <Icon d={IC.check} size={14} strokeWidth={2.25} />
+      </span>
+      <span className={s.mxCheckLabel}>{children}</span>
+    </label>
   );
 }
 
@@ -186,7 +242,7 @@ export { s as ui };
 export function DismissBill({ title, onClick }: { title: string; onClick: () => void }) {
   return (
     <button type="button" className={s.billX} onClick={onClick} aria-label={`${title} isn't due this cycle`} title="Not a bill this cycle">
-      <Icon d={IC.close} size={14} strokeWidth={2.5} />
+      <Icon d={IC.close} size={14} />
     </button>
   );
 }

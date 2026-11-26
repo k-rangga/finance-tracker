@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import s from '../styles/ui.module.css';
 import { FoundInstallments } from '../components/Plans';
 import { BillItem, BudgetCard, InstallmentsGroup, useInstallmentTotals } from './categoryCards';
-import { Badge } from '../components/ui';
+import { Badge, Toast } from '../components/ui';
 import { Celebrate } from '../components/Delight';
 import { IC, Icon } from '../components/Icon';
 import { categoryStatus, changeBadge, type Budget, type CatView, type TxView } from '../lib/budget';
@@ -319,19 +319,15 @@ export function Categories({ cycle, budget, allTxs, open, setOpen, onShowTransac
       {/* Phones: Summary already has the totals, and the rows above say what's over. */}
       {!phone && <CategoriesPanel cycle={cycle} mode={mode} rows={[...variable, ...fixed]} onPick={name => setOpen(name)} />}
       {toast && (
-        <div className={s.toast} role="status">
-          <span style={{ marginRight: 'auto', minWidth: 0 }}>{toast.text}</span>
-          <button
-            type="button"
-            className={s.toastBtn}
-            onClick={() => {
-              toast.undo();
-              setToast(null);
-            }}
-          >
-            Undo
-          </button>
-        </div>
+        <Toast
+          text={toast.text}
+          action="Undo"
+          onAction={() => {
+            toast.undo();
+            setToast(null);
+          }}
+          onClose={() => setToast(null)}
+        />
       )}
     </div>
   );

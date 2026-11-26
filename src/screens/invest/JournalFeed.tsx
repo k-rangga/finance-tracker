@@ -136,8 +136,8 @@ export function JournalFeed({ account, items, dS, onReview }: Props) {
         <Select ariaLabel="Month" value={month} onChange={m => (setMonth(m), setTag(''))} options={months.map(m => ({ value: m, label: monthName(m) }))} />
         <Select ariaLabel="Tag" value={tag} onChange={setTag} options={[{ value: '', label: 'All tags' }, ...tags.map(x => ({ value: x, label: x }))]} />
         <button type="button" className={s.btnOutlineSm} style={{ marginLeft: 'auto', minHeight: 44 }} onClick={copy} disabled={!entries.length && !note.trim()}>
-          <Icon d={IC.list} size={14} />
-          {copied ? 'Copied ✓' : 'Copy'}
+          <Icon d={IC.copy} size={15} />
+          {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
 
@@ -166,7 +166,7 @@ export function JournalFeed({ account, items, dS, onReview }: Props) {
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ marginRight: 'auto' }}>Your note on the month</span>
             <span style={{ fontSize: 12, fontWeight: 400, color: noteState === 'error' ? C.redInk : noteState === 'saved' ? C.good : C.textMuted }}>
-              {noteState === 'saving' ? 'Saving…' : noteState === 'saved' ? 'Saved ✓' : noteState === 'error' ? 'Not saved' : ''}
+              {noteState === 'saving' ? 'Saving…' : noteState === 'saved' ? 'Saved' : noteState === 'error' ? 'Not saved' : ''}
             </span>
           </span>
           <textarea

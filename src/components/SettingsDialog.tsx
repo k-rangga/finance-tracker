@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { IconChip, Modal, Options } from './ui';
+import { Select } from './Select';
 import { CATEGORIES, toCategory } from '../data/categories';
 import { dayLabel, startOfToday, sum } from '../lib/format';
 import { DEFAULT_PAYDAY, nextPaydayFor, type PaydayRule } from '../lib/cycle';
@@ -130,16 +131,18 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
       <Section title="Income and payday">
         <div className={s.setGrid}>
           {num('income', 'Monthly income', d.currency)}
-          <label className={s.field}>
+          <div className={s.field}>
             <span>Payday</span>
-            <select className={s.input} value={rule.day} onChange={e => setRule({ day: Number(e.target.value) })}>
-              {Array.from({ length: 31 }, (_, i) => i + 1).map(n => (
-                <option key={n} value={n}>
-                  {n === 31 ? 'Last day of the month' : `The ${ordinal(n)}`}
-                </option>
-              ))}
-            </select>
-          </label>
+            <Select
+              ariaLabel="Payday"
+              value={String(rule.day)}
+              onChange={v => setRule({ day: Number(v) })}
+              options={Array.from({ length: 31 }, (_, i) => i + 1).map(n => ({
+                value: String(n),
+                label: n === 31 ? 'Last day of the month' : `The ${ordinal(n)}`,
+              }))}
+            />
+          </div>
         </div>
         <Row label="On a weekend, paid">
           <Options label="On a weekend, paid" items={Object.keys(WEEKEND)} value={weekendLabel} onChange={k => setRule({ weekend: WEEKEND[k] })} />

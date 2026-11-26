@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import s from './styles/ui.module.css';
 import { IC, Icon } from './components/Icon';
+import { Toast } from './components/ui';
 import { Logo } from './components/Logo';
 import { SettingsDialog } from './components/SettingsDialog';
 import { CategoryDialog } from './components/CategoryDialog';
@@ -274,7 +275,7 @@ export default function App() {
           <Logo size={32} />
           <span className={s.brandText}>Maxie</span>
           <button type="button" className={s.miniBtn} onClick={() => setNav(true)} title="Minimize sidebar" aria-label="Minimize sidebar">
-            <Icon d={IC.chevLeft} size={16} strokeWidth={2.5} />
+            <Icon d={IC.chevLeft} size={16} />
           </button>
         </div>
         <nav className={s.navList}>
@@ -312,7 +313,7 @@ export default function App() {
         </nav>
         <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button type="button" className={`${s.railBtn} ${s.expandOnly}`} onClick={() => setNav(false)} title="Expand sidebar" aria-label="Expand sidebar">
-            <Icon d={IC.chevRight} size={20} strokeWidth={2.5} />
+            <Icon d={IC.chevRight} size={20} />
           </button>
           <button type="button" className={s.railBtn} onClick={() => setSettingsOpen(true)} title="Settings" aria-label="Settings">
             <Icon d={IC.settings} size={20} />
@@ -446,19 +447,15 @@ export default function App() {
 
       {gmailOpen && <GmailDialog notice={googleNotice} onClose={() => setGmailOpen(false)} />}
       {billUndo && (
-        <div className={s.toast} role="status">
-          <span style={{ marginRight: 'auto', minWidth: 0 }}>{billUndo.text}</span>
-          <button
-            type="button"
-            className={s.toastBtn}
-            onClick={() => {
-              billUndo.run();
-              setBillUndo(null);
-            }}
-          >
-            Undo
-          </button>
-        </div>
+        <Toast
+          text={billUndo.text}
+          action="Undo"
+          onAction={() => {
+            billUndo.run();
+            setBillUndo(null);
+          }}
+          onClose={() => setBillUndo(null)}
+        />
       )}
       {chat && <Chat cycle={cycle} budget={budget} allTxs={allTxs} ask={chat.ask} onClose={() => setChat(null)} />}
       {settingsOpen && (
