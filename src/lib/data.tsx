@@ -71,8 +71,8 @@ export function DataProvider({ backend, children, loading, failed }: { backend: 
     };
   }, [backend, attempt]);
 
-  // While the app is open, pick up new imports every hour (the server syncs Gmail hourly), and when you come
-  // back to a tab that's been in the background for an hour or more.
+  // While the app is open, pick up new imports every hour (the server syncs Gmail every 2 hours, Jakarta time),
+  // and when you come back to a tab that's been in the background for an hour or more.
   const loaded = data !== null;
   useEffect(() => {
     if (!loaded) return;

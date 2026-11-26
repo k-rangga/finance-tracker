@@ -96,8 +96,13 @@ await ok('Gmail without a Google connection says so', () => {
 await ok('Jakarta hour for the sync schedule', () => {
   const { ctx } = fresh();
   ctx.store.setProp('x', '1');
-  // 23:30 UTC is 06:30 in Jakarta, a sync hour.
+  // Every 2 hours in Asia/Jakarta: even hours sync, odd hours skip.
+  assert.equal(runFunction(ctx, 'isSyncHour_', 0), true);
   assert.equal(runFunction(ctx, 'isSyncHour_', 6), true);
+  assert.equal(runFunction(ctx, 'isSyncHour_', 22), true);
+  assert.equal(runFunction(ctx, 'isSyncHour_', 1), false);
+  assert.equal(runFunction(ctx, 'isSyncHour_', 7), false);
+  assert.equal(runFunction(ctx, 'isSyncHour_', 23), false);
 });
 
 await ok('synchronous fetch reaches a server and returns its body', async () => {

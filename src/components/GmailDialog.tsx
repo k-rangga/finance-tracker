@@ -103,8 +103,8 @@ export function GmailDialog({ onClose, notice }: { onClose: () => void; notice?:
   return (
     <Modal title="Gmail sync" onClose={onClose}>
       <p style={{ fontSize: 14, lineHeight: 1.5, color: C.textMuted }}>
-        Receipts are read (never changed) from one Gmail label in <strong>{gmail.google_email ?? 'your account'}</strong>. It syncs automatically about every 2 hours from 06:00
-        to 00:00 (Jakarta time), and whenever you press Sync now.
+        Receipts are read (never changed) from one Gmail label in <strong>{gmail.google_email ?? 'your account'}</strong>. It syncs automatically every 2 hours (Jakarta time:
+        00:00, 02:00, …, 22:00), and whenever you press Sync now.
       </p>
       <div className={s.note} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 14 }}>
         <span>

@@ -195,12 +195,12 @@ for (const [name, got, want] of cases) {
   console.log('ok   Google Finance symbols (IDX:, CURRENCY:…USD) and #N/A / blank quotes are skipped');
 }
 
-// Automatic sync (Asia/Jakarta): every hour.
+// Automatic sync (Asia/Jakarta): every 2 hours (00:00, 02:00, …, 22:00).
 {
   const isSyncHour = vm.runInContext('isSyncHour_', ctx);
   const on = [...Array(24).keys()].filter(isSyncHour);
-  assert.deepEqual(on, [...Array(24).keys()]);
-  console.log('ok   automatic sync runs every hour');
+  assert.deepEqual(on, [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]);
+  console.log('ok   automatic sync runs every 2 hours (Asia/Jakarta)');
 }
 
 // De-duplication: card alert then Grab receipt for the same booking, a repeat forward, and a reversal.
