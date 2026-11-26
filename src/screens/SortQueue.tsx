@@ -102,12 +102,12 @@ export function SortQueue({ ids, allTxs, g, onPick, onClose }: Props) {
         <Celebrate id={`sort-${done}-${ids[0] ?? 'all'}`} when={done > 0 && skipped.length === 0} />
         <Modal title="All sorted" onClose={onClose} width={460}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12, padding: '8px 0' }}>
-            <Logo size={52} mood={skipped.length ? 'calm' : 'happy'} interactive cheer="Clean slate!" />
+            <Logo size={52} mood={skipped.length ? 'calm' : 'happy'} interactive cheer="Clean slate." />
             <p style={{ fontFamily: 'var(--font-serif)', fontSize: 18, lineHeight: '26px', color: C.text }}>
               {skipped.length
-                ? `Nice work — ${done} sorted, ${skipped.length} left for later.`
+                ? `Nice and steady — ${done} sorted, ${skipped.length} left for later.`
                 : done > 0
-                  ? `Every rupiah has a home. ${done} ${done === 1 ? 'transaction' : 'transactions'} sorted!`
+                  ? `Every rupiah has a calm home. ${done} ${done === 1 ? 'transaction' : 'transactions'} sorted.`
                   : 'Nothing left in Buffer — clean slate.'}
             </p>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -145,10 +145,10 @@ export function SortQueue({ ids, allTxs, g, onPick, onClose }: Props) {
         <div className={s.track} style={{ height: 5 }} aria-hidden="true">
           <span className={s.fill} style={{ width: `${Math.round(((done + skipped.length) / total) * 100)}%`, background: 'var(--clay)' }} />
         </div>
-        {streak >= 2 && (
+        {!settings.quietMode && streak >= 2 && (
           <span className={s.sortStreak}>
             <FlameIcon size={13} />
-            {streak} in a row!
+            {streak} sorted
           </span>
         )}
         <span className={s.sortProgressLabel}>

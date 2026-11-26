@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import s from '../styles/ui.module.css';
 import { storage } from '../lib/storage';
+import { useSettings } from '../lib/settings';
 
 /** True when the device asks for less motion: count-ups, confetti and fades are skipped. */
 export const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -45,18 +46,19 @@ const CONFETTI_COLOURS = ['var(--category-1)', 'var(--category-4)', 'var(--categ
 
 /**
  * A short confetti burst for a win (savings target reached, cycle ending under budget), once per `id`:
- * remembered on this device so it doesn't repeat on every visit.
+ * remembered on this device so it doesn't repeat on every visit, and silenced in Quiet mode.
  */
 export function Celebrate({ id, when }: { id: string; when: boolean }) {
+  const { settings } = useSettings();
   const key = 'moneyTracker.celebrated.' + id;
   const [show, setShow] = useState(false);
   useEffect(() => {
-    if (!when || reducedMotion() || storage.getRaw(key)) return;
+    if (!when || settings.quietMode || reducedMotion() || storage.getRaw(key)) return;
     storage.setRaw(key, '1');
     setShow(true);
     const t = setTimeout(() => setShow(false), 2600);
     return () => clearTimeout(t);
-  }, [when, key]);
+  }, [when, settings.quietMode, key]);
   if (!show) return null;
   return (
     <div className={s.confetti} aria-hidden="true">

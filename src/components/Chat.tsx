@@ -101,7 +101,7 @@ function buildStarters(b: Budget, isId: boolean): string[] {
     out.push(isId ? `Gimana cara ngerem ${overCat.name}?` : `How do I rein in ${overCat.name}?`);
   } else {
     out.push(isId ? 'Siklus ini masih aman gak?' : 'Am I on track this cycle?');
-    out.push(isId ? 'Apresiasi pencapaianku siklus ini!' : 'Hype my wins this cycle!');
+    out.push(isId ? 'Ceritakan pencapaianku siklus ini' : 'Highlight my wins this cycle');
   }
 
   if (bufferCount > 0) {
@@ -390,7 +390,7 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
                       >
                         <Icon d={copied === i ? IC.check : IC.copy} size={15} />
                       </button>
-                      {m.rating && <span className={s.chatRateNote}>{m.rating === 'up' ? 'Yay, glad that helped!' : "Got it — I'll tune that next time."}</span>}
+                      {m.rating && <span className={s.chatRateNote}>{m.rating === 'up' ? 'Glad that helped.' : "Got it — I'll tune that next time."}</span>}
                       {!m.rating && m.model && <span className={s.chatModelTag}>{modelLabel(m.model)}</span>}
                     </span>
                   </div>
@@ -757,7 +757,7 @@ function ActionCardView({ prepared, done, onApply, onUndo }: { prepared: Prepare
         ) : (
           <>
             <span className={s.mxTag} data-tone="success">
-              Done — nice and tidy!
+              Done — all tidy.
             </span>
             <button type="button" className={s.textBtnSm} onClick={onUndo}>
               Undo

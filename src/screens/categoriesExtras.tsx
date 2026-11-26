@@ -164,14 +164,17 @@ export const TrophyIcon = ({ size = 14 }: { size?: number }) => (
   </svg>
 );
 
-/** A flame and "3": under budget that many cycles running, shown from two. */
-export const StreakChip = ({ n }: { n?: number }) =>
-  n && n >= 2 ? (
+/** A flame and "3": under budget that many cycles running, shown from two (hidden in Quiet mode). */
+export const StreakChip = ({ n }: { n?: number }) => {
+  const { settings } = useSettings();
+  if (settings.quietMode || !n || n < 2) return null;
+  return (
     <span className={s.streak} title={`Within budget ${n} cycles in a row`} aria-label={`Within budget ${n} cycles in a row`}>
       <FlameIcon size={15} />
       {n}
     </span>
-  ) : null;
+  );
+};
 
 // ---- no-spend challenges ----
 

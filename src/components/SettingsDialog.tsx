@@ -256,6 +256,15 @@ export function SettingsDialog({ onClose, email, onEditCategory }: { onClose: ()
             }}
           />
         </Row>
+        <Row label="App tone">
+          <Options
+            label="App tone"
+            items={['Warm', 'Quiet'] as const}
+            value={d.quietMode ? 'Quiet' : 'Warm'}
+            onChange={v => setD(p => ({ ...p, quietMode: v === 'Quiet' }))}
+          />
+        </Row>
+        <span className={s.setHint}>Quiet hides confetti, streaks, and win badges when you just want a calm, minimal check-in.</span>
       </Section>
 
       <Section title="Account">

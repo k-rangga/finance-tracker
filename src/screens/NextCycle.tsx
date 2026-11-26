@@ -245,35 +245,35 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
     if (left < -1) {
       return {
         face: 'steady',
-        line: `Over-allocated by ${short(-left)} — trim a slider below or tap Auto-balance to land cleanly.`,
-        cheer: 'Easy fix — one tap to balance!',
+        line: `Slightly over by ${short(-left)} — trim a slider below or tap Auto-balance to settle it cleanly.`,
+        cheer: 'Easy to settle in one tap.',
       };
     }
     if (spare >= step) {
       return {
         face: 'happy',
-        line: `Nice! You have ${short(spare)} spare above your ${bufferPct}% buffer — put it to work in Investing or Savings.`,
-        cheer: `${short(spare)} ready to deploy!`,
+        line: `You have ${short(spare)} spare above your ${bufferPct}% buffer — ready to guide into Investing or Savings.`,
+        cheer: `${short(spare)} ready to place.`,
       };
     }
     if (left >= bufferGoal - 1 && savingsRate >= settings.savingsPct - 0.5) {
       return {
         face: 'happy',
-        line: `Dialed in! ${savingsRate}% saved (${short(savings)}) with your ${bufferPct}% buffer fully covered.`,
-        cheer: 'Model looks rock solid!',
+        line: `All settled — ${savingsRate}% saved (${short(savings)}) with your ${bufferPct}% buffer comfortably covered.`,
+        cheer: 'Calm and balanced.',
       };
     }
     if (left >= 0 && left < bufferGoal) {
       return {
         face: 'curious',
-        line: `Balanced, with ${short(left)} of your ${short(bufferGoal)} buffer goal — trim a little everyday spend for extra cushion.`,
-        cheer: 'Almost at your buffer goal!',
+        line: `Balanced, with ${short(left)} of your ${short(bufferGoal)} buffer goal — easing everyday spend slightly adds extra cushion.`,
+        cheer: 'Close to your buffer goal.',
       };
     }
     return {
       face: 'happy',
-      line: `Every rupiah has a job — ${savingsRate}% going to savings and ${short(everydayTotal)} for everyday life.`,
-      cheer: 'Looking great!',
+      line: `Every rupiah has a calm home — ${savingsRate}% to savings and ${short(everydayTotal)} for everyday life.`,
+      cheer: 'Looking steady.',
     };
   })();
 
@@ -302,7 +302,7 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
         ? "Matched everyday categories to this cycle's projected pace."
         : preset === 'lean'
           ? 'Lean mode: trimmed everyday by 15% and routed savings into your goal.'
-          : 'Save-more mode: boosted savings by +10% and balanced everyday.';
+          : 'Save-more mode: lifted savings by +10% and balanced everyday.';
     setToast({ text: label, undo: () => save(prev) });
   };
 
@@ -320,7 +320,7 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
       res.trimmedEveryday > 0 ? `trimmed ${short(res.trimmedEveryday)} from everyday` : '',
       res.trimmedSavings > 0 ? `eased savings by ${short(res.trimmedSavings)}` : '',
     ].filter(Boolean);
-    setToast({ text: `Balanced! ${parts.join(' and ')}.`, undo: () => save(prev) });
+    setToast({ text: `Settled — ${parts.join(' and ')}.`, undo: () => save(prev) });
   };
 
   const assignSpare = (target: 'invest' | 'savings') => {
@@ -331,7 +331,7 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
     const nextInv = target === 'invest' ? invest + add : invest;
     setManyEveryday({}, nextSav, nextInv);
     setToast({
-      text: `Assigned ${short(add)} spare to ${target === 'invest' ? 'Investing' : 'Savings'} — nice move!`,
+      text: `Assigned ${short(add)} spare to ${target === 'invest' ? 'Investing' : 'Savings'}.`,
       undo: () => save(prev),
     });
   };
@@ -401,9 +401,9 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
             <Kpi label="Savings" value={short(savings)} sub={`${savingsRate}%`} ink={SAVE_INK} />
             <Kpi label="Everyday" value={short(everydayTotal)} sub={`${pctOfInflow(everydayTotal)}%`} />
             <Kpi
-              label={left < 0 ? 'Over-allocated' : 'Unassigned'}
+              label={left < 0 ? 'Slightly over' : 'Unassigned'}
               value={left < 0 ? `−${short(-left)}` : short(left)}
-              sub={left < 0 ? 'needs trim' : `goal ${short(bufferGoal)}`}
+              sub={left < 0 ? 'easy trim' : `goal ${short(bufferGoal)}`}
               ink={left < 0 ? C.redInk : left >= bufferGoal ? C.good : C.amberInk}
             />
           </div>

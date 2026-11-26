@@ -152,57 +152,57 @@ function MaxieGreeting({ cycle, budget: b, onAskMaxie }: { cycle: Cycle; budget:
   if (cycle.dayN === 1) {
     mood = 'happy';
     line = id
-      ? `Selamat gajian${name ? `, ${name}` : ''}! Siklus baru, semangat baru — yuk mulai dengan langkah ringan hari ini.`
-      : `Happy payday${name ? `, ${name}` : ''}! Fresh cycle, clean slate — here's to a great month ahead!`;
+      ? `Selamat gajian${name ? `, ${name}` : ''}. Siklus baru, lembaran bersih — semoga bulan ini terasa ringan.`
+      : `Happy payday${name ? `, ${name}` : ''}. Fresh cycle, clean slate — wishing you a steady month ahead.`;
   } else if (left < 0) {
     mood = 'steady';
     line = id
-      ? `${salutation} Siklus ini agak ketat, lewat ${short(-left)} dari rencana — tenang, kita atur bareng pelan-pelan ya.`
-      : `${salutation} A little tight at ${short(-left)} over plan — no stress, we've got this one day at a time.`;
-    quickAsk = id ? 'Kenapa siklus ini lewat rencana dan gimana cara aturnya?' : 'Why am I over plan and how do I recover?';
+      ? `${salutation} Siklus ini sedikit di atas rencana sebesar ${short(-left)} — tidak perlu buru-buru, kita atur pelan-pelan ya.`
+      : `${salutation} Slightly above plan by ${short(-left)} — no rush, we can ease it back one day at a time.`;
+    quickAsk = id ? 'Kenapa siklus ini di atas rencana dan gimana cara aturnya?' : 'Why am I above plan and how do I ease back?';
   } else if (cycle.daysLeft <= 3 && left >= 0) {
     mood = 'happy';
     line = id
-      ? `${salutation} Tinggal ${cycle.daysLeft + 1} hari lagi ke gajian dan masih ada sisa ${short(left)} — mantap banget, finishing strong!`
-      : `${salutation} Almost at payday with ${short(left)} still to spare — you're finishing strong!`;
+      ? `${salutation} Tinggal ${cycle.daysLeft + 1} hari menuju gajian dengan sisa ${short(left)} — penutup yang tenang dan rapi.`
+      : `${salutation} Just ${cycle.daysLeft + 1} days to payday with ${short(left)} to spare — a calm, steady finish.`;
   } else if (SAVINGS_TARGET_PCT > 0 && b.savedPct >= SAVINGS_TARGET_PCT && (cycle.dayN <= 4 || recentSavings)) {
     mood = 'happy';
     line = id
-      ? `${salutation} Yeay, target tabungan ${SAVINGS_TARGET_PCT}% siklus ini sudah tercapai — keren banget!`
-      : `${salutation} Woohoo — savings goal met with ${Math.round(b.savedPct)}% set aside this cycle!`;
+      ? `${salutation} Target tabungan ${SAVINGS_TARGET_PCT}% siklus ini sudah tercapai — langkah yang mantap.`
+      : `${salutation} Savings goal reached — ${Math.round(b.savedPct)}% already set aside this cycle.`;
   } else if (yesterdaySpend === 0 && cycle.dayN >= 2) {
     mood = 'happy';
     line = id
-      ? `${salutation} Kemarin nol pengeluaran — keren! Enak banget buat lanjutin ritme hari ini.`
-      : `${salutation} Zero spend yesterday — love that momentum! Let's keep the good groove going.`;
+      ? `${salutation} Kemarin nol pengeluaran — ritme yang tenang untuk dibawa ke hari ini.`
+      : `${salutation} Zero spend yesterday — quiet momentum to carry into today.`;
   } else if (b.paceToday > 0 && b.spent < b.paceToday * 0.9 && cycle.dayN >= 4) {
     mood = 'happy';
     line = id
-      ? `${salutation} Ritmemu cakep banget — masih ${short(b.paceToday - b.spent)} di bawah kecepatan normal hari ke-${cycle.dayN}!`
-      : `${salutation} You're cruising — ${short(b.paceToday - b.spent)} ahead of pace by day ${cycle.dayN}!`;
+      ? `${salutation} Ritmemu terasa tenang — masih ${short(b.paceToday - b.spent)} di bawah kecepatan normal hari ke-${cycle.dayN}.`
+      : `${salutation} Nicely paced — ${short(b.paceToday - b.spent)} ahead of your usual pace by day ${cycle.dayN}.`;
   } else {
     mood = 'happy';
     line = id
-      ? `${salutation} Semua masih aman di ${short(b.safeDay)} per hari sampai gajian nanti — semoga harimu menyenangkan!`
-      : `${salutation} Looking steady at ${short(b.safeDay)} a day until payday — hope you have a great day!`;
+      ? `${salutation} Semua masih lega di ${short(b.safeDay)} per hari sampai gajian nanti — semoga harimu tenang.`
+      : `${salutation} Looking steady at ${short(b.safeDay)} a day until payday — hope today feels light.`;
   }
 
   const cheer =
     pledged && todaySpend === 0
       ? id
-        ? 'Mode nol pengeluaran aktif!'
-        : 'Zero-spend mode locked in!'
+        ? 'Mode nol pengeluaran aktif.'
+        : 'Zero-spend day active.'
       : left < 0
         ? id
-          ? 'Kita atur bareng, pasti bisa!'
-          : "We've got this together!"
+          ? 'Pelan-pelan kita rapikan bersama.'
+          : 'Easy to ease back together.'
         : streak >= 3
           ? id
-            ? `${streak} hari mulus berturut-turut!`
-            : `${streak} smooth days in a row!`
+            ? `${streak} hari berjalan mulus.`
+            : `${streak} calm days in a row.`
           : id
-            ? `Masih ada ${short(left)} ruang aman!`
-            : `${short(left)} of breathing room!`;
+            ? `Masih ada ${short(left)} ruang lega.`
+            : `${short(left)} of breathing room.`;
 
   return (
     <div className={s.mxGreeting} data-wide>
@@ -220,8 +220,8 @@ function MaxieGreeting({ cycle, budget: b, onAskMaxie }: { cycle: Cycle; budget:
             {pledged ? <Icon d={IC.check} size={12} strokeWidth={2.4} /> : <TargetIcon size={13} />}
             {pledged
               ? id
-                ? 'Hari nol pengeluaran aktif — semangat!'
-                : "Zero-spend day active — you've got this!"
+                ? 'Hari nol pengeluaran aktif — jalani dengan santai'
+                : 'Zero-spend day active — taking it slow'
               : id
                 ? 'Targetkan hari nol pengeluaran'
                 : 'Aim for a zero-spend day'}
@@ -237,10 +237,11 @@ function MaxieGreeting({ cycle, budget: b, onAskMaxie }: { cycle: Cycle; budget:
   );
 }
 
-/** Compact Milestone Trophy Shelf: highlights real cycle wins with tappable warm detail notes. */
+/** Compact Milestone Trophy Shelf: highlights real cycle wins with tappable warm detail notes (hidden in Quiet mode). */
 function WinsStrip({ cycle, budget: b, target }: { cycle: Cycle; budget: Budget; target: number }) {
   const { short, settings } = useSettings();
   const [picked, setPicked] = useState<string | null>(null);
+  if (settings.quietMode) return null;
   const id = settings.maxieLanguage === 'id';
 
   const streak = smoothStreakDays(cycle, b);
@@ -262,10 +263,10 @@ function WinsStrip({ cycle, budget: b, target }: { cycle: Cycle; budget: Budget;
     wins.push({
       id: 'saved',
       icon: <TrophyIcon size={14} />,
-      label: id ? 'Target tabungan tercapai' : 'Savings goal hit',
+      label: id ? 'Target tabungan tercapai' : 'Savings goal reached',
       detail: id
-        ? `Sudah menyisihkan ${short(b.saved)} (${Math.round(b.savedPct)}%) siklus ini — mantap!`
-        : `You set aside ${short(b.saved)} (${Math.round(b.savedPct)}%) this cycle — huge win!`,
+        ? `Sudah menyisihkan ${short(b.saved)} (${Math.round(b.savedPct)}%) siklus ini.`
+        : `You set aside ${short(b.saved)} (${Math.round(b.savedPct)}%) this cycle.`,
     });
   }
   if (b.txs.length > 0 && bufferCount === 0) {
@@ -274,8 +275,8 @@ function WinsStrip({ cycle, budget: b, target }: { cycle: Cycle; budget: Budget;
       icon: <Icon d={IC.check} size={13} strokeWidth={2.4} color={C.good} />,
       label: id ? 'Buffer rapi' : 'Buffer zero',
       detail: id
-        ? 'Semua transaksi siklus ini sudah masuk kategori masing-masing — bersih banget!'
-        : 'Every transaction this cycle has a proper category home — spotless!',
+        ? 'Semua transaksi siklus ini sudah masuk kategori masing-masing.'
+        : 'Every transaction this cycle has a calm category home.',
     });
   }
   if (cycle.dayN >= 4 && b.paceToday > 0 && b.spent <= b.paceToday) {
@@ -285,7 +286,7 @@ function WinsStrip({ cycle, budget: b, target }: { cycle: Cycle; budget: Budget;
       label: id ? 'Di bawah pace' : 'Under pace',
       detail: id
         ? `Masih ${short(b.paceToday - b.spent)} di bawah ritme normal hari ke-${cycle.dayN}.`
-        : `You're ${short(b.paceToday - b.spent)} ahead of your usual day-${cycle.dayN} pace.`,
+        : `Currently ${short(b.paceToday - b.spent)} ahead of your usual day-${cycle.dayN} pace.`,
     });
   }
   if (b.txs.length > 0 && b.bills.length === 0) {
@@ -325,7 +326,7 @@ function WinsStrip({ cycle, budget: b, target }: { cycle: Cycle; budget: Budget;
   );
 }
 
-// ---- needs attention: over/near limit categories & inbox items ----
+// ---- worth a gentle look: over/near limit categories & inbox items ----
 
 function NeedsAttention({
   budget: b,
@@ -352,11 +353,11 @@ function NeedsAttention({
   const topAlert = alerts[0];
 
   return (
-    <section className={s.sxAttnCard} data-wide aria-label="Needs attention">
+    <section className={s.sxAttnCard} data-wide aria-label="Worth a gentle look">
       <div className={s.sxAttnHead}>
         <span className={s.sxAttnTitle}>
           <Icon d={IC.alert} size={15} color={alerts.some(c => c.status.key === 'over') ? C.redInk : C.amberInk} />
-          Needs attention
+          Worth a gentle look
         </span>
         <div className={s.sxAttnActions}>
           {topAlert && (
@@ -489,7 +490,7 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
         <span className={s.sxLeftBig} style={{ color: left < 0 ? C.redInk : C.text }}>
           {short(shownLeft)}
         </span>
-        <span className={s.sxLeftLabel}>{left < 0 ? 'over plan' : 'left'}</span>
+        <span className={s.sxLeftLabel}>{left < 0 ? 'above plan' : 'left'}</span>
         {tomorrowSafe > b.safeDay + 1 ? (
           <button
             type="button"

@@ -68,6 +68,8 @@ export type Settings = {
   fixedBillCycles?: Record<string, FixedBillCycleState>;
   /** Merchant keys dismissed from automatic fixed-bill suggestions. */
   notFixedBills?: string[];
+  /** Quiet mode: hides confetti, streaks, and win badges for a minimal, unhurried view. */
+  quietMode?: boolean;
 };
 
 export type ChatFeedback = { q: string; a: string; good: boolean; at: string };

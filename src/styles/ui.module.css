@@ -317,6 +317,7 @@
   background: var(--surface);
   border-radius: 16px;
   border: 1px solid var(--border);
+  box-shadow: var(--card-glow);
   padding: var(--pad);
   display: flex;
   flex-direction: column;
@@ -1640,7 +1641,8 @@ textarea.input {
   flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  box-shadow: var(--card-glow);
+  border-radius: 16px;
   min-width: 0;
 }
 .txSummaryLine {
@@ -1665,9 +1667,9 @@ textarea.input {
 .recapRow {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 9px 10px;
   margin: 0 -10px;
   width: calc(100% + 20px);
   border: none;
@@ -1686,7 +1688,7 @@ textarea.input {
 }
 .recapTrack {
   display: block;
-  height: 4px;
+  height: 5px;
   border-radius: 999px;
   background: var(--divider);
   overflow: hidden;
@@ -1695,6 +1697,14 @@ textarea.input {
   display: block;
   height: 100%;
   border-radius: 999px;
+  opacity: 0.85;
+  transition:
+    width 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.recapRow:hover .recapTrack > span,
+.recapRow[aria-pressed='true'] .recapTrack > span {
+  opacity: 1;
 }
 
 /* ---------- Installment schedule ---------- */
@@ -3202,9 +3212,11 @@ textarea.input {
   display: inline-flex;
 }
 .sumBig {
-  font-size: 28px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-family: var(--font-serif);
+  font-size: 30px;
+  font-weight: 500;
+  font-optical-sizing: auto;
+  letter-spacing: -0.015em;
   font-variant-numeric: tabular-nums;
   line-height: 1.15;
 }
@@ -3522,10 +3534,11 @@ textarea.input {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 18px 20px;
+  padding: 20px 22px;
   border-radius: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
+  box-shadow: var(--card-glow);
   min-width: 0;
 }
 @media (max-width: 759px) {
@@ -3707,10 +3720,12 @@ button.sxTile:disabled {
   text-overflow: ellipsis;
 }
 .sxTileValue {
-  font-size: 24px;
+  font-family: var(--font-serif);
+  font-size: 25px;
   line-height: 30px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-weight: 500;
+  font-optical-sizing: auto;
+  letter-spacing: -0.015em;
   font-variant-numeric: proportional-nums;
   white-space: nowrap;
   overflow: hidden;
@@ -3817,10 +3832,11 @@ button.sxTile:disabled {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 14px 18px;
+  padding: 16px 20px;
   border-radius: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
+  box-shadow: var(--card-glow);
   min-width: 0;
 }
 .sxAttnHead {
@@ -4161,10 +4177,12 @@ button.sxTile:disabled {
   row-gap: 2px;
 }
 .sxLeftBig {
-  font-size: 32px;
-  line-height: 38px;
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  font-family: var(--font-serif);
+  font-size: 36px;
+  line-height: 40px;
+  font-weight: 500;
+  font-optical-sizing: auto;
+  letter-spacing: -0.02em;
   font-variant-numeric: proportional-nums;
 }
 .sxLeftLabel {
@@ -5387,18 +5405,17 @@ button.sxTile:disabled {
   cursor: pointer;
 }
 .mxLogoBtn:hover svg {
-  transform: translateY(-1px) rotate(-4deg) scale(1.06);
+  transform: translateY(-1px) rotate(-2.5deg) scale(1.03);
 }
 .mxLogoBtn:active svg {
-  transform: scale(0.95);
+  transform: scale(0.97);
 }
 .mxBounce {
-  animation: mxBounce 0.45s cubic-bezier(0.22, 1.4, 0.36, 1);
+  animation: mxBounce 0.42s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes mxBounce {
   0% { transform: translateY(0) scale(1); }
-  35% { transform: translateY(-4px) scale(1.08); }
-  70% { transform: translateY(1px) scale(0.98); }
+  42% { transform: translateY(-2.5px) scale(1.035); }
   100% { transform: translateY(0) scale(1); }
 }
 .mxSpeech {
@@ -6147,12 +6164,11 @@ button.sxTile:disabled {
   background: var(--hover);
 }
 .fbCheckPop {
-  animation: fbPop 0.34s cubic-bezier(0.22, 1.4, 0.36, 1);
+  animation: fbPop 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes fbPop {
-  0% { transform: scale(0.86); }
-  60% { transform: scale(1.06); }
-  100% { transform: scale(1); }
+  0% { transform: scale(0.93); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
 }
 .btnPrimary:active:not(:disabled),
 .btnPrimarySm:active:not(:disabled),

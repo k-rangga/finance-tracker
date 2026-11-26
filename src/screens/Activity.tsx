@@ -734,48 +734,54 @@ function Recap({
           )}
         </section>
       )}
-      {byCat.length > 0 && (
-        <section className={s.sideCard}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <h3 className={s.sideTitle}>By category</h3>
-            <span style={{ fontSize: 13, color: C.textMuted }}>Click one to show only its transactions</span>
-          </div>
-          <div className={s.sideList} style={{ gap: 4 }}>
-            {byCat.map(([name, v]) => {
-              const color = categoryByName(name)?.color ?? C.textFaint;
-              const subs = subsOf[name];
-              const isOpen = !!subs && (opened.includes(name) || picked.cat === name);
-              return (
-                <div key={name} style={{ display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
-                    <button type="button" className={s.recapRow} style={{ flex: 1, minWidth: 0 }} aria-pressed={picked.cat === name && !picked.sub} onClick={() => onPickCat(name)}>
-                      <span style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14 }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                          <span aria-hidden="true" style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: color }} />
-                          <span className={s.ellipsis}>{name}</span>
+      {byCat.length > 0 && (() => {
+        const hasAnySubs = byCat.some(([name]) => !!subsOf[name]);
+        return (
+          <section className={s.sideCard}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <h3 className={s.sideTitle}>By category</h3>
+              <span style={{ fontSize: 13, color: C.textMuted }}>Tap any category to filter</span>
+            </div>
+            <div className={s.sideList} style={{ gap: 4 }}>
+              {byCat.map(([name, v]) => {
+                const color = categoryByName(name)?.color ?? C.textFaint;
+                const subs = subsOf[name];
+                const isOpen = !!subs && (opened.includes(name) || picked.cat === name);
+                return (
+                  <div key={name} style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <button type="button" className={s.recapRow} style={{ flex: 1, minWidth: 0 }} aria-pressed={picked.cat === name && !picked.sub} onClick={() => onPickCat(name)}>
+                        <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, fontSize: 14 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                            <span aria-hidden="true" style={{ flex: 'none', width: 8, height: 8, borderRadius: '50%', background: color, opacity: 0.9 }} />
+                            <span className={s.ellipsis}>{name}</span>
+                          </span>
+                          <span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
+                            {full(v)}{' '}
+                            <span style={{ color: C.textMuted, fontWeight: 400, fontSize: 12.5, opacity: 0.85 }}>({Math.round((v / total) * 100)}%)</span>
+                          </span>
                         </span>
-                        <span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>
-                          {full(v)} <span style={{ color: C.textMuted, fontWeight: 400 }}>({Math.round((v / total) * 100)}%)</span>
+                        <span className={s.recapTrack}>
+                          <span style={{ width: `${(v / byCat[0][1]) * 100}%`, background: color }} />
                         </span>
-                      </span>
-                      <span className={s.recapTrack}>
-                        <span style={{ width: `${(v / byCat[0][1]) * 100}%`, background: color }} />
-                      </span>
-                    </button>
-                    {subs && (
-                      <button
-                        type="button"
-                        className={s.iconBtnSm}
-                        aria-expanded={isOpen}
-                        aria-label={`${isOpen ? 'Hide' : 'Show'} ${name} sub-categories`}
-                        title={isOpen ? 'Hide sub-categories' : 'Show sub-categories'}
-                        onClick={() => setOpened(isOpen ? opened.filter(x => x !== name) : [...opened, name])}
-                        style={{ marginTop: 6 }}
-                      >
-                        <Icon d={IC.chevDown} size={14} style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.16s ease-out' }} />
                       </button>
-                    )}
-                  </div>
+                      {hasAnySubs &&
+                        (subs ? (
+                          <button
+                            type="button"
+                            className={s.iconBtnSm}
+                            aria-expanded={isOpen}
+                            aria-label={`${isOpen ? 'Hide' : 'Show'} ${name} sub-categories`}
+                            title={isOpen ? 'Hide sub-categories' : 'Show sub-categories'}
+                            onClick={() => setOpened(isOpen ? opened.filter(x => x !== name) : [...opened, name])}
+                            style={{ flex: 'none', width: 28, height: 28 }}
+                          >
+                            <Icon d={IC.chevDown} size={14} style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s cubic-bezier(0.22, 1, 0.36, 1)' }} />
+                          </button>
+                        ) : (
+                          <span style={{ width: 28, flex: 'none' }} aria-hidden="true" />
+                        ))}
+                    </div>
                   {isOpen && (
                     <div className={s.recapSubs}>
                       {subs.map(([sub, sv]) => (
@@ -802,7 +808,8 @@ function Recap({
             })}
           </div>
         </section>
-      )}
+        );
+      })()}
     </aside>
   );
 }
