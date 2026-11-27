@@ -36,22 +36,22 @@ export type Trade = {
  */
 export type Prices = { map: Record<string, number>; at: string; auto?: Record<string, string>; quotedAt?: string };
 
-/** An update on an open position: buying more (average up or down) or just a note. */
-export type UpdateKind = 'avg_up' | 'avg_down' | 'note';
+/** An update on an open position: buying more (average up/down), taking profit/trimming principal back, or just a note. */
+export type UpdateKind = 'avg_up' | 'avg_down' | 'trim' | 'note';
 export type TradeUpdate = {
   id: string;
   tradeId: string;
   /** When it happened (ISO timestamp). */
   at: string;
   kind: UpdateKind;
-  /** Avg up/down only: buy price, quantity (shares or units, like Trade.q) and fee (auto when missing). */
+  /** Avg up/down or trim only: price, quantity (shares or units, like Trade.q) and fee (auto when missing). */
   px?: number;
   q?: number;
   fee?: number;
   note?: string;
 };
 
-export const UPDATE_LABEL: Record<UpdateKind, string> = { avg_up: 'Avg up', avg_down: 'Avg down', note: 'Note' };
+export const UPDATE_LABEL: Record<UpdateKind, string> = { avg_up: 'Avg up', avg_down: 'Avg down', trim: 'Take profit / trim', note: 'Note' };
 export type Snap = { d: string; v: number; c: number };
 
 export const MARKETS: Market[] = ['IDX', 'US', 'Crypto'];
@@ -78,14 +78,25 @@ export const levTag = (t: Trade) => (levOf(t) > 1 ? `${levOf(t)}x ${t.dir || 'Lo
 export const buyFee = (t: Trade) => (t.fee != null ? t.fee : t.px * t.q * (t.mk === 'IDX' ? 0.0015 : 0.001));
 /** Fee of an avg up/down buy: as entered, else the same auto rate as the first buy. */
 export const addFee = (t: Pick<Trade, 'mk'>, u: TradeUpdate) => (u.fee != null ? u.fee : (u.px ?? 0) * (u.q ?? 0) * (t.mk === 'IDX' ? 0.0015 : 0.001));
-export const isAdd = (u: TradeUpdate) => u.kind !== 'note' && (u.px ?? 0) > 0 && (u.q ?? 0) > 0;
+/** Fee of a partial profit-take / trim sell: as entered, else the standard sell rate. */
+export const trimFee = (t: Pick<Trade, 'mk'>, u: TradeUpdate) => (u.fee != null ? u.fee : (u.px ?? 0) * (u.q ?? 0) * (t.mk === 'IDX' ? 0.0025 : 0.001));
+export const isAdd = (u: TradeUpdate) => (u.kind === 'avg_up' || u.kind === 'avg_down') && (u.px ?? 0) > 0 && (u.q ?? 0) > 0;
+export const isTrim = (u: TradeUpdate) => u.kind === 'trim' && (u.px ?? 0) > 0 && (u.q ?? 0) > 0;
+
+/** Net proceeds recovered from partial profit-takes / trims on this trade (native currency). */
+export const trimmedProceedsOf = (t: Trade, updates: TradeUpdate[]) =>
+  sum(updates.filter(u => u.tradeId === t.id && isTrim(u)).map(u => Math.max(0, u.px! * u.q! - trimFee(t, u))));
+
+/** Total initial + added buy cost across the life of the trade (native currency), for Return-of-Capital tracking. */
+export const totalBoughtCostOf = (t: Trade, updates: TradeUpdate[]) =>
+  t.px * t.q + buyFee(t) + sum(updates.filter(u => u.tradeId === t.id && isAdd(u)).map(u => u.px! * u.q! + addFee(t, u)));
 
 /** A position at one moment: quantity, average buy price, and cost including all buy fees (native currency). */
 export type PosState = { q: number; avg: number; cost: number };
 
 /**
  * The position after each update, oldest first: `before` and `after` for every update (a note leaves it unchanged).
- * The average is quantity-weighted over the buys; fees are carried in the cost, as for the first buy.
+ * The average is quantity-weighted over the buys; trims reduce quantity and scale remaining cost basis without lowering avg buy price.
  */
 export function positionHistory(t: Trade, updates: TradeUpdate[]) {
   let cur: PosState = { q: t.q, avg: t.px, cost: t.px * t.q + buyFee(t) };
@@ -97,21 +108,26 @@ export function positionHistory(t: Trade, updates: TradeUpdate[]) {
       if (isAdd(u)) {
         const q = before.q + u.q!;
         cur = { q, avg: (before.avg * before.q + u.px! * u.q!) / q, cost: before.cost + u.px! * u.q! + addFee(t, u) };
+      } else if (isTrim(u)) {
+        const sold = Math.min(before.q, u.q!);
+        const q = Math.max(0, before.q - sold);
+        const cost = before.q > 0 ? before.cost * (q / before.q) : 0;
+        cur = { q, avg: before.avg, cost };
       }
       return { u, before, after: cur };
     });
 }
 
 /**
- * The trade as it stands with its avg ups/downs folded in: total quantity, weighted average price and total buy fees.
+ * The trade as it stands with its avg ups/downs and partial trims folded in: remaining quantity, weighted average price and remaining buy fees.
  * The stored entry is never changed; everything that values the position uses this.
  */
 export function effectiveTrade(t: Trade, updates: TradeUpdate[]): Trade {
-  const adds = updates.filter(u => u.tradeId === t.id && isAdd(u));
-  if (!adds.length) return t;
-  const q = t.q + sum(adds.map(u => u.q!));
-  const px = (t.px * t.q + sum(adds.map(u => u.px! * u.q!))) / q;
-  return { ...t, px, q, fee: buyFee(t) + sum(adds.map(u => addFee(t, u))) };
+  const hist = positionHistory(t, updates);
+  const changed = hist.some(h => isAdd(h.u) || isTrim(h.u));
+  if (!changed) return t;
+  const last = hist[hist.length - 1].after;
+  return { ...t, px: last.avg, q: last.q, fee: Math.max(0, last.cost - last.avg * last.q) };
 }
 export const sellFee = (t: Trade) => (t.ex ? t.ex.px * t.q * (t.mk === 'IDX' ? 0.0025 : 0.001) : 0);
 /** Reward in units of planned risk. */
@@ -134,7 +150,7 @@ export function computePortfolio(journal: Trade[], prices: Prices, fx: number, y
       const last = lastOf(t);
       const cost = toIdr((t.px * t.q) / levOf(t) + buyFee(t), t.mk);
       const pl = toIdr((last - t.px) * t.q * dirOf(t) - buyFee(t), t.mk);
-      return { t, last, cost, pl, val: cost + pl, plp: (pl / cost) * 100 };
+      return { t, last, cost, pl, val: cost + pl, plp: cost > 0 ? (pl / cost) * 100 : 0 };
     });
   const tot = sum(pos.map(p => p.val));
   const cost = sum(pos.map(p => p.cost));

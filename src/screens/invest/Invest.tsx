@@ -5,6 +5,8 @@ import { useData } from '../../lib/data';
 import { fmtFull, fmtShort, toISO } from '../../lib/format';
 import { useSettings } from '../../lib/settings';
 import type { Cycle } from '../../lib/cycle';
+import type { Budget } from '../../lib/budget';
+import type { ImpulseSummary, WealthSnapshot } from '../../lib/wealth';
 import { fetchQuotes } from '../../lib/backend';
 import { computePortfolio, effectiveTrade, type Trade } from './model';
 import { Portfolio, priceNote } from './Portfolio';
@@ -47,7 +49,7 @@ export function useInvestFmt() {
   }, [settings.currency, settings.fxRate]);
 }
 
-export function Invest({ cycle }: { cycle: Cycle }) {
+export function Invest({ cycle, wealth, budget, impulse }: { cycle: Cycle; wealth?: WealthSnapshot; budget?: Budget; impulse?: ImpulseSummary }) {
   const { settings } = useSettings();
   const todayISO = toISO(cycle.today);
   const { journal: stored, updates, prices, snaps, saveTrade, saveUpdate, deleteUpdate, savePrices, saveSnapshot } = useData();
@@ -231,6 +233,9 @@ export function Invest({ cycle }: { cycle: Cycle }) {
           account="all"
           items={items}
           dS={dS}
+          wealth={wealth}
+          budget={budget}
+          impulse={impulse}
           onReview={toReview.length ? () => setReviewing(toReview) : undefined}
           draftFromTrade={journalDraftTrade}
           onConsumedDraftTrade={() => setJournalDraftTrade(null)}

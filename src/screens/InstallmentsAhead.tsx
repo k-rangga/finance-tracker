@@ -14,8 +14,8 @@ const monthYear = (d: Date) => d.toLocaleDateString('en-GB', { month: 'short', y
  * Installments already promised for the next pay cycles: what each cycle owes, when it drops because a plan
  * ends, and each plan's end date and what's left. This cycle's payments are also in Fixed bills above.
  */
-export function InstallmentsAhead({ cycle }: { cycle: Cycle }) {
-  const { full } = useSettings();
+export function InstallmentsAhead({ cycle, monthlyAssetAdded = 0 }: { cycle: Cycle; monthlyAssetAdded?: number }) {
+  const { full, short } = useSettings();
   const { views, openSchedule } = usePlans();
   const days = paydaysFrom(cycle.start, 5);
   const cycles = days.slice(0, 4).map((start, i) => ({ start, end: new Date(days[i + 1].getTime() - DAY) }));
@@ -23,6 +23,8 @@ export function InstallmentsAhead({ cycle }: { cycle: Cycle }) {
   if (!plans.length) return null;
   const totals = cycles.map((_, i) => plans.reduce((a, p) => a + p.perCycle[i], 0));
   const left = plans.reduce((a, p) => a + p.left, 0);
+  const thisCycleDebt = totals[0] ?? 0;
+  const ratio = monthlyAssetAdded > 0 ? Math.round((thisCycleDebt / monthlyAssetAdded) * 100) : null;
 
   return (
     <Card style={{ gap: 14 }}>
@@ -77,7 +79,16 @@ export function InstallmentsAhead({ cycle }: { cycle: Cycle }) {
             </button>
           ))}
       </div>
-      <span style={{ fontSize: 13, color: C.textMuted }}>Already promised: each cycle's amount is planned for you under Fixed bills → Installments.</span>
+      <span style={{ fontSize: 13, color: C.textMuted }}>
+        Already promised: each cycle&apos;s amount is planned for you under Fixed bills → Installments.
+        {thisCycleDebt > 0 && (
+          <>
+            {' '}
+            <strong>Liability check:</strong> {short(thisCycleDebt)}/cycle in past-purchase commitments
+            {ratio != null ? ` (${ratio}% of your ${short(monthlyAssetAdded)} moved into assets this cycle)` : ''}.
+          </>
+        )}
+      </span>
     </Card>
   );
 }

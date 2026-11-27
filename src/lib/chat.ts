@@ -7,13 +7,16 @@ import { CATEGORIES, OTHER_CATEGORIES, SAVINGS_TARGET_PCT } from '../data/catego
 import { merchantKey } from '../data/transactions';
 import type { FixedBillStatus } from './fixedBills';
 import { paceInsight, weekendSafeSplit } from './pace';
+import type { FortAssetsAlert, ImpulseSummary, LifestyleCreepSignal, WealthSnapshot } from './wealth';
 
 /** A change Gemini suggests; shown as a card you apply yourself (see askGemini_ in apps-script/Gemini.js). */
 export type ChatAction =
   | { type: 'rule'; merchant: string; category: string; sub?: string | null; why?: string }
   | { type: 'recategorize'; txIds: string[]; category: string; sub?: string | null; why?: string }
   | { type: 'move_limit'; from: string; to: string; amount: number; why?: string }
-  | { type: 'challenge'; category: string; why?: string };
+  | { type: 'challenge'; category: string; why?: string }
+  | { type: 'wishlist'; name: string; amount: number; coolDays?: number; why?: string }
+  | { type: 'pay_yourself_first'; savingsPct?: number; investPct?: number; why?: string };
 
 /** A reply also carries the model that wrote it, suggested next questions, husky mood, and your thumbs up or down once rated. */
 export type ChatMessage = {
@@ -99,6 +102,11 @@ export function chatContext({
   notes,
   withNotes,
   fixedBills,
+  wealth,
+  impulse,
+  fortDip,
+  lifestyleCreep,
+  pyfStreak,
 }: {
   cycle: Cycle;
   budget: Budget;
@@ -106,6 +114,11 @@ export function chatContext({
   notes: Record<string, string>;
   withNotes: boolean;
   fixedBills?: FixedBillStatus[];
+  wealth?: WealthSnapshot;
+  impulse?: ImpulseSummary;
+  fortDip?: FortAssetsAlert | null;
+  lifestyleCreep?: LifestyleCreepSignal | null;
+  pyfStreak?: number;
 }) {
   const r = Math.round;
   const name = settings.name.trim();
@@ -225,6 +238,48 @@ export function chatContext({
             liked: settings.chatFeedback.filter(f => f.good).slice(-4).map(f => ({ q: f.q.slice(0, 80), a: f.a.slice(0, 140) })),
             disliked: settings.chatFeedback.filter(f => !f.good).slice(-4).map(f => ({ q: f.q.slice(0, 80), a: f.a.slice(0, 140) })),
           },
+        }
+      : {}),
+    // Holistic Rich Dad + Jakarta behavioral snapshot: Balance Sheet, Runway, Freedom Ratio, Wishlist & Impulse lures.
+    ...(wealth
+      ? {
+          wealth: {
+            emergencyFund: r(wealth.emergencyFund),
+            emergencyTargetMonths: wealth.emergencyTargetMonths,
+            runwayMonths: Math.round(wealth.runwayMonths * 10) / 10,
+            runwayDays: wealth.runwayDays,
+            portfolioValue: r(wealth.portfolioValue),
+            assetsTotal: r(wealth.assetsTotal),
+            liabilitiesTotal: r(wealth.liabilitiesTotal),
+            cardLiabilities: r(wealth.cardLiabilities),
+            installmentLiabilities: r(wealth.installmentLiabilities),
+            netProductiveWealth: r(wealth.netProductiveWealth),
+            passiveMonthlyCashflow: r(wealth.passiveMonthly),
+            freedomPct: Math.round(wealth.freedomPct * 10) / 10,
+            freedomStage: wealth.freedomStage,
+            cashflowPattern: wealth.cashflowPattern,
+            investedThisCycle: r(b.invested),
+            ...(pyfStreak != null ? { payYourselfFirstStreak: pyfStreak } : {}),
+            ...(fortDip?.dipped ? { fortAssetsDip: { amount: r(fortDip.amount), reason: fortDip.reason } } : {}),
+            ...(lifestyleCreep?.detected ? { lifestyleCreep: { expenseCapturePct: lifestyleCreep.expenseCapturePct, message: lifestyleCreep.message } } : {}),
+          },
+        }
+      : {}),
+    ...(impulse && impulse.skipCount > 0
+      ? {
+          impulseLeaks: {
+            skipCount: impulse.skipCount,
+            skipTotal: r(impulse.skipTotal),
+            topTrigger: impulse.topTrigger ? { label: impulse.topTrigger.label, count: impulse.topTrigger.count, total: r(impulse.topTrigger.total) } : null,
+          },
+        }
+      : {}),
+    ...(settings.wishlist?.length
+      ? {
+          wishlist: settings.wishlist
+            .filter(w => w.status === 'cooling' || w.status === 'ready')
+            .slice(0, 6)
+            .map(w => ({ name: w.name, amount: r(w.amount), status: w.status, fundingMode: w.fundingMode })),
         }
       : {}),
   };

@@ -1,9 +1,10 @@
 import s from '../../styles/ui.module.css';
 import { Card, CardHead, Dot } from '../../components/ui';
 import { payday, type Cycle } from '../../lib/cycle';
-import { dayLabel, dayMonth, diffDays, parseISO, pc, addDays, sum } from '../../lib/format';
+import { dayLabel, dayMonth, diffDays, parseISO, pc, addDays, sum, toISO } from '../../lib/format';
 import { useSettings } from '../../lib/settings';
 import { C } from '../../lib/tokens';
+import { monthlyAssetCashflow } from '../../lib/wealth';
 import { buyFee, levOf, MARKETS, MK_COLOR, MK_NAME, type Market, type Portfolio as PortfolioModel, type Prices } from './model';
 import { useInvestFmt } from './Invest';
 
@@ -48,6 +49,9 @@ export function Portfolio({ cycle, P }: { cycle: Cycle; P: PortfolioModel }) {
   });
   const cmax = Math.max(...hist, settings.investPct) * 1.15;
   const labels = starts.slice(0, 6).map(dayMonth);
+  const cf = monthlyAssetCashflow(settings.assetCashflows ?? [], toISO(cycle.today));
+  const portDisp = settings.currency === 'USD' ? P.tot / settings.fxRate : P.tot;
+  const impliedYieldPct = portDisp > 0 && cf.annual > 0 ? (cf.annual / portDisp) * 100 : 0;
 
   return (
     <div className={s.stack}>
@@ -75,6 +79,30 @@ export function Portfolio({ cycle, P }: { cycle: Cycle; P: PortfolioModel }) {
             ))}
           </div>
         </div>
+      </Card>
+
+      <Card style={{ gap: 14 }}>
+        <CardHead
+          title="Passive Cash Flow & Yield"
+          caption={cf.monthly > 0 ? `${short(cf.monthly)}/mo · ${short(cf.annual)}/yr${impliedYieldPct > 0 ? ` · ${impliedYieldPct.toFixed(1)}% implied yield` : ''}` : 'Dividends, bond coupons, staking & interest'}
+        />
+        {cf.monthly > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {cf.bySource.map(row => (
+              <div key={row.source} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '6px 0', borderBottom: `1px solid ${C.divider}`, fontSize: 14 }}>
+                <span>{row.label}</span>
+                <strong style={{ color: C.good, fontVariantNumeric: 'tabular-nums' }}>+{full(row.monthly)}/mo</strong>
+              </div>
+            ))}
+            <span style={{ fontSize: 12.5, color: C.textMuted }}>
+              Add or edit asset cash flows anytime in Savings plan → Personal Cash-Flow Statement. Linking a ticker credits Return of Capital on that position.
+            </span>
+          </div>
+        ) : (
+          <p style={{ fontSize: 14, lineHeight: 1.5, color: C.textSoft }}>
+            No passive cash flows logged yet. Record dividends, SBN coupons, deposit interest, or staking yields under <strong>Savings plan → Personal Cash-Flow Statement</strong> to track how fast your asset column covers monthly expenses.
+          </p>
+        )}
       </Card>
 
 

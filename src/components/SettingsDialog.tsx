@@ -12,7 +12,7 @@ import { useData } from '../lib/data';
 import { onVercel } from '../lib/supabase';
 import { PIN_LENGTH, setPin, signOut } from './SignIn';
 
-type NumKey = 'income' | 'savingsPct' | 'investPct' | 'idxCap' | 'usCap' | 'cryptoCap' | 'fxRate';
+type NumKey = 'income' | 'savingsPct' | 'investPct' | 'emergencyFund' | 'emergencyTargetMonths' | 'giveFirstPct' | 'idxCap' | 'usCap' | 'cryptoCap' | 'fxRate';
 
 export function SettingsDialog({
   onClose,
@@ -31,6 +31,9 @@ export function SettingsDialog({
     income: String(settings.income),
     savingsPct: String(settings.savingsPct),
     investPct: String(settings.investPct),
+    emergencyFund: String(settings.emergencyFund ?? 0),
+    emergencyTargetMonths: String(settings.emergencyTargetMonths ?? 6),
+    giveFirstPct: String(settings.giveFirstPct ?? 0),
     idxCap: String(settings.idxCap),
     usCap: String(settings.usCap),
     cryptoCap: String(settings.cryptoCap),
@@ -72,8 +75,20 @@ export function SettingsDialog({
   };
 
   const save = () => {
-    const n = (k: NumKey) => Number(txt[k].replace(/[^\d.]/g, ''));
-    const next: Settings = { ...d, income: n('income'), savingsPct: n('savingsPct'), investPct: n('investPct'), idxCap: n('idxCap'), usCap: n('usCap'), cryptoCap: n('cryptoCap'), fxRate: n('fxRate') };
+    const n = (k: NumKey) => Number(txt[k].replace(/[^\d.]/g, '')) || 0;
+    const next: Settings = {
+      ...d,
+      income: n('income'),
+      savingsPct: n('savingsPct'),
+      investPct: n('investPct'),
+      emergencyFund: Math.max(0, n('emergencyFund')),
+      emergencyTargetMonths: Math.max(1, Math.min(24, Math.round(n('emergencyTargetMonths') || 6))),
+      giveFirstPct: Math.max(0, Math.min(50, n('giveFirstPct'))),
+      idxCap: n('idxCap'),
+      usCap: n('usCap'),
+      cryptoCap: n('cryptoCap'),
+      fxRate: n('fxRate'),
+    };
     if (!(next.income > 0)) return setErr('Enter your monthly income.');
     if (!(next.fxRate > 0)) return setErr('Enter the USD exchange rate.');
     if ([next.savingsPct, next.investPct, next.idxCap, next.usCap, next.cryptoCap].some(v => !(v >= 0 && v <= 100))) return setErr('Percentages must be between 0 and 100.');
@@ -178,6 +193,16 @@ export function SettingsDialog({
           {num('savingsPct', 'Savings target', '% of income')}
           {num('investPct', 'Invest each payday', '% of income')}
         </div>
+        <div className={s.setGrid} style={{ marginTop: 10 }}>
+          {num('emergencyFund', 'Emergency fund', d.currency)}
+          {num('emergencyTargetMonths', 'Runway goal', 'months')}
+        </div>
+        <div className={s.setGrid} style={{ marginTop: 10 }}>
+          {num('giveFirstPct', 'Give first / charity', '% of income')}
+        </div>
+        <span className={s.setHint}>
+          Emergency fund powers your survival runway (6 months is the urban Indonesia benchmark). Give first tracks optional zakat/charity before everyday spending.
+        </span>
         <span className={s.setHint} style={planned > 100 ? { color: 'var(--amber-ink)', fontWeight: 600 } : undefined}>
           Category limits {budgetPct}% and savings {savePct}% make {planned}% of income
           {planned > 100 ? '. Lower the savings target or a category limit to fit.' : planned < 100 ? `, ${100 - planned}% left unplanned.` : '.'}

@@ -7,6 +7,7 @@ import type { TrackedInstallment } from './installments';
 import { applyCategorySettings, DEFAULT_SUBCATEGORIES, setSavingsTarget, type CustomCategory } from '../data/categories';
 import { currentCycleKey, type CyclePlan } from './cyclePlans';
 import type { FixedBill, FixedBillCycleState } from './fixedBills';
+import type { AssetCashflow, JoyCheckEntry, PayYourselfFirstRecord, TradeIdeaSource, WishlistItem } from './wealth';
 
 export type Settings = {
   /** What the Summary greeting calls you; empty for a greeting without a name. */
@@ -74,6 +75,22 @@ export type Settings = {
   ownAccountNames?: string;
   /** True once the user has completed or skipped the first-time welcome setup wizard. */
   onboardingDone?: boolean;
+  /** Liquid emergency fund balance (display currency), used for Buckminster Fuller survival runway (days/months forward). */
+  emergencyFund?: number;
+  /** Target emergency fund cushion in months of essential spending (default 6, matching OCBC NISP benchmark). */
+  emergencyTargetMonths?: number;
+  /** Optional "Give First" allocation % of income (e.g. Zakat / Sedekah / charity). */
+  giveFirstPct?: number;
+  /** Saved Joy & Impulse/Lure check-ins by transaction id (synced across devices). */
+  joyChecks?: Record<string, JoyCheckEntry>;
+  /** Pay Yourself First payday ritual completion by cycle start ISO (YYYY-MM-DD). */
+  payYourselfFirst?: Record<string, PayYourselfFirstRecord>;
+  /** "Assets Buy Luxuries" cooling-off wishlist items. */
+  wishlist?: WishlistItem[];
+  /** Passive / asset cash flows (dividends, bond coupons, deposit interest, rental, staking, side income). */
+  assetCashflows?: AssetCashflow[];
+  /** Trade idea origin by trade id ("Own analysis" vs "Tips / social noise"). */
+  tradeSources?: Record<string, TradeIdeaSource>;
 };
 
 export type ChatFeedback = { q: string; a: string; good: boolean; at: string };

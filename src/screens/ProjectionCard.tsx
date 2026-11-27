@@ -9,6 +9,7 @@ import { useSettings } from '../lib/settings';
 import type { Cycle } from '../lib/cycle';
 import type { CyclePlan } from '../lib/cyclePlans';
 import { projectCycles, type ProjectedCycle, type WhatIfPurchase } from '../lib/projection';
+import { opportunityCost } from '../lib/wealth';
 import { dayMonth, toISO } from '../lib/format';
 import { C } from '../lib/tokens';
 
@@ -298,7 +299,34 @@ export function ProjectionCard({
               ))}
             </div>
             {activeWhatIf && (
-              <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className={s.btnOutlineSm}
+                  onClick={() => {
+                    const prev = settings.wishlist ?? [];
+                    const id = 'wl_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+                    update({
+                      wishlist: [
+                        {
+                          id,
+                          name: activeWhatIf.name,
+                          amount: activeWhatIf.amount,
+                          addedAt: toISO(new Date()),
+                          coolDays: 3,
+                          fundingMode: 'assets',
+                          status: 'cooling',
+                        },
+                        ...prev,
+                      ],
+                    });
+                    setSimAmtText('');
+                    setSimName('');
+                    setSimOpen(false);
+                  }}
+                >
+                  Pause in Wishlist (72h)
+                </button>
                 {simMonths === 1 && (
                   <button
                     type="button"
@@ -322,7 +350,16 @@ export function ProjectionCard({
           {whatIfVerdict && (
             <div className={s.projVerdict} data-tone={whatIfVerdict.tone}>
               <Logo size={28} mood={whatIfVerdict.face} interactive cheer="Testing scenarios is smart!" />
-              <span>{whatIfVerdict.text}</span>
+              <span>
+                {whatIfVerdict.text}
+                {activeWhatIf ? (
+                  <>
+                    {' '}
+                    <strong>Rich Dad lens:</strong> invested at 8%/yr instead, {short(activeWhatIf.amount)} compounds to{' '}
+                    <strong>{short(opportunityCost(activeWhatIf.amount, 5, 0.08))}</strong> in 5 years.
+                  </>
+                ) : null}
+              </span>
             </div>
           )}
         </div>

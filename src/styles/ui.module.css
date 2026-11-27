@@ -10590,3 +10590,312 @@ button.sxTile:active:not(:disabled),
     gap: 8px;
   }
 }
+
+/* ---- Rich Dad + Jakarta Behavioral Wealth Components (Runway, Pay Yourself First, Wishlist, Cash-Flow Board) ---- */
+.wlStripCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: var(--card-glow);
+}
+.wlStripHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.wlStripGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: 10px;
+}
+.wlMetricBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+.wlMetricBtn:hover {
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+.wlMetricLabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.wlMetricVal {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.wlMetricSub {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+.wlMiniTrack {
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: var(--divider);
+  overflow: hidden;
+}
+.wlMiniTrack > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.wlAlertsRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wlAlertChip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  font-size: 13px;
+  line-height: 1.45;
+  background: var(--amber-tint);
+  color: var(--amber-ink);
+}
+.wlAlertBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--clay) 30%, var(--border));
+  background: color-mix(in srgb, var(--clay) 7%, var(--bg));
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.wlAlertBtn:hover {
+  background: color-mix(in srgb, var(--clay) 13%, var(--bg));
+}
+.wlPillGood {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--good-tint);
+  color: var(--good);
+}
+.wlPillWarn {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--amber-tint);
+  color: var(--amber-ink);
+}
+.wlCheckList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wlCheckRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.wlCheckRow:hover {
+  border-color: var(--border-strong);
+}
+.wlCheckRow[data-done] {
+  background: color-mix(in srgb, var(--good-tint) 42%, var(--surface));
+  border-color: color-mix(in srgb, var(--good) 28%, var(--border));
+}
+.wlCheckBox {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  color: #fff;
+}
+.wlCheckBox[data-done] {
+  background: var(--good);
+  border-color: var(--good);
+}
+.wlInfoRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 13px;
+  color: var(--text-soft);
+}
+.wlTwoCol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+}
+.wlMeterBox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.wlBigNum {
+  font-family: var(--font-serif);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.wlTrack {
+  display: block;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--divider);
+  overflow: hidden;
+  margin: 2px 0;
+}
+.wlTrack > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.wlQuadGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+}
+.wlQuadBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.wlQuadBox[data-tone='asset'] {
+  border-color: color-mix(in srgb, var(--good) 28%, var(--border));
+}
+.wlQuadBox[data-tone='liability'] {
+  border-color: color-mix(in srgb, var(--amber) 32%, var(--border));
+}
+.wlLine {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+.wlLine strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.wlLineTotal {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 8px;
+  margin-top: 2px;
+  border-top: 1px solid var(--divider);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.wlBenchRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg);
+  font-size: 13px;
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+.wlFormBox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.wlFlowRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--divider);
+}
+.wlTinyTag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--divider);
+  color: var(--text-soft);
+  vertical-align: middle;
+}
+.wlWishRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
