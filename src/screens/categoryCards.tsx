@@ -8,7 +8,7 @@ import s from '../styles/ui.module.css';
 import { IC, Icon } from '../components/Icon';
 import { Logo } from '../components/Logo';
 import { usePlans } from '../components/Plans';
-import { FlameIcon } from './categoriesExtras';
+import { FlameIcon, MoveBudget, type ChallengeState } from './categoriesExtras';
 import type { CatView, TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { dayMonth, sum, tidyName, toISO } from '../lib/format';
@@ -120,12 +120,30 @@ function PlaceList({ places, onPick }: { places: { what: string; count: number; 
  * An everyday category as a card: icon, name, streak badge, "spent of limit", remaining or over, and a pace-marked
  * meter. Opened: clickable 7-day bars, clickable top merchants, inline limit nudge / share-room rebalance, and Maxie's note.
  */
+/** Playful, warm one-line vibe tailored to the category and its current pace. */
+function categoryVibe(name: string, opts: { cur: number; lim: number; over: number; smoothUnder: boolean; pctUsed: number; isId: boolean }): string | null {
+  const low = name.toLowerCase();
+  if (opts.cur === 0) return opts.isId ? 'Masih utuh — rapi sekali' : 'Untouched so far — golden start';
+  if (opts.over > 0) return opts.isId ? 'Agak hangat minggu ini — santai, bisa pinjam ruang' : 'A little warm — easy to borrow spare room';
+  if (opts.lim > 0 && opts.pctUsed >= 85) return opts.isId ? 'Sudah dekat garis — pelan-pelan ya' : 'Cozying up to the line';
+  if (opts.smoothUnder) {
+    if (/cafe|coffee|kopi|dining|food|makan/.test(low)) return opts.isId ? 'Masih lega buat traktir santai' : 'Plenty of treat room left';
+    if (/shop|belanja|fashion/.test(low)) return opts.isId ? 'Keranjang tenang, dompet senang' : 'Calm cart, happy wallet';
+    if (/take ?out|delivery|grab/.test(low)) return opts.isId ? 'Ritme yang ringan banget' : 'Light & easy pace';
+    return opts.isId ? `Melaju mulus (${opts.pctUsed}%)` : `Cruising nicely (${opts.pctUsed}%)`;
+  }
+  return null;
+}
+
 export function BudgetCard({
   r,
   cycle,
   open,
   onToggle,
   streak = 0,
+  quietDays,
+  challenge,
+  justRebalanced,
   todayFrac,
   donors,
   shareTargets = [],
@@ -142,9 +160,15 @@ export function BudgetCard({
   onToggle: () => void;
   /** Consecutive past cycles kept within limit (shown at 2+). */
   streak?: number;
+  /** Consecutive zero-spend days ending today within the cycle. */
+  quietDays?: number | null;
+  /** Active mini-quest state for this category (shows compact stamp dots even when collapsed). */
+  challenge?: ChallengeState | null;
+  /** Brief warm pulse highlight right after pouring budget into or out of this card. */
+  justRebalanced?: boolean;
   /** Fraction of the cycle/week elapsed today (0–1), drawn as a subtle tick on the meter. */
   todayFrac?: number;
-  donors: { name: string; room: number }[];
+  donors: { name: string; room: number; spent?: number; limit?: number }[];
   /** Other variable categories that can receive spare budget room from this category. */
   shareTargets?: { name: string; room: number; over: number }[];
   onMove: (from: string, amount: number) => void;
@@ -152,10 +176,11 @@ export function BudgetCard({
   onNudgeLimit?: (delta: number) => void;
   onShowTransactions: (cat: string, extra?: { q?: string; date?: string }) => void;
   onEditCategory: (name: string) => void;
-  /** Anything more for the opened card (sub-categories, the no-spend challenge). */
+  /** Anything more for the opened card (sub-categories, mini-quests). */
   extra?: ReactNode;
 }) {
   const { settings, full, short } = useSettings();
+  const isId = settings.maxieLanguage === 'id';
   const phone = useIsPhone();
   const { setOverride } = useData();
   const { c, cur, lim, mine } = r;
@@ -163,6 +188,7 @@ export function BudgetCard({
   const room = Math.max(0, lim - cur);
   const pctUsed = lim > 0 ? Math.round((cur / lim) * 100) : 0;
   const [choosing, setChoosing] = useState(false);
+  const [pouring, setPouring] = useState(false);
   const [srcIdx, setSrc] = useState(0);
   const [sharing, setSharing] = useState(false);
   const [deltaFloat, setDeltaFloat] = useState<{ id: number; text: string; pos: boolean } | null>(null);
@@ -254,14 +280,33 @@ export function BudgetCard({
                 onMove(src.name, coverAmt);
               }}
             >
-              Cover {full(coverAmt)}
+              Pour {full(coverAmt)}
             </button>
-            {!choosing && donors.length > 1 && (
+            <button type="button" className={s.mxLinkBtn} onClick={() => setPouring(v => !v)}>
+              {pouring ? 'Hide slider' : 'Custom pour…'}
+            </button>
+            {!choosing && !pouring && donors.length > 1 && (
               <button type="button" className={s.mxLinkBtn} onClick={() => setChoosing(true)}>
-                Choose another budget
+                Pick another jar
               </button>
             )}
           </div>
+          {pouring && (
+            <div style={{ marginTop: 8 }}>
+              <MoveBudget
+                name={c.name}
+                need={over}
+                targetSpent={cur}
+                targetLimit={lim}
+                donors={donors}
+                onMove={(from, amt) => {
+                  onMove(from, amt);
+                  setPouring(false);
+                }}
+                onCancel={() => setPouring(false)}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -269,10 +314,17 @@ export function BudgetCard({
   const places = topPlaces(mine);
   const one = mine.length === 1 ? mine[0] : null;
   const smoothUnder = cur > 0 && lim > 0 && todayFrac != null && todayFrac > 0.15 && cur < lim * todayFrac * 0.85;
+  const vibe = categoryVibe(c.name, { cur, lim, over, smoothUnder, pctUsed, isId });
   const shareAmt = Math.min(room, step);
 
   return (
-    <section id={'cat-' + c.name} className={s.mxCard} data-over={over > 0 || undefined} aria-label={`${c.name} budget`}>
+    <section
+      id={'cat-' + c.name}
+      className={s.mxCard}
+      data-over={over > 0 || undefined}
+      data-rebalanced={justRebalanced || undefined}
+      aria-label={`${c.name} budget`}
+    >
       <button type="button" className={s.mxHead} aria-expanded={open} onClick={onToggle}>
         <span className={s.mxIcon} style={{ background: c.tint, color: 'var(--ink)' }}>
           <Icon d={c.icon} size={19} />
@@ -280,15 +332,30 @@ export function BudgetCard({
         <span className={s.mxTitles}>
           <span className={s.mxLabelRow}>
             <span className={s.mxLabel}>{c.name}</span>
-            {streak >= 2 && (
+            {streak >= 2 && !settings.quietMode && (
               <span className={s.mxStreakBadge} title={`${streak} consecutive cycles within limit`}>
                 <FlameIcon size={12} /> {streak} cycles
+              </span>
+            )}
+            {quietDays != null && quietDays >= 2 && !settings.quietMode && (
+              <span className={s.mxQuietPill} title={`${quietDays} quiet days without spending in ${c.name}`}>
+                {quietDays} quiet days
+              </span>
+            )}
+            {challenge && challenge.kind === 'nospend' && (challenge.key === 'running' || challenge.key === 'done') && (
+              <span className={s.mxMiniStamps} title={challenge.text} aria-label={challenge.text}>
+                {Array.from({ length: challenge.totalDays }, (_, i) => {
+                  const hit = challenge.key === 'done' || i < challenge.day;
+                  return <span key={i} className={s.mxMiniDot} data-hit={hit || undefined} data-done={challenge.key === 'done' || undefined} />;
+                })}
               </span>
             )}
           </span>
           <span className={s.mxSub}>
             {short(cur)} of {short(lim)}
-            {smoothUnder && <span className={s.mxSmoothNote}> · Smooth sailing ({pctUsed}%)</span>}
+            {vibe && (
+              <span className={smoothUnder || cur === 0 ? s.mxSmoothNote : s.mxVibeNote}> · {vibe}</span>
+            )}
           </span>
         </span>
         <span className={s.mxStatus} data-over={over > 0 || undefined}>
@@ -460,8 +527,14 @@ export function BillItem({
   editor: ReactNode;
   onShowTransactions: (cat: string) => void;
 }) {
-  const { full, short } = useSettings();
+  const { settings, full, short } = useSettings();
   const phone = useIsPhone();
+  const [justPaid, setJustPaid] = useState(false);
+  useEffect(() => {
+    if (!justPaid) return;
+    const t = setTimeout(() => setJustPaid(false), 1200);
+    return () => clearTimeout(t);
+  }, [justPaid]);
   const { c, cur, lim, mine, last } = r;
   const dueTotal = sum(due.map(x => x.amount));
   const status: 'paid' | 'due' | 'none' = cur > 0 || marked ? 'paid' : due.length ? 'due' : 'none';
@@ -523,7 +596,9 @@ export function BillItem({
         <span className={s.mxTitles} style={{ gap: 4 }}>
           <span className={s.mxLabel}>{c.name}</span>
           <span className={s.mxMeta}>
-            <StatusTag status={status} due={due[0]?.date} />
+            <span className={justPaid ? s.mxPopIn : undefined}>
+              <StatusTag status={status} due={due[0]?.date} />
+            </span>
             {note}
           </span>
         </span>
@@ -537,7 +612,18 @@ export function BillItem({
           {fix}
           {editor}
           {cur === 0 && (
-            <button type="button" className={s.btnOutlineSm} style={{ alignSelf: 'flex-start' }} onClick={onMark}>
+            <button
+              type="button"
+              className={s.btnOutlineSm}
+              style={{ alignSelf: 'flex-start' }}
+              onClick={() => {
+                if (!marked) {
+                  haptic('success', settings.quietMode);
+                  setJustPaid(true);
+                }
+                onMark();
+              }}
+            >
               {marked ? 'Mark as not paid' : 'Mark as paid'}
             </button>
           )}

@@ -8,14 +8,30 @@ import { Logo } from '../components/Logo';
 import { IC, Icon } from '../components/Icon';
 import { categoryStatus, changeBadge, type Budget, type CatView, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { sum, toISO } from '../lib/format';
+import { sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
 import { useSetLimits } from '../lib/limits';
 import type { FixedBillStatus } from '../lib/fixedBills';
-import type { Transaction } from '../data/transactions';
-import { ChallengeBox, challengeState, SectionHead, startChallenge, streaks, Summary, TargetIcon, TrophyIcon } from './categoriesExtras';
+import { merchantKey, type Transaction } from '../data/transactions';
+import {
+  BillRing,
+  ChallengeBox,
+  challengeState,
+  CupIcon,
+  FlameIcon,
+  HeartSparkIcon,
+  LeafIcon,
+  quietDaysFor,
+  SectionHead,
+  startChallenge,
+  streaks,
+  Summary,
+  TargetIcon,
+  TrophyIcon,
+  type ChallengeState,
+} from './categoriesExtras';
 import { FixedBillsList } from './FixedBills';
 
 type Mode = 'cycle' | 'week';
@@ -70,6 +86,7 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
   const [showUnused, setShowUnused] = useState(false);
   /** The last limit or bill change, with a way to take it back, for a few seconds. */
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
+  const [rebalanced, setRebalanced] = useState<string[]>([]);
   const wi = cycle.weekIdx;
 
   useEffect(() => {
@@ -81,6 +98,11 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
     const timer = setTimeout(() => setToast(null), 7000);
     return () => clearTimeout(timer);
   }, [toast]);
+  useEffect(() => {
+    if (rebalanced.length === 0) return;
+    const timer = setTimeout(() => setRebalanced([]), 1500);
+    return () => clearTimeout(timer);
+  }, [rebalanced]);
 
   const view = makeView(mode, wi, settings.warnAt, budget.txs);
   const sorter = (a: Row, b: Row) => {
@@ -112,16 +134,35 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
   /** Where spending should be by today, as a share of a limit: days gone in the cycle, or in the week. */
   const todayFrac = mode === 'cycle' ? cycle.dayN / cycle.cycleDays : Math.min(1, (cycle.dayIdx - wi * 7 + 1) / 7);
   const challenges = settings.challenges ?? [];
-  const challengeOf = (name: string) => {
-    const ch = challenges.find(x => x.category === name);
-    return ch ? challengeState(ch, allTxs, cycle.today) : null;
+  const challengeOf = (r: Row) => {
+    const ch = challenges.find(x => x.category === r.c.name);
+    return ch ? challengeState(ch, allTxs, cycle.today, { cycleSpent: r.cur, cycleDaysLeft: cycle.daysLeft }) : null;
   };
   const activeChallenges = challenges
-    .map(ch => ({ ch, st: challengeState(ch, allTxs, cycle.today) }))
+    .map(ch => {
+      const r = variable.find(v => v.c.name === ch.category);
+      return {
+        ch,
+        st: challengeState(ch, allTxs, cycle.today, { cycleSpent: r?.cur, cycleDaysLeft: cycle.daysLeft }),
+      };
+    })
     .filter(x => x.st.key === 'running' || x.st.key === 'done');
-  const setChallenge = (name: string, on: boolean) => {
-    update({ challenges: [...challenges.filter(x => x.category !== name), ...(on ? [startChallenge(name, cycle.today)] : [])] });
-    if (on) setToast({ text: `7-day no-spend challenge started for ${name} — you've got this!` });
+  const setChallenge = (name: string, opts: { days?: number; kind?: 'nospend' | 'beat_last'; target?: number } | null) => {
+    update({
+      challenges: [
+        ...challenges.filter(x => x.category !== name),
+        ...(opts ? [startChallenge(name, cycle.today, opts)] : []),
+      ],
+    });
+    if (opts) {
+      const label =
+        opts.kind === 'beat_last'
+          ? `Beat-last-cycle quest started for ${name} — let's finish lighter!`
+          : opts.days === 3
+            ? `3-day mini reset started for ${name} — you've got this!`
+            : `7-day no-spend week started for ${name} — you've got this!`;
+      setToast({ text: label });
+    }
   };
 
   /** Consecutive past cycles kept within limit per variable category (shown as warm flame badges). */
@@ -137,7 +178,11 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
     const t = budget.cats.find(c => c.name === to)!;
     const pct = amount / ofIncome(1);
     setLimits({ [to]: t.limitPct + pct, [from]: Math.max(0, f.limitPct - pct) });
-    setToast({ text: `Moved ${short(amount)} from ${from} to ${to} — total plan stays the same.`, undo: () => setLimits({ [to]: t.limitPct, [from]: f.limitPct }) });
+    setRebalanced([from, to]);
+    setToast({
+      text: `Poured ${short(amount)} from ${from} into ${to} — total plan stays balanced.`,
+      undo: () => setLimits({ [to]: t.limitPct, [from]: f.limitPct }),
+    });
   };
   /** Nudge a variable category's monthly limit up or down by a fixed currency step, with Undo. */
   const nudgeLimit = (name: string, delta: number) => {
@@ -156,7 +201,7 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
   const donorsFor = (name: string) =>
     variable
       .filter(x => x.c.name !== name && x.lim - x.cur > 0)
-      .map(x => ({ name: x.c.name, room: x.lim - x.cur }))
+      .map(x => ({ name: x.c.name, room: x.lim - x.cur, spent: x.cur, limit: x.lim }))
       .sort((a, b) => b.room - a.room);
   const shareTargetsFor = (name: string) =>
     variable
@@ -171,51 +216,62 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
       : filter === 'smooth'
         ? variable.filter(r => r.st.key === 'ok' && r.cur > 0)
         : filter === 'challenges'
-          ? variable.filter(r => !!challengeOf(r.c.name))
+          ? variable.filter(r => !!challengeOf(r))
           : usedAll;
 
   // Fixed bills you ticked off by hand this cycle.
   const cycleKey = toISO(cycle.start);
   const marked = new Set((settings.paidBills ?? []).filter(k => k.startsWith(cycleKey + '|')).map(k => k.slice(cycleKey.length + 1)));
   const toggleMarked = (name: string) => {
+    const wasMarked = marked.has(name);
     const key = cycleKey + '|' + name;
     const kept = (settings.paidBills ?? []).filter(k => k.startsWith(cycleKey + '|') && k !== key);
-    update({ paidBills: marked.has(name) ? kept : [...kept, key] });
+    update({ paidBills: wasMarked ? kept : [...kept, key] });
+    if (!wasMarked) setToast({ text: `${name} ticked off — one less thing on your mind.` });
   };
   const isPaid = (r: Row) => r.cur > 0 || marked.has(r.c.name);
 
   const toggle = (name: string) => setOpen(open === name ? null : name);
 
   /** An everyday category as a card (Maxie's budget detail design). */
-  const card = (r: Row) => (
-    <BudgetCard
-      key={r.c.name}
-      r={r}
-      cycle={cycle}
-      open={open === r.c.name}
-      onToggle={() => toggle(r.c.name)}
-      streak={mode === 'cycle' ? catStreaks[r.c.name] ?? 0 : 0}
-      todayFrac={todayFrac}
-      donors={mode === 'cycle' && r.c.type === 'variable' ? donorsFor(r.c.name) : []}
-      shareTargets={mode === 'cycle' && r.c.type === 'variable' ? shareTargetsFor(r.c.name) : []}
-      onMove={(from, amount) => move(from, r.c.name, amount)}
-      onShareRoom={mode === 'cycle' && r.c.type === 'variable' ? (to, amount) => move(r.c.name, to, amount) : undefined}
-      onNudgeLimit={mode === 'cycle' && r.c.type === 'variable' ? delta => nudgeLimit(r.c.name, delta) : undefined}
-      onShowTransactions={onShowTransactions}
-      onEditCategory={onEditCategory}
-      extra={
-        r.c.name === UNSORTED && r.mine.length > 0 ? (
-          <button type="button" className={s.btnOutlineSm} style={{ alignSelf: 'flex-start' }} onClick={() => onShowTransactions(r.c.name)}>
-            Sort {r.mine.length} {r.mine.length === 1 ? 'transaction' : 'transactions'}
-          </button>
-        ) : mode === 'cycle' && r.c.type === 'variable' ? (
-          <div style={{ alignSelf: 'flex-start' }}>
-            <ChallengeBox name={r.c.name} state={challengeOf(r.c.name)} onStart={() => setChallenge(r.c.name, true)} onClear={() => setChallenge(r.c.name, false)} />
-          </div>
-        ) : undefined
-      }
-    />
-  );
+  const card = (r: Row) => {
+    const qDays = mode === 'cycle' ? quietDaysFor(r.mine, cycle.today, cycle.start) : null;
+    const ch = challengeOf(r);
+    return (
+      <BudgetCard
+        key={r.c.name}
+        r={r}
+        cycle={cycle}
+        open={open === r.c.name}
+        onToggle={() => toggle(r.c.name)}
+        streak={mode === 'cycle' ? catStreaks[r.c.name] ?? 0 : 0}
+        quietDays={qDays}
+        challenge={ch}
+        justRebalanced={rebalanced.includes(r.c.name)}
+        todayFrac={todayFrac}
+        donors={mode === 'cycle' && r.c.type === 'variable' ? donorsFor(r.c.name) : []}
+        shareTargets={mode === 'cycle' && r.c.type === 'variable' ? shareTargetsFor(r.c.name) : []}
+        onMove={(from, amount) => move(from, r.c.name, amount)}
+        onShareRoom={mode === 'cycle' && r.c.type === 'variable' ? (to, amount) => move(r.c.name, to, amount) : undefined}
+        onNudgeLimit={mode === 'cycle' && r.c.type === 'variable' ? delta => nudgeLimit(r.c.name, delta) : undefined}
+        onShowTransactions={onShowTransactions}
+        onEditCategory={onEditCategory}
+        extra={
+          r.c.name === UNSORTED && r.mine.length > 0 ? (
+            <button type="button" className={s.btnOutlineSm} style={{ alignSelf: 'flex-start' }} onClick={() => onShowTransactions(r.c.name)}>
+              Sort {r.mine.length} {r.mine.length === 1 ? 'transaction' : 'transactions'}
+            </button>
+          ) : r.c.name === UNSORTED && r.mine.length === 0 ? (
+            <span style={{ fontSize: 13, color: C.good, fontWeight: 500 }}>Buffer zero — every single receipt is tucked into its right home.</span>
+          ) : mode === 'cycle' && r.c.type === 'variable' ? (
+            <div style={{ alignSelf: 'flex-start' }}>
+              <ChallengeBox name={r.c.name} state={ch} lastSpent={r.last} onStart={opts => setChallenge(r.c.name, opts ?? {})} onClear={() => setChallenge(r.c.name, null)} />
+            </div>
+          ) : undefined
+        }
+      />
+    );
+  };
   const inst = useInstallmentTotals(cycle);
   const [instOpen, setInstOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
@@ -238,6 +294,24 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
               : spent > limit
                 ? `${short(spent - limit)} over plan — let's trim or rebalance together.`
                 : `${short(budget.safeDay)} a day keeps you smoothly on track for the next ${days} ${days === 1 ? 'day' : 'days'}.`;
+          const isId = settings.maxieLanguage === 'id';
+          const cruisingCount = variable.filter(r => r.cur > 0 && r.st.key === 'ok').length;
+          const zeroClubCount = unused.length;
+          const questCount = activeChallenges.filter(x => x.st.key === 'running').length;
+          const bufferClear = (variable.find(r => r.c.name === UNSORTED)?.mine.length ?? 0) === 0;
+          const pepTalks = isId
+            ? [
+                cruisingCount > 0 ? `${cruisingCount} kategori lagi melaju nyaman di dalam rencana — ritme yang tenang!` : 'Lembaran masih bersih dan tenang, pelan-pelan saja.',
+                zeroClubCount > 0 ? `${zeroClubCount} kategori masih belum tersentuh sama sekali siklus ini.` : 'Semua kategori terpantau rapi — tidak ada yang terlewat.',
+                bufferClear ? 'Buffer kosong bersih! Semua transaksi sudah masuk ke rumahnya masing-masing.' : 'Ada sedikit transaksi di Buffer menunggu dirapikan bareng.',
+                `Masih ada ruang aman ${short(budget.safeDay)} per hari sampai gajian berikutnya.`,
+              ]
+            : [
+                cruisingCount > 0 ? `${cruisingCount} everyday ${cruisingCount === 1 ? 'category is' : 'categories are'} cruising nicely inside plan.` : 'Fresh slate ahead — unhurried and steady.',
+                zeroClubCount > 0 ? `${zeroClubCount} untouched ${zeroClubCount === 1 ? 'category' : 'categories'} sitting cozy in your Zero-Spend Club.` : 'Every corner of your budget is accounted for — tidy work.',
+                bufferClear ? 'Buffer zero — every single receipt is tucked neatly into its right category.' : 'Just a quick Buffer tidy-up waiting whenever you have a spare moment.',
+                `You have ${short(budget.safeDay)} a day of gentle breathing room for the next ${days} ${days === 1 ? 'day' : 'days'}.`,
+              ];
           return (
             <Summary
               spent={spent}
@@ -245,6 +319,8 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
               todayFrac={frac}
               period={mode === 'cycle' ? 'this cycle' : `in week ${wi + 1}`}
               footnote={footnote}
+              pulse={{ cruising: cruisingCount, watch: watchCount, quests: questCount, zeroClub: zeroClubCount }}
+              pepTalks={pepTalks}
               onAskMaxie={
                 onAskMaxie
                   ? () =>
@@ -338,13 +414,37 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
             {filteredUsed.map(card)}
             {filter === 'all' && showUnused && unused.map(card)}
           </div>
+          {filter === 'all' && unused.length > 0 && (
+            <div className={s.zeroClubCard}>
+              <div className={s.zeroClubHead}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: C.good }}>
+                  <LeafIcon size={14} /> Zero-Spend Club · {unused.length} untouched {unused.length === 1 ? 'jar' : 'jars'}
+                </span>
+                <button type="button" className={s.textBtnSm} style={{ padding: 0 }} onClick={() => setShowUnused(v => !v)}>
+                  {showUnused ? 'Hide cards' : 'Expand all'}
+                </button>
+              </div>
+              <div className={s.zeroClubPills}>
+                {unused.map(r => (
+                  <button
+                    key={r.c.name}
+                    type="button"
+                    className={s.zeroClubPill}
+                    style={{ background: r.c.tint }}
+                    onClick={() => {
+                      setShowUnused(true);
+                      setOpen(r.c.name);
+                      requestAnimationFrame(() => document.getElementById('cat-' + r.c.name)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+                    }}
+                  >
+                    <Icon d={r.c.icon} size={13} />
+                    <span>{r.c.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {filter === 'all' && unused.length > 0 && (
-              <button type="button" className={s.catFold} style={{ border: 'none' }} aria-expanded={showUnused} onClick={() => setShowUnused(!showUnused)}>
-                <Icon d={IC.chevDown} size={14} style={{ transform: showUnused ? 'rotate(180deg)' : 'none' }} />
-                {showUnused ? 'Hide unused' : `Not used yet (${unused.length}): ${unused.map(r => r.c.name).join(', ')}`}
-              </button>
-            )}
             <button type="button" className={s.catFold} onClick={onNewCategory} style={{ color: C.clayInk, fontWeight: 600, border: 'none' }}>
               <Icon d={IC.plus} size={14} />
               New category
@@ -371,20 +471,23 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
                 title="Fixed bills"
                 right={
                   hasAny ? (
-                    allBillsPaid ? (
-                      <span style={{ color: C.good, fontWeight: 600 }}>All paid</span>
-                    ) : (
-                      <span>
-                        {overdueCount > 0 && (
-                          <span style={{ color: C.redInk, fontWeight: 600, marginRight: 8 }}>
-                            {overdueCount} overdue
-                          </span>
-                        )}
-                        {activeIndividual.length > 0
-                          ? `${paidIndividual.length} of ${activeIndividual.length} paid · ${short(totalPaidAmt)} / ${short(totalPlannedAmt)}`
-                          : `${short(totalPaidAmt)} of ${short(totalPlannedAmt)} paid`}
-                      </span>
-                    )
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <BillRing paid={paidIndividual.length + fixed.filter(isPaid).length} total={totalItems} />
+                      {allBillsPaid ? (
+                        <span style={{ color: C.good, fontWeight: 600 }}>All paid</span>
+                      ) : (
+                        <span>
+                          {overdueCount > 0 && (
+                            <span style={{ color: C.redInk, fontWeight: 600, marginRight: 8 }}>
+                              {overdueCount} overdue
+                            </span>
+                          )}
+                          {activeIndividual.length > 0
+                            ? `${paidIndividual.length} of ${activeIndividual.length} paid · ${short(totalPaidAmt)} / ${short(totalPlannedAmt)}`
+                            : `${short(totalPaidAmt)} of ${short(totalPlannedAmt)} paid`}
+                        </span>
+                      )}
+                    </span>
                   ) : undefined
                 }
               />
@@ -453,6 +556,7 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
                 mode={mode}
                 rows={[...variable, ...fixed]}
                 challenges={activeChallenges}
+                catStreaks={catStreaks}
                 onPick={name => {
                   setFilter('all');
                   setOpen(name);
@@ -468,6 +572,7 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
           mode={mode}
           rows={[...variable, ...fixed]}
           challenges={activeChallenges}
+          catStreaks={catStreaks}
           onPick={name => {
             setFilter('all');
             setOpen(name);
@@ -546,31 +651,54 @@ export function AmountEditor({ label, initial, onSave, onCancel, onRemove }: { l
   );
 }
 
-/** Side panel (wide screens) or collapsible section (phones): Watch list, active no-spend challenges, Biggest win, and Biggest changes. */
+/** Side panel (wide screens) or collapsible section (phones): Watch list, active mini-quests, warm little wins, and Biggest changes. */
 function CategoriesPanel({
   bare,
   cycle,
   mode,
   rows,
   challenges,
+  catStreaks,
   onPick,
 }: {
   bare?: boolean;
   cycle: Cycle;
   mode: Mode;
   rows: Row[];
-  challenges: { ch: { category: string; start: string }; st: { key: 'running' | 'done' | 'missed'; day: number; text: string } }[];
+  challenges: { ch: { category: string; start: string; days?: number; kind?: 'nospend' | 'beat_last'; target?: number }; st: ChallengeState }[];
+  catStreaks: Record<string, number>;
   onPick: (name: string) => void;
 }) {
   const { short } = useSettings();
   const watch = rows.filter(r => r.st.key !== 'ok').sort((x, y) => x.st.rank - y.st.rank || y.used - x.used);
-  const biggestWin = rows
+  const calmest = rows
     .filter(r => r.c.type === 'variable' && r.last > 0 && r.cur < r.last)
     .sort((x, y) => y.last - y.cur - (x.last - x.cur))[0];
+  const steadyRhythm = rows
+    .filter(r => r.c.type === 'variable' && (catStreaks[r.c.name] ?? 0) >= 2)
+    .sort((a, b) => (catStreaks[b.c.name] ?? 0) - (catStreaks[a.c.name] ?? 0))[0];
+  const cozyRegular = (() => {
+    const map = new Map<string, { spot: string; cat: string; count: number }>();
+    for (const r of rows) {
+      if (r.c.type !== 'variable') continue;
+      for (const t of r.mine) {
+        const k = merchantKey(t.title) || t.title;
+        const cur = map.get(k);
+        if (cur) cur.count++;
+        else map.set(k, { spot: tidyName(t.title), cat: r.c.name, count: 1 });
+      }
+    }
+    return [...map.values()].filter(x => x.count >= 2).sort((a, b) => b.count - a.count)[0];
+  })();
+  const cushion = rows
+    .filter(r => r.c.type === 'variable' && r.cur > 0 && r.lim - r.cur > 0 && r.c.name !== calmest?.c.name)
+    .sort((a, b) => b.lim - b.cur - (a.lim - a.cur))[0];
   const changes = rows
     .filter(r => r.c.type === 'variable' && r.last > 0 && Math.abs(r.cur - r.last) > 0)
     .sort((x, y) => Math.abs(y.cur - y.last) - Math.abs(x.cur - x.last))
     .slice(0, 3);
+  const hasWins = !!(calmest || steadyRhythm || cozyRegular || cushion);
+
   return (
     <aside className={bare ? undefined : s.splitSide} aria-label="Categories at a glance">
       <section className={s.sideCard}>
@@ -578,7 +706,7 @@ function CategoriesPanel({
         {watch.length === 0 ? (
           <div className={s.catSideEmpty}>
             <Logo size={30} mood="happy" interactive cheer="Every budget looks great!" />
-            <span>Every single category is inside its limit — smooth sailing!</span>
+            <span>Every category is feeling calm today — smooth sailing!</span>
           </div>
         ) : (
           <div className={s.sideList} style={{ gap: 6 }}>
@@ -598,39 +726,83 @@ function CategoriesPanel({
 
       {challenges.length > 0 && (
         <section className={s.sideCard}>
-          <h3 className={s.sideTitle}>Active challenges</h3>
+          <h3 className={s.sideTitle}>Active mini-quests</h3>
           <div className={s.sideList} style={{ gap: 8 }}>
             {challenges.map(({ ch, st }) => (
               <button key={ch.category} type="button" className={s.catChalRow} onClick={() => onPick(ch.category)}>
                 <span className={s.catChalHead}>
-                  {st.key === 'done' ? <TrophyIcon size={15} /> : <TargetIcon size={15} />}
+                  {st.key === 'done' ? <TrophyIcon size={15} /> : st.kind === 'beat_last' ? <LeafIcon size={15} /> : <TargetIcon size={15} />}
                   <span style={{ marginRight: 'auto' }}>{ch.category}</span>
                   <span style={{ fontSize: 12, fontWeight: 500, color: st.key === 'done' ? C.good : C.textMuted }}>
-                    {st.key === 'done' ? 'Completed!' : `Day ${st.day}/7`}
+                    {st.key === 'done'
+                      ? 'Completed!'
+                      : st.kind === 'beat_last' && st.target
+                        ? `${short(Math.max(0, st.target - (st.spent ?? 0)))} below`
+                        : `Day ${st.day}/${st.totalDays}`}
                   </span>
                 </span>
-                <span className={s.catChalDots} aria-hidden="true">
-                  {Array.from({ length: 7 }, (_, i) => (
-                    <span key={i} className={s.catChalDot} data-done={st.key === 'done' || i < st.day ? true : undefined} />
-                  ))}
-                </span>
+                {st.kind === 'nospend' && (
+                  <span className={s.catChalDots} aria-hidden="true">
+                    {Array.from({ length: st.totalDays }, (_, i) => (
+                      <span key={i} className={s.catChalDot} data-done={st.key === 'done' || i < st.day ? true : undefined} />
+                    ))}
+                  </span>
+                )}
               </button>
             ))}
           </div>
         </section>
       )}
 
-      {biggestWin && (
+      {hasWins && (
         <section className={s.sideCard} style={{ paddingTop: bare ? 12 : undefined }}>
-          <button type="button" className={s.catSideWin} onClick={() => onPick(biggestWin.c.name)}>
-            <span className={s.catSideWinLabel}>Biggest win</span>
-            <span style={{ fontSize: 14, fontWeight: 600 }}>
-              {biggestWin.c.name} is {short(biggestWin.last - biggestWin.cur)} lower
-            </span>
-            <span style={{ fontSize: 12.5, color: C.textMuted }}>
-              vs {mode === 'cycle' ? `last cycle by day ${cycle.dayN}` : 'last week'}
-            </span>
-          </button>
+          <h3 className={s.sideTitle}>Little wins this cycle</h3>
+          <div className={s.keepsakeList}>
+            {calmest && (
+              <button type="button" className={s.keepsakeCard} data-tone="good" onClick={() => onPick(calmest.c.name)}>
+                <span className={s.keepsakeHead}>
+                  <LeafIcon size={15} />
+                  <span className={s.keepsakeLabel}>Calmest corner</span>
+                </span>
+                <span className={s.keepsakeText}>
+                  <strong>{calmest.c.name}</strong> is {short(calmest.last - calmest.cur)} gentler than {mode === 'cycle' ? `last cycle by day ${cycle.dayN}` : 'last week'} — breathing easier already.
+                </span>
+              </button>
+            )}
+            {steadyRhythm && (
+              <button type="button" className={s.keepsakeCard} onClick={() => onPick(steadyRhythm.c.name)}>
+                <span className={s.keepsakeHead}>
+                  <FlameIcon size={15} />
+                  <span className={s.keepsakeLabel}>Steady rhythm</span>
+                </span>
+                <span className={s.keepsakeText}>
+                  <strong>{steadyRhythm.c.name}</strong> has stayed comfortably inside plan for {catStreaks[steadyRhythm.c.name]} cycles running.
+                </span>
+              </button>
+            )}
+            {cozyRegular && (
+              <button type="button" className={s.keepsakeCard} onClick={() => onPick(cozyRegular.cat)}>
+                <span className={s.keepsakeHead}>
+                  <CupIcon size={15} />
+                  <span className={s.keepsakeLabel}>Your cozy regular</span>
+                </span>
+                <span className={s.keepsakeText}>
+                  You&apos;ve dropped by <strong>{cozyRegular.spot}</strong> {cozyRegular.count} times in {cozyRegular.cat}.
+                </span>
+              </button>
+            )}
+            {cushion && (
+              <button type="button" className={s.keepsakeCard} onClick={() => onPick(cushion.c.name)}>
+                <span className={s.keepsakeHead}>
+                  <HeartSparkIcon size={15} />
+                  <span className={s.keepsakeLabel}>Breathing room</span>
+                </span>
+                <span className={s.keepsakeText}>
+                  <strong>{cushion.c.name}</strong> still holds {short(cushion.lim - cushion.cur)} of quiet cushion heading toward payday.
+                </span>
+              </button>
+            )}
+          </div>
         </section>
       )}
 

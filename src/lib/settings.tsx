@@ -43,8 +43,8 @@ export type Settings = {
   fixedStart?: 'empty';
   /** Fixed bills you ticked off by hand this cycle (paid in cash, say): "cycleStartISO|Category". */
   paidBills?: string[];
-  /** No-spend challenges: a category with nothing spent for 7 days from `start` (YYYY-MM-DD). */
-  challenges?: { category: string; start: string }[];
+  /** No-spend / beat-last-cycle mini-quests per category from `start` (YYYY-MM-DD). */
+  challenges?: { category: string; start: string; days?: number; kind?: 'nospend' | 'beat_last'; target?: number }[];
   /** Share of income to keep unplanned in a cycle's plan, as a buffer (default 10). */
   bufferPct?: number;
   /** Your thumbs up / down on Maxie's answers (newest last, at most 30): sent with each question so Maxie learns what helps. */

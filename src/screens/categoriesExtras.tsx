@@ -33,6 +33,8 @@ export function Summary({
   period,
   footnote,
   switcher,
+  pulse,
+  pepTalks,
   onAskMaxie,
 }: {
   spent: number;
@@ -42,22 +44,36 @@ export function Summary({
   period: string;
   footnote: string;
   switcher: ReactNode;
+  pulse?: { cruising: number; watch: number; quests: number; zeroClub: number };
+  pepTalks?: string[];
   onAskMaxie?: () => void;
 }) {
-  const { full, short } = useSettings();
+  const { full, short, settings } = useSettings();
   const phone = useIsPhone();
   const [showPace, setShowPace] = useState(false);
+  const [pepIdx, setPepIdx] = useState<number | null>(null);
   const shown = useCountUp(spent);
   const expected = limit * todayFrac;
   const mood = moodOf(spent, limit, expected);
   const width = limit > 0 ? Math.min(100, (spent / limit) * 100) : 0;
   const paceDelta = expected - spent;
+  const cyclePep = () => {
+    if (!pepTalks || pepTalks.length === 0) return;
+    haptic('tick', settings.quietMode);
+    setPepIdx(prev => (prev == null ? 0 : (prev + 1) % pepTalks.length));
+  };
   return (
     <section className={s.sumCard} aria-label="This cycle at a glance">
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-        <span className={s.sumCat}>
+        <button
+          type="button"
+          className={s.sumCatBtn}
+          onClick={cyclePep}
+          title="Tap Maxie for a warm pep talk"
+          aria-label="Tap Maxie for a warm pep talk"
+        >
           <Logo size={44} mood={mood.face} interactive cheer={mood.cheer} />
-        </span>
+        </button>
         <span style={{ display: 'flex', flexDirection: 'column', gap: 3, marginRight: 'auto', minWidth: 0, flex: '1 1 180px' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span className={s.sumBig}>{(phone ? short : full)(shown)} spent</span>
@@ -71,6 +87,14 @@ export function Summary({
         </span>
         {switcher}
       </div>
+      {pepIdx != null && pepTalks && pepTalks[pepIdx] && (
+        <div className={s.sumPepBubble} role="status">
+          <span>{pepTalks[pepIdx]}</span>
+          <button type="button" className={s.textBtnSm} style={{ padding: 0, flex: 'none' }} onClick={cyclePep}>
+            Next →
+          </button>
+        </div>
+      )}
       <div className={s.sumTrackWrap} onMouseEnter={() => setShowPace(true)} onMouseLeave={() => setShowPace(false)} onClick={() => setShowPace(v => !v)}>
         <span className={s.sumTrack}>
           <span className={s.sumFill} style={{ width: width + '%', background: mood.bar }} />
@@ -84,6 +108,30 @@ export function Summary({
           </span>
         )}
       </div>
+      {pulse && (pulse.cruising > 0 || pulse.watch > 0 || pulse.zeroClub > 0 || pulse.quests > 0) && (
+        <div className={s.sumPulseRow} aria-label="Category rhythm overview">
+          {pulse.cruising > 0 && (
+            <span className={s.sumPulsePill} data-tone="good">
+              {pulse.cruising} cruising
+            </span>
+          )}
+          {pulse.zeroClub > 0 && (
+            <span className={s.sumPulsePill} data-tone="calm">
+              {pulse.zeroClub} untouched
+            </span>
+          )}
+          {pulse.watch > 0 && (
+            <span className={s.sumPulsePill} data-tone="warn">
+              {pulse.watch} on watch
+            </span>
+          )}
+          {pulse.quests > 0 && (
+            <span className={s.sumPulsePill} data-tone="quest">
+              {pulse.quests} {pulse.quests === 1 ? 'quest' : 'quests'} live
+            </span>
+          )}
+        </div>
+      )}
       <div className={s.sumFootRow}>
         <span style={{ fontSize: 14, color: mood.ink, fontWeight: 500 }}>{footnote}</span>
         {onAskMaxie && (
@@ -165,6 +213,64 @@ export const TrophyIcon = ({ size = 14 }: { size?: number }) => (
   </svg>
 );
 
+/** A gentle moss leaf for calmest-category keepsakes. */
+export const LeafIcon = ({ size = 15 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ flex: 'none' }}>
+    <path d="M5 19c.5-7.5 5.5-13 14-14-1 8.5-6.5 13.5-14 14z" fill="var(--good)" opacity="0.22" stroke="var(--good)" strokeWidth="1.8" strokeLinejoin="round" />
+    <path d="M5 19c3-3 6.5-6 10-8.5" stroke="var(--good)" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+  </svg>
+);
+
+/** A cozy warm cup for favorite-spot keepsakes. */
+export const CupIcon = ({ size = 15 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ flex: 'none' }}>
+    <path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9z" fill="var(--clay)" opacity="0.2" stroke="var(--clay-ink)" strokeWidth="1.7" strokeLinejoin="round" />
+    <path d="M16 10.5h2a2.5 2.5 0 0 1 0 5h-2" stroke="var(--clay-ink)" strokeWidth="1.7" strokeLinecap="round" fill="none" />
+    <path d="M8 5.5c0-1 .8-1.5.8-2.5M12 5.5c0-1 .8-1.5.8-2.5" stroke="var(--clay-ink)" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+  </svg>
+);
+
+/** A soft warm heart-spark for extra breathing room keepsakes. */
+export const HeartSparkIcon = ({ size = 15 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ flex: 'none' }}>
+    <path d="M12 20s-7-4.4-8.8-8.3A5.1 5.1 0 0 1 12 6.8a5.1 5.1 0 0 1 8.8 4.9C19 15.6 12 20 12 20z" fill="var(--category-4)" opacity="0.24" stroke="var(--clay-ink)" strokeWidth="1.7" strokeLinejoin="round" />
+  </svg>
+);
+
+/** Crisp mini progress ring for Fixed Bills completion. */
+export const BillRing = ({ paid, total }: { paid: number; total: number }) => {
+  if (total <= 0) return null;
+  const r = 8;
+  const circ = 2 * Math.PI * r;
+  const frac = Math.max(0, Math.min(1, paid / total));
+  const done = paid >= total;
+  return (
+    <svg width={20} height={20} viewBox="0 0 20 20" aria-hidden="true" style={{ flex: 'none', transform: 'rotate(-90deg)' }}>
+      <circle cx="10" cy="10" r={r} fill="none" stroke="var(--border-strong)" strokeWidth="2.4" opacity="0.45" />
+      <circle
+        cx="10"
+        cy="10"
+        r={r}
+        fill="none"
+        stroke={done ? 'var(--good)' : 'var(--clay)'}
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeDasharray={circ}
+        strokeDashoffset={circ * (1 - frac)}
+        style={{ transition: 'stroke-dashoffset 420ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+      />
+    </svg>
+  );
+};
+
+/** Consecutive quiet (zero-spend) days ending today within the cycle for a category; null when untouched all cycle. */
+export function quietDaysFor(mine: TxView[], today: Date, cycleStart: Date): number | null {
+  if (mine.length === 0) return null;
+  const latest = mine.reduce((max, t) => Math.max(max, t.date.getTime()), cycleStart.getTime());
+  const diff = Math.floor((today.getTime() - latest) / DAY);
+  return Math.max(0, diff);
+}
+
 /** A flame and "3": under budget that many cycles running, shown from two (hidden in Quiet mode). */
 export const StreakChip = ({ n }: { n?: number }) => {
   const { settings } = useSettings();
@@ -177,20 +283,45 @@ export const StreakChip = ({ n }: { n?: number }) => {
   );
 };
 
-// ---- no-spend challenges ----
+// ---- mini-quests (no-spend resets & beat last cycle) ----
 
-export type Challenge = { category: string; start: string };
+export type Challenge = { category: string; start: string; days?: number; kind?: 'nospend' | 'beat_last'; target?: number };
 const CHALLENGE_DAYS = 7;
 
-/** Where a no-spend week stands: running (day n of 7), done, or missed (something was spent). */
-export function challengeState(ch: Challenge, allTxs: TxView[], today: Date) {
+export type ChallengeState = {
+  key: 'running' | 'done' | 'missed';
+  day: number;
+  totalDays: number;
+  kind: 'nospend' | 'beat_last';
+  spent?: number;
+  target?: number;
+  text: string;
+};
+
+/** Where a mini-quest stands: running, done, or missed. */
+export function challengeState(
+  ch: Challenge,
+  allTxs: TxView[],
+  today: Date,
+  ctx?: { cycleSpent?: number; cycleDaysLeft?: number },
+): ChallengeState {
+  if (ch.kind === 'beat_last' && (ch.target ?? 0) > 0) {
+    const target = ch.target!;
+    const spent = ctx?.cycleSpent ?? 0;
+    const daysLeft = ctx?.cycleDaysLeft ?? 1;
+    if (spent >= target) return { key: 'missed', day: 1, totalDays: 1, kind: 'beat_last', spent, target, text: 'Passed last cycle' };
+    if (daysLeft <= 0) return { key: 'done', day: 1, totalDays: 1, kind: 'beat_last', spent, target, text: 'Beat last cycle!' };
+    return { key: 'running', day: 1, totalDays: 1, kind: 'beat_last', spent, target, text: 'Beating last cycle' };
+  }
+  const totalDays = ch.days ?? CHALLENGE_DAYS;
   const start = new Date(ch.start + 'T00:00:00');
-  const end = new Date(start.getTime() + CHALLENGE_DAYS * DAY);
+  const end = new Date(start.getTime() + totalDays * DAY);
   const spent = allTxs.some(t => t.cat === ch.category && isSpend(t) && t.date >= start && t.date < end);
-  const day = Math.min(CHALLENGE_DAYS, Math.floor((today.getTime() - start.getTime()) / DAY) + 1);
-  if (spent) return { key: 'missed' as const, day, text: 'No-spend week missed' };
-  if (today >= end) return { key: 'done' as const, day, text: 'No-spend week done' };
-  return { key: 'running' as const, day, text: `No-spend day ${day}/${CHALLENGE_DAYS}` };
+  const day = Math.min(totalDays, Math.max(1, Math.floor((today.getTime() - start.getTime()) / DAY) + 1));
+  const label = totalDays === 3 ? '3-day reset' : 'No-spend week';
+  if (spent) return { key: 'missed', day, totalDays, kind: 'nospend', text: `${label} paused` };
+  if (today >= end) return { key: 'done', day: totalDays, totalDays, kind: 'nospend', text: `${label} done!` };
+  return { key: 'running', day, totalDays, kind: 'nospend', text: `${label} · Day ${day}/${totalDays}` };
 }
 
 export function ChallengeChip({ text, kind }: { text: string; kind: 'running' | 'done' | 'missed' }) {
@@ -202,45 +333,110 @@ export function ChallengeChip({ text, kind }: { text: string; kind: 'running' | 
   );
 }
 
-/** In an opened category: start a no-spend week, or track it as a 7-day stamp card. */
+/** In an opened category: pick a cheerful mini-quest (3-day reset, 7-day no-spend week, or beat last cycle), or track progress. */
 export function ChallengeBox({
   name,
   state,
+  lastSpent = 0,
   onStart,
   onClear,
 }: {
   name: string;
-  state: ReturnType<typeof challengeState> | null;
-  onStart: () => void;
+  state: ChallengeState | null;
+  lastSpent?: number;
+  onStart: (opts?: { days?: number; kind?: 'nospend' | 'beat_last'; target?: number }) => void;
   onClear: () => void;
 }) {
-  const { settings } = useSettings();
+  const { settings, short } = useSettings();
   if (!state)
     return (
-      <button
-        type="button"
-        className={s.btnOutlineSm}
-        onClick={() => {
-          haptic('success', settings.quietMode);
-          onStart();
-        }}
-        title={`Spend nothing on ${name} for 7 days`}
-      >
-        <TargetIcon size={15} />
-        Try a no-spend week
-      </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: C.textMuted }}>Try a playful mini-quest for {name}</span>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <button
+            type="button"
+            className={s.btnOutlineSm}
+            onClick={() => {
+              haptic('success', settings.quietMode);
+              onStart({ days: 3, kind: 'nospend' });
+            }}
+            title={`Spend nothing on ${name} for 3 days`}
+          >
+            <TargetIcon size={14} />
+            3-day mini reset
+          </button>
+          <button
+            type="button"
+            className={s.btnOutlineSm}
+            onClick={() => {
+              haptic('success', settings.quietMode);
+              onStart({ days: 7, kind: 'nospend' });
+            }}
+            title={`Spend nothing on ${name} for 7 days`}
+          >
+            <TrophyIcon size={14} />
+            7-day no-spend week
+          </button>
+          {lastSpent > 0 && (
+            <button
+              type="button"
+              className={s.btnOutlineSm}
+              onClick={() => {
+                haptic('success', settings.quietMode);
+                onStart({ kind: 'beat_last', target: lastSpent });
+              }}
+              title={`Finish this cycle under last cycle's ${short(lastSpent)}`}
+            >
+              <LeafIcon size={14} />
+              Beat last cycle (&lt; {short(lastSpent)})
+            </button>
+          )}
+        </div>
+      </div>
     );
-  const earned = state.key === 'done' ? CHALLENGE_DAYS : state.key === 'running' ? state.day : Math.max(0, state.day - 1);
+
+  if (state.kind === 'beat_last' && state.target) {
+    const pct = Math.min(100, Math.round(((state.spent ?? 0) / state.target) * 100));
+    const room = Math.max(0, state.target - (state.spent ?? 0));
+    return (
+      <div className={s.stampCard} data-kind={state.key}>
+        <div className={s.stampHead}>
+          <ChallengeChip text={state.text} kind={state.key} />
+          <button type="button" className={s.textBtnSm} onClick={onClear}>
+            {state.key === 'running' ? 'Stop' : 'Clear'}
+          </button>
+        </div>
+        <div className={s.pourTrack}>
+          <span className={s.pourFill} style={{ width: `${Math.max(4, pct)}%`, background: state.key === 'missed' ? 'var(--danger)' : 'var(--good)' }} />
+        </div>
+        <span style={{ fontSize: 12.5, color: C.textMuted }}>
+          {state.key === 'done'
+            ? `You finished ${short(room)} lighter than last cycle — a lovely quiet win!`
+            : state.key === 'missed'
+              ? `Edged past ${short(state.target)} this time — fresh try next cycle.`
+              : `${short(room)} below last cycle's ${short(state.target)} finish line.`}
+        </span>
+      </div>
+    );
+  }
+
+  const total = state.totalDays;
+  const earned = state.key === 'done' ? total : state.key === 'running' ? state.day : Math.max(0, state.day - 1);
   return (
     <div className={s.stampCard} data-kind={state.key}>
       <div className={s.stampHead}>
-        <ChallengeChip text={state.key === 'done' ? 'No-spend week done!' : state.text} kind={state.key} />
+        <ChallengeChip text={state.text} kind={state.key} />
         <button type="button" className={s.textBtnSm} onClick={onClear}>
           {state.key === 'running' ? 'Stop' : 'Clear'}
         </button>
       </div>
-      <div className={s.stampRow} role="img" aria-label={`${earned} of ${CHALLENGE_DAYS} no-spend days completed`}>
-        {Array.from({ length: CHALLENGE_DAYS }, (_, i) => {
+      <div
+        className={s.stampRow}
+        style={{ gridTemplateColumns: `repeat(${total}, minmax(0, 1fr))` }}
+        role="img"
+        aria-label={`${earned} of ${total} quiet days completed`}
+      >
+        {Array.from({ length: total }, (_, i) => {
           const hit = i < earned;
           const missedHere = state.key === 'missed' && i === earned;
           return (
@@ -258,11 +454,26 @@ export function ChallengeBox({
           );
         })}
       </div>
+      {state.key === 'done' && (
+        <span style={{ fontSize: 12.5, color: C.good, fontWeight: 500 }}>
+          Lovely discipline — you can tuck that saved room straight into Savings or your Emergency Fund.
+        </span>
+      )}
     </div>
   );
 }
 
-export const startChallenge = (category: string, today: Date): Challenge => ({ category, start: toISO(today) });
+export const startChallenge = (
+  category: string,
+  today: Date,
+  opts?: { days?: number; kind?: 'nospend' | 'beat_last'; target?: number },
+): Challenge => ({
+  category,
+  start: toISO(today),
+  ...(opts?.days && opts.days !== 7 ? { days: opts.days } : {}),
+  ...(opts?.kind && opts.kind !== 'nospend' ? { kind: opts.kind } : {}),
+  ...(opts?.target ? { target: opts.target } : {}),
+});
 
 // ---- opened category: the last 7 days, where it went, moving budget ----
 
@@ -319,26 +530,33 @@ export function TopMerchants({ mine }: { mine: TxView[] }) {
 }
 
 /**
- * Move part of another category's limit here, with a slider: the total budget stays the same.
- * `donors`: categories with room left, most room first.
+ * Visual "pouring water" envelope transfer: drag a slider to pour spare budget from one category into another,
+ * watching both jars rebalance live while the total budget stays untouched.
  */
 export function MoveBudget({
   name,
   need,
+  targetSpent = 0,
+  targetLimit = 0,
   donors,
   onMove,
+  onCancel,
 }: {
   name: string;
   /** How much it's over (suggested amount). */
   need: number;
-  donors: { name: string; room: number }[];
+  targetSpent?: number;
+  targetLimit?: number;
+  donors: { name: string; room: number; spent?: number; limit?: number }[];
   onMove: (from: string, amount: number) => void;
+  onCancel?: () => void;
 }) {
   const { full, short, settings } = useSettings();
   const step = settings.currency === 'IDR' ? 10_000 : 1;
   const [open, setOpen] = useState(need > 0);
   const [from, setFrom] = useState(donors[0]?.name ?? '');
-  const room = donors.find(d => d.name === from)?.room ?? 0;
+  const donor = donors.find(d => d.name === from) ?? donors[0];
+  const room = donor?.room ?? 0;
   const max = Math.floor(room / step) * step;
   const suggest = Math.min(max, Math.ceil((need > 0 ? need : room * 0.25) / step) * step);
   const [amount, setAmount] = useState(suggest);
@@ -347,12 +565,20 @@ export function MoveBudget({
   if (!open)
     return (
       <button type="button" className={s.btnOutlineSm} onClick={() => setOpen(true)}>
-        Move budget here…
+        Pour budget here…
       </button>
     );
+
+  const donorAfterRoom = Math.max(0, room - value);
+  const donorCap = Math.max(1, donor?.limit ?? room);
+  const donorFillPct = Math.min(100, Math.round((donorAfterRoom / donorCap) * 100));
+  const targetNewLim = Math.max(1, targetLimit + value);
+  const targetUsedPct = Math.min(100, Math.round((targetSpent / targetNewLim) * 100));
+  const targetAfterDiff = targetNewLim - targetSpent;
+
   return (
     <div className={s.moveBox}>
-      <span className={s.statLabel}>Move budget to {name}</span>
+      <span className={s.statLabel}>Pour spare room into {name}</span>
       <div className={s.tplGrid}>
         {donors.slice(0, 5).map(d => (
           <button
@@ -369,6 +595,28 @@ export function MoveBudget({
           </button>
         ))}
       </div>
+      <div className={s.pourGrid}>
+        <div className={s.pourBarBox}>
+          <span className={s.pourBarTop}>
+            <span>{from}</span>
+            <strong>{short(donorAfterRoom)} left</strong>
+          </span>
+          <span className={s.pourTrack}>
+            <span className={s.pourFill} style={{ width: `${Math.max(4, donorFillPct)}%`, background: 'var(--clay)' }} />
+          </span>
+        </div>
+        <div className={s.pourBarBox}>
+          <span className={s.pourBarTop}>
+            <span>{name}</span>
+            <strong style={{ color: targetAfterDiff >= 0 ? C.good : C.redInk }}>
+              {targetAfterDiff >= 0 ? `${short(targetAfterDiff)} left` : `${short(-targetAfterDiff)} over`}
+            </strong>
+          </span>
+          <span className={s.pourTrack}>
+            <span className={s.pourFill} style={{ width: `${Math.max(4, targetUsedPct)}%`, background: targetAfterDiff >= 0 ? 'var(--good)' : 'var(--danger)' }} />
+          </span>
+        </div>
+      </div>
       <input
         type="range"
         className={s.moveSlider}
@@ -377,17 +625,33 @@ export function MoveBudget({
         step={step}
         value={value}
         onChange={e => setAmount(Number(e.target.value))}
-        aria-label={`Amount to move from ${from}`}
+        aria-label={`Amount to pour from ${from}`}
       />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 14, marginRight: 'auto' }}>
-          <strong>{full(value)}</strong> from {from} → {name}
+          Pour <strong>{full(value)}</strong> from {from} → {name}
         </span>
-        <button type="button" className={s.btnGhost} onClick={() => setOpen(false)}>
+        <button
+          type="button"
+          className={s.btnGhost}
+          onClick={() => {
+            setOpen(false);
+            onCancel?.();
+          }}
+        >
           Cancel
         </button>
-        <button type="button" className={s.btnPrimarySm} disabled={value <= 0} onClick={() => onMove(from, value)}>
-          Move
+        <button
+          type="button"
+          className={s.btnPrimarySm}
+          disabled={value <= 0}
+          onClick={() => {
+            haptic('success', settings.quietMode);
+            onMove(from, value);
+            onCancel?.();
+          }}
+        >
+          Pour budget
         </button>
       </div>
     </div>
