@@ -17,8 +17,8 @@ import { JournalEditor } from './JournalEditor';
 import { needsReview, reviewStats, SOURCE_NAME, type AnyTrade, type Source } from './trades';
 
 type Props = {
-  account: Source;
-  /** This account's trades (used for live trade embeds, monthly recap, and Maxie drafting). */
+  account: 'all' | Source;
+  /** All trades across accounts (used for live trade embeds, monthly recap, and Maxie drafting). */
   items: AnyTrade[];
   /** Money from rupiah, in the account's own currency. */
   dS: (idr: number, signed?: boolean) => string;
@@ -175,7 +175,9 @@ export function JournalFeed({ account, items, dS, onReview, draftFromTrade, onCo
     const embeds = topTrades.map(t => `[[trade:${t.key}]]`).join('\n\n');
     const summaryLine = monthStats.count
       ? `${monthStats.count} closed trades · ${Math.round(monthStats.winRate ?? 0)}% wins · ${dS(monthStats.pnl, true)}`
-      : `${SOURCE_NAME[account]} reflection`;
+      : account === 'all'
+        ? 'Trading & investing reflection'
+        : `${SOURCE_NAME[account]} reflection`;
     startNewEntry({
       title: `${curMonthName} — Trading Journal`,
       subtitle: summaryLine,
@@ -261,7 +263,10 @@ export function JournalFeed({ account, items, dS, onReview, draftFromTrade, onCo
   }
 
   // ---- Publication Feed View ----
-  const isMissingTable = err.toLowerCase().includes('journal_entries') && (err.toLowerCase().includes('does not exist') || err.toLowerCase().includes('could not find'));
+  const lowerErr = err.toLowerCase();
+  const isMissingTable =
+    lowerErr.includes('permission denied') ||
+    (lowerErr.includes('journal_entries') && (lowerErr.includes('does not exist') || lowerErr.includes('could not find')));
 
   return (
     <div className={s.subWrap}>

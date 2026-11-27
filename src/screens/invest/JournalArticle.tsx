@@ -323,6 +323,14 @@ export function JournalReader({
     }
   };
 
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   const mins = readingTimeMinutes(entry.body);
   const coverStorage =
     entry.coverPath && !entry.coverPath.startsWith('data:') && !entry.coverPath.startsWith('http')
@@ -330,13 +338,13 @@ export function JournalReader({
       : undefined;
 
   return (
-    <div className={s.subWrap}>
-      <div className={s.subTopBar}>
-        <button type="button" className={s.textBtnSm} style={{ paddingLeft: 0 }} onClick={onBack}>
-          <Icon d={IC.chevLeft} size={15} /> Back to Journal
+    <div className={s.subFullScreen} role="dialog" aria-modal="true" aria-label={entry.title || 'Journal entry'}>
+      <header className={s.subFsBar}>
+        <button type="button" className={s.subFsPillBtn} onClick={onBack}>
+          <Icon d={IC.chevLeft} size={15} /> Back
         </button>
-        <div className={s.subTopActions}>
-          <button type="button" className={s.btnOutlineSm} onClick={copyMarkdown}>
+        <div className={s.subFsBarRight}>
+          <button type="button" className={s.subFsPillBtn} onClick={copyMarkdown}>
             <Icon d={IC.copy} size={14} /> {copied ? 'Copied' : 'Copy'}
           </button>
           <button type="button" className={s.btnPrimarySm} onClick={onEdit}>
@@ -357,17 +365,19 @@ export function JournalReader({
                   await onDelete();
                 }}
               >
-                {deleting ? 'Deleting…' : 'Confirm delete'}
+                {deleting ? 'Deleting…' : 'Delete'}
               </button>
-              <button type="button" className={s.textBtnSm} onClick={() => setConfirmDel(false)}>
+              <button type="button" className={s.subFsPillBtn} onClick={() => setConfirmDel(false)}>
                 Cancel
               </button>
             </span>
           )}
         </div>
-      </div>
+      </header>
 
-      <article className={s.subArticle}>
+      <div className={s.subFsScroll}>
+        <div className={s.subFsInner}>
+          <article className={s.subFsArticle}>
         <header className={s.subArticleHead}>
           {entry.status === 'draft' && <span className={s.subDraftBadge}>Draft</span>}
           <h1 className={s.subTitle}>{entry.title || 'Untitled entry'}</h1>
@@ -518,6 +528,8 @@ export function JournalReader({
           </div>
         </form>
       </section>
+        </div>
+      </div>
 
       {zoom && (
         <div className={s.subLightbox} role="dialog" aria-modal="true" onClick={() => setZoom(null)}>

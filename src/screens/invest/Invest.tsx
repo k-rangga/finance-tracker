@@ -170,29 +170,31 @@ export function Invest({ cycle }: { cycle: Cycle }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Which account, and which view of it. */}
+      {/* Which account, and which view of it. Journal is shared across all trade types. */}
       <div className={s.invHead}>
-        <div className={s.pills} role="group" aria-label="Account">
-          {WORLDS.map(([k, label, ink]) => (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={world === k}
-              className={world === k ? s.optOn : s.opt}
-              onClick={() => {
-                setWorld(k);
-                setQ('');
-              }}
-            >
-              <span
-                className={s.badgeDot}
-                style={{ background: world === k ? 'rgba(255, 250, 242, 0.92)' : ink, display: 'inline-block', marginRight: 7, verticalAlign: 'middle' }}
-                aria-hidden="true"
-              />
-              {label}
-            </button>
-          ))}
-        </div>
+        {view !== 'journal' && (
+          <div className={s.pills} role="group" aria-label="Account">
+            {WORLDS.map(([k, label, ink]) => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={world === k}
+                className={world === k ? s.optOn : s.opt}
+                onClick={() => {
+                  setWorld(k);
+                  setQ('');
+                }}
+              >
+                <span
+                  className={s.badgeDot}
+                  style={{ background: world === k ? 'rgba(255, 250, 242, 0.92)' : ink, display: 'inline-block', marginRight: 7, verticalAlign: 'middle' }}
+                  aria-hidden="true"
+                />
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className={s.subTabList} role="tablist" aria-label="View">
           {(['trades', 'journal', 'insights'] as const).map(k => (
             <button key={k} type="button" role="tab" aria-selected={view === k} className={view === k ? s.subTabActive : s.subTab} onClick={() => setView(k)}>
@@ -200,27 +202,38 @@ export function Invest({ cycle }: { cycle: Cycle }) {
             </button>
           ))}
         </div>
-        <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            className={s.iconBtn}
-            onClick={refresh}
-            disabled={refreshing}
-            aria-label={perps ? 'Sync Hyperliquid' : 'Refresh prices'}
-            title={perps ? 'Sync Hyperliquid' : 'Refresh prices'}
-          >
-            <Icon d={IC.refresh} size={16} style={refreshing ? { animation: 'spin 1s linear infinite' } : undefined} />
-          </button>
-          {!perps && (
-            <button type="button" className={s.btnPrimarySm} onClick={() => setFormOpen(true)} aria-label="New entry">
-              <Icon d={IC.plus} size={16} />
-              New entry
+        {view !== 'journal' && (
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className={s.iconBtn}
+              onClick={refresh}
+              disabled={refreshing}
+              aria-label={perps ? 'Sync Hyperliquid' : 'Refresh prices'}
+              title={perps ? 'Sync Hyperliquid' : 'Refresh prices'}
+            >
+              <Icon d={IC.refresh} size={16} style={refreshing ? { animation: 'spin 1s linear infinite' } : undefined} />
             </button>
-          )}
-        </span>
+            {!perps && (
+              <button type="button" className={s.btnPrimarySm} onClick={() => setFormOpen(true)} aria-label="New trade">
+                <Icon d={IC.plus} size={16} />
+                New trade
+              </button>
+            )}
+          </span>
+        )}
       </div>
 
-      {perps && hl.state && !hl.state.address ? (
+      {view === 'journal' ? (
+        <JournalFeed
+          account="all"
+          items={items}
+          dS={dS}
+          onReview={toReview.length ? () => setReviewing(toReview) : undefined}
+          draftFromTrade={journalDraftTrade}
+          onConsumedDraftTrade={() => setJournalDraftTrade(null)}
+        />
+      ) : perps && hl.state && !hl.state.address ? (
         <ConnectWallet hl={hl} />
       ) : (
         <>
@@ -245,8 +258,8 @@ export function Invest({ cycle }: { cycle: Cycle }) {
             </span>
           </div>
 
-          {/* One filter bar: open or closed, when, which name, and what still needs a review. The Journal goes by month. */}
-          {view !== 'journal' && <div className={s.invFilters}>
+          {/* One filter bar: open or closed, when, which name, and what still needs a review. */}
+          <div className={s.invFilters}>
             {view === 'trades' && (
               <Select
                 ariaLabel="Open or closed"
@@ -284,19 +297,9 @@ export function Invest({ cycle }: { cycle: Cycle }) {
                 )}
               </>
             )}
-          </div>}
+          </div>
 
-          {view === 'journal' ? (
-            <JournalFeed
-              key={world}
-              account={world}
-              items={mine}
-              dS={money}
-              onReview={toReview.length ? () => setReviewing(toReview) : undefined}
-              draftFromTrade={journalDraftTrade}
-              onConsumedDraftTrade={() => setJournalDraftTrade(null)}
-            />
-          ) : view === 'trades' ? (
+          {view === 'trades' ? (
             <Journal
               today={cycle.today}
               todayISO={todayISO}

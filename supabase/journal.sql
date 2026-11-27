@@ -68,3 +68,11 @@ drop policy if exists "journal images own delete" on storage.objects;
 create policy "journal images own delete" on storage.objects
   for delete to authenticated
   using (bucket_id = 'journal-images' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Explicit table grants for authenticated users (required when default privileges don't auto-grant to authenticated).
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on public."journal_entries" to authenticated;
+grant select, insert, update, delete on public."journal_comments" to authenticated;
+
+-- Refresh PostgREST schema cache immediately.
+notify pgrst, 'reload schema';
