@@ -203,7 +203,7 @@ export function Invest({ cycle }: { cycle: Cycle }) {
           ))}
         </div>
         {view !== 'journal' && (
-          <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <span className={s.invHeadActions}>
             <button
               type="button"
               className={s.iconBtn}
@@ -212,12 +212,14 @@ export function Invest({ cycle }: { cycle: Cycle }) {
               aria-label={perps ? 'Sync Hyperliquid' : 'Refresh prices'}
               title={perps ? 'Sync Hyperliquid' : 'Refresh prices'}
             >
-              <Icon d={IC.refresh} size={16} style={refreshing ? { animation: 'spin 1s linear infinite' } : undefined} />
+              <Icon d={IC.refresh} size={15} style={refreshing ? { animation: 'spin 1s linear infinite' } : undefined} />
             </button>
             {!perps && (
               <button type="button" className={s.btnPrimarySm} onClick={() => setFormOpen(true)} aria-label="New trade">
-                <Icon d={IC.plus} size={16} />
-                New trade
+                <Icon d={IC.plus} size={14} />
+                <span>
+                  <span className={s.invNewLong}>New </span>trade
+                </span>
               </button>
             )}
           </span>
@@ -249,12 +251,14 @@ export function Invest({ cycle }: { cycle: Cycle }) {
             ))}
             <span className={s.invStatus}>
               <span style={{ color: hl.error && perps ? C.redInk : px.stale && !perps ? C.amberInk : undefined }}>{status_}</span>
-              {!perps && (
-                <button type="button" className={s.linkBtn} style={{ fontSize: 13 }} onClick={() => setPxOpen(true)}>
-                  Enter prices
-                </button>
-              )}
-              <span>All accounts {dS(allAccounts)}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span>All accounts {dS(allAccounts)}</span>
+                {!perps && (
+                  <button type="button" className={s.linkBtn} style={{ fontSize: 12.5 }} onClick={() => setPxOpen(true)}>
+                    Enter prices
+                  </button>
+                )}
+              </span>
             </span>
           </div>
 

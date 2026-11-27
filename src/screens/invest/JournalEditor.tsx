@@ -17,6 +17,7 @@ import {
 } from '../../lib/journal';
 import { draftJournalMonth } from '../../lib/perps';
 import { plInk } from '../../lib/tokens';
+import { useVisualViewport } from '../../lib/useVisualViewport';
 import { EmbeddedTradeCard, JournalArticleBody, JournalImage } from './JournalArticle';
 import type { AnyTrade } from './trades';
 
@@ -422,8 +423,17 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
     .split(/\s+/)
     .filter(Boolean).length;
 
+  const vp = useVisualViewport(true);
+
   return (
-    <div className={s.subFullScreen} role="dialog" aria-modal="true" aria-label="Journal editor">
+    <div
+      className={s.subFullScreen}
+      data-kb={vp.keyboardOpen ? '1' : undefined}
+      style={vp.height != null ? { top: vp.top, height: vp.height, bottom: 'auto' } : undefined}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Journal editor"
+    >
       {/* Substack-style minimal top bar */}
       <header className={s.subFsBar}>
         <div className={s.subFsBarLeft}>

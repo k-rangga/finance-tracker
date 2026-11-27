@@ -8,6 +8,7 @@ import type { Cycle } from '../lib/cycle';
 import type { FixedBillStatus } from '../lib/fixedBills';
 import { useData } from '../lib/data';
 import { useSettings } from '../lib/settings';
+import { useVisualViewport } from '../lib/useVisualViewport';
 import { useSetLimits } from '../lib/limits';
 import { onVercel } from '../lib/supabase';
 import { C } from '../lib/tokens';
@@ -246,14 +247,21 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
     // Once, on opening.
   }, []);
 
+  const vp = useVisualViewport(true);
+
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, busy, problem]);
+  }, [messages, busy, problem, vp.keyboardOpen]);
 
   const lastModelIdx = [...messages].map((m, i) => (m.role === 'model' ? i : -1)).filter(i => i >= 0).pop() ?? -1;
 
   return (
-    <div className={s.chatOverlay} onMouseDown={e => e.target === e.currentTarget && onClose()}>
+    <div
+      className={s.chatOverlay}
+      data-kb={vp.keyboardOpen ? '1' : undefined}
+      style={vp.height != null ? { top: vp.top, height: vp.height, bottom: 'auto' } : undefined}
+      onMouseDown={e => e.target === e.currentTarget && onClose()}
+    >
       <section className={`${s.chatPanel} fade-in`} role="dialog" aria-modal="true" aria-label="Ask Maxie">
         <header className={s.chatHead}>
           <span className={s.chatMark} style={{ overflow: 'hidden', padding: 0 }}>
