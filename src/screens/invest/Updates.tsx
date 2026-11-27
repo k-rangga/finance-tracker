@@ -2,7 +2,7 @@ import { useState } from 'react';
 import s from '../../styles/ui.module.css';
 import { Modal, Options } from '../../components/ui';
 import { C, plInk } from '../../lib/tokens';
-import { addFee, dirOf, isAdd, nat, numIn, positionHistory, UPDATE_LABEL, type PosState, type Trade, type TradeUpdate, type UpdateKind } from './model';
+import { addFee, dirOf, isAdd, isTrim, nat, numIn, positionHistory, trimFee, UPDATE_LABEL, type PosState, type Trade, type TradeUpdate, type UpdateKind } from './model';
 
 /** `15 Oct 2026, 09:30` */
 export const fmtAt = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -10,6 +10,7 @@ export const fmtAt = (iso: string) => new Date(iso).toLocaleString('en-GB', { da
 const KIND_COLORS: Record<UpdateKind, [string, string]> = {
   avg_up: [C.goodTint, C.good],
   avg_down: [C.amberTint, C.amberInk],
+  trim: [C.skyTint, C.sky],
   note: [C.divider, C.textSoft],
 };
 
@@ -18,6 +19,8 @@ const lotsLabel = (t: Pick<Trade, 'mk' | 'tk'>, q: number) =>
 
 /** `+5 lots @ Rp 7.900` */
 const addLabel = (t: Trade, u: TradeUpdate) => '+' + lotsLabel(t, u.q!) + ' @ ' + nat(u.px!, t.mk);
+/** `−5 lots @ Rp 9.500` */
+const trimLabel = (t: Trade, u: TradeUpdate) => '−' + lotsLabel(t, u.q!) + ' @ ' + nat(u.px!, t.mk);
 
 export function KindBadge({ kind }: { kind: UpdateKind }) {
   const [bg, ink] = KIND_COLORS[kind];
@@ -31,7 +34,7 @@ export function KindBadge({ kind }: { kind: UpdateKind }) {
 /** Updates on a trade, newest first. `t` is the stored entry (its first buy), not the averaged position. */
 export function UpdateTimeline({ t, updates, onOpen }: { t: Trade; updates: TradeUpdate[]; onOpen: (u: TradeUpdate) => void }) {
   const hist = positionHistory(t, updates).reverse();
-  if (!hist.length) return <span style={{ fontSize: 13, color: C.textMuted }}>No updates yet. Log an avg up, avg down or a note as the trade develops.</span>;
+  if (!hist.length) return <span style={{ fontSize: 13, color: C.textMuted }}>No updates yet. Log an avg up, avg down, profit trim or note as the trade develops.</span>;
   return (
     <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}>
       {hist.map(({ u, after }) => (
@@ -46,6 +49,14 @@ export function UpdateTimeline({ t, updates, onOpen }: { t: Trade; updates: Trad
               {isAdd(u) && (
                 <span style={{ fontSize: 14, fontWeight: 600 }}>
                   {addLabel(t, u)} <span style={{ fontWeight: 500, color: C.textMuted }}>(new avg {nat(after.avg, t.mk)})</span>
+                </span>
+              )}
+              {isTrim(u) && (
+                <span style={{ fontSize: 14, fontWeight: 600, color: C.sky }}>
+                  {trimLabel(t, u)}{' '}
+                  <span style={{ fontWeight: 500, color: C.textMuted }}>
+                    (recovered {nat(Math.max(0, u.px! * u.q! - trimFee(t, u)), t.mk)} · {lotsLabel(t, after.q)} left)
+                  </span>
                 </span>
               )}
               {u.note && (
@@ -99,7 +110,21 @@ export function UpdateDetail({ t, updates, update, last, onEdit, onDelete, onClo
             {row('After', pos(after))}
           </>
         )}
-        {row(isAdd(u) ? 'Unrealised P/L now' : 'Position now', isAdd(u) ? (pl >= 0 ? '+' : '−') + nat(Math.abs(pl), t.mk) + ` at ${nat(last, t.mk)}` : pos(after), isAdd(u) ? plInk(pl) : undefined)}
+        {isTrim(u) && (
+          <>
+            {row('Trim price', nat(u.px!, t.mk))}
+            {row('Quantity trimmed', lotsLabel(t, u.q!))}
+            {row('Fee', nat(trimFee(t, u), t.mk) + (u.fee == null ? ' (auto)' : ''))}
+            {row('Net principal recovered', nat(Math.max(0, u.px! * u.q! - trimFee(t, u)), t.mk), C.good)}
+            {row('Before', pos(before))}
+            {row('After', pos(after))}
+          </>
+        )}
+        {row(
+          isAdd(u) || isTrim(u) ? 'Unrealised P/L remaining' : 'Position now',
+          isAdd(u) || isTrim(u) ? (pl >= 0 ? '+' : '−') + nat(Math.abs(pl), t.mk) + ` at ${nat(last, t.mk)}` : pos(after),
+          isAdd(u) || isTrim(u) ? plInk(pl) : undefined,
+        )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <span className={s.label}>Note</span>
@@ -150,7 +175,8 @@ export function UpdateForm({ t, avg, last, editing, onClose, onSave }: {
   const [fee, setFee] = useState(editing?.fee != null ? String(editing.fee) : '');
   const [note, setNote] = useState(editing?.note ?? '');
   const [err, setErr] = useState('');
-  const add = kind !== 'note';
+  const hasQty = kind !== 'note';
+  const isTrimKind = kind === 'trim';
 
   const save = () => {
     const when = new Date(at);
@@ -158,14 +184,14 @@ export function UpdateForm({ t, avg, last, editing, onClose, onSave }: {
     const p = numIn(px, t.mk);
     const n = parseFloat(q.replace(/[^\d.]/g, '')) * (t.mk === 'IDX' ? 100 : 1);
     const f = numIn(fee, t.mk);
-    if (add && !(p > 0 && n > 0)) return setErr(`Enter the price and ${t.mk === 'IDX' ? 'lots' : 'quantity'} you bought.`);
-    if (!add && !note.trim()) return setErr('Write the note.');
+    if (hasQty && !(p > 0 && n > 0)) return setErr(`Enter the price and ${t.mk === 'IDX' ? 'lots' : 'quantity'} you ${isTrimKind ? 'trimmed' : 'bought'}.`);
+    if (!hasQty && !note.trim()) return setErr('Write the note.');
     onSave({
       id: editing?.id ?? 'tu' + Date.now(),
       tradeId: t.id,
       at: when.toISOString(),
       kind,
-      ...(add ? { px: p, q: n, ...(f >= 0 ? { fee: f } : {}) } : {}),
+      ...(hasQty ? { px: p, q: n, ...(f >= 0 ? { fee: f } : {}) } : {}),
       ...(note.trim() ? { note: note.trim() } : {}),
     });
   };
@@ -176,7 +202,7 @@ export function UpdateForm({ t, avg, last, editing, onClose, onSave }: {
         <span className={s.label}>Type</span>
         <Options
           label="Type"
-          items={['avg_up', 'avg_down', 'note'] as const}
+          items={['avg_up', 'avg_down', 'trim', 'note'] as const}
           value={kind}
           onChange={k => {
             setKind(k);
@@ -185,16 +211,22 @@ export function UpdateForm({ t, avg, last, editing, onClose, onSave }: {
           }}
           render={k => UPDATE_LABEL[k]}
         />
-        {add && <span style={{ fontSize: 13, color: C.textMuted }}>Current average {nat(avg, t.mk)}</span>}
+        {hasQty && (
+          <span style={{ fontSize: 13, color: C.textMuted }}>
+            {isTrimKind
+              ? `Current average ${nat(avg, t.mk)} — trimming pulls principal back toward a Free-Roll Asset without changing your avg cost.`
+              : `Current average ${nat(avg, t.mk)}`}
+          </span>
+        )}
       </div>
       <label className={s.field}>
         Date and time
         <input className={s.input} type="datetime-local" value={at} onChange={e => setAt(e.target.value)} />
       </label>
-      {add && (
+      {hasQty && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
           <label className={s.field}>
-            Price ({cur})
+            {isTrimKind ? `Sell price (${cur})` : `Price (${cur})`}
             <input
               className={s.input}
               inputMode="decimal"
@@ -216,12 +248,18 @@ export function UpdateForm({ t, avg, last, editing, onClose, onSave }: {
           </label>
           <label className={s.field}>
             Fee ({cur}, optional)
-            <input className={s.input} inputMode="decimal" value={fee} placeholder={t.mk === 'IDX' ? 'Auto 0.15%' : 'Auto 0.1%'} onChange={e => setFee(e.target.value)} />
+            <input
+              className={s.input}
+              inputMode="decimal"
+              value={fee}
+              placeholder={t.mk === 'IDX' ? (isTrimKind ? 'Auto 0.25%' : 'Auto 0.15%') : 'Auto 0.1%'}
+              onChange={e => setFee(e.target.value)}
+            />
           </label>
         </div>
       )}
       <label className={s.field}>
-        {add ? 'Note (optional)' : 'Note'}
+        {hasQty ? 'Note (optional)' : 'Note'}
         <textarea className={s.input} rows={4} value={note} onChange={e => {
             setNote(e.target.value);
             setErr('');

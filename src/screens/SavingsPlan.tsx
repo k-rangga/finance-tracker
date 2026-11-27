@@ -11,12 +11,18 @@ import { dayLabel, dayMonth, diffDays, ordinal } from '../lib/format';
 import { C } from '../lib/tokens';
 
 import { NextCycle, PlannedExpenses } from './NextCycle';
+import { CashflowStatementCard, PayYourselfFirstCard, WishlistCard } from './WealthSection';
 import type { Bill } from '../data/transactions';
+import type { FortAssetsAlert, ImpulseSummary, LifestyleCreepSignal, WealthSnapshot } from '../lib/wealth';
 
-/** `children` sit under the monthly plan (Subscriptions). `view`: this cycle, or planning the next one. */
+/** `children` sit under the monthly plan (Installments & Subscriptions). `view`: this cycle, or planning the next one. */
 type Props = {
   cycle: Cycle;
   budget: Budget;
+  wealth?: WealthSnapshot;
+  impulse?: ImpulseSummary;
+  fortDip?: FortAssetsAlert | null;
+  lifestyleCreep?: LifestyleCreepSignal | null;
   onOpenInvest: () => void;
   onShowTransactions: (cat: string) => void;
   view: 'this' | 'next';
@@ -26,7 +32,7 @@ type Props = {
   children?: ReactNode;
 };
 
-export function SavingsPlan({ cycle, budget: b, onOpenInvest, onShowTransactions, view, setView, next, nextKnown, children }: Props) {
+export function SavingsPlan({ cycle, budget: b, wealth, impulse, fortDip, lifestyleCreep, onOpenInvest, onShowTransactions, view, setView, next, nextKnown, children }: Props) {
   const switcher = (
     <div className={s.segment} role="group" aria-label="Which cycle" style={{ alignSelf: 'flex-start' }}>
       {(['this', 'next'] as const).map(v => (
@@ -48,9 +54,15 @@ export function SavingsPlan({ cycle, budget: b, onOpenInvest, onShowTransactions
       {switcher}
       <ActionPlan cycle={cycle} budget={b} onShowTransactions={onShowTransactions} />
 
+      <PayYourselfFirstCard cycle={cycle} budget={b} fortDip={fortDip ?? null} lifestyleCreep={lifestyleCreep ?? null} onOpenInvest={onOpenInvest} />
+
       <PlannedExpenses cycle={cycle} budget={b} />
 
       <MonthlyPlan budget={b} onOpenInvest={onOpenInvest} />
+
+      {wealth && impulse && <CashflowStatementCard cycle={cycle} budget={b} wealth={wealth} impulse={impulse} />}
+
+      {wealth && <WishlistCard cycle={cycle} budget={b} wealth={wealth} />}
 
       {children}
 

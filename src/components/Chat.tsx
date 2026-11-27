@@ -18,6 +18,7 @@ import { tidyName, toISO } from '../lib/format';
 import { paceInsight, weekendSafeSplit } from '../lib/pace';
 import { newJournalId, saveJournalEntry } from '../lib/journal';
 import { startChallenge } from '../screens/categoriesExtras';
+import type { FortAssetsAlert, ImpulseSummary, LifestyleCreepSignal, WealthSnapshot } from '../lib/wealth';
 
 /** Stop waiting after this long; per-model fetches abort at 22s and fall back automatically. */
 const TIMEOUT_MS = 45_000;
@@ -143,6 +144,7 @@ function buildStarters(
   b: Budget,
   short: (v: number) => string,
   isId: boolean,
+  wealth?: WealthSnapshot,
 ): StarterChip[] {
   const left = b.budget - b.spent - b.fixedDue;
   const insight = paceInsight({
@@ -202,10 +204,10 @@ function buildStarters(
     });
   }
 
-  // 2. Affordability / Weekend budget chip
+  // 2. "How can I afford it?" / Runway & Weekend budget chip
   out.push({
     icon: IC.wallet,
-    title: isId ? 'Bisa jajan berapa?' : 'Can I afford a treat?',
+    title: isId ? 'Gimana cara membelinya?' : 'How can I afford it?',
     sub: wkSplit
       ? isId
         ? `Akhir pekan ${short(wkSplit.weekendSafe)}/hr`
@@ -214,17 +216,33 @@ function buildStarters(
         ? `Aman ${short(b.safeDay)}/hari`
         : `Safe at ${short(b.safeDay)}/day`,
     prompt: isId
-      ? 'Dengan sisa anggaran dan tagihan yang akan datang, berapa ruang aman buat belanja santai minggu ini?'
-      : 'Based on my remaining budget and upcoming bills, what can I comfortably spend on a treat this week?',
+      ? 'Dengan sisa anggaran, tabungan, dan asetku sekarang, gimana cara beli keinginan tanpa ganggu tabungan atau nambah cicilan?'
+      : 'With my remaining budget, savings, and assets right now, how can I afford a treat or bigger purchase without touching savings or adding debt?',
   });
 
-  // 3. Tidy Buffer OR Savings goal
+  // 3. Tidy Buffer OR Runway & Freedom check OR Savings goal
   if (bufferCount > 0) {
     out.push({
       icon: IC.tag,
       title: isId ? `Rapikan ${bufferCount} Buffer` : `Tidy ${bufferCount} in Buffer`,
       sub: isId ? 'Bantu pilah otomatis' : 'Suggest categories & rules',
       prompt: isId ? `Bantu rapikan ${bufferCount} transaksi di Buffer dan sarankan kategorinya.` : `Help me sort my ${bufferCount} Buffer ${bufferCount === 1 ? 'transaction' : 'transactions'} and suggest categories.`,
+    });
+  } else if (wealth) {
+    out.push({
+      icon: IC.shield,
+      title: isId ? 'Cek runway & aset' : 'Check my runway & assets',
+      sub:
+        wealth.runwayMonths > 0
+          ? isId
+            ? `${wealth.runwayMonths.toFixed(1)} bln runway · ${wealth.freedomPct.toFixed(0)}% bebas`
+            : `${wealth.runwayMonths.toFixed(1)} mo runway · ${wealth.freedomPct.toFixed(0)}% freedom`
+          : isId
+            ? 'Dana darurat & arus kas'
+            : 'Emergency fund & cash flow',
+      prompt: isId
+        ? 'Kalau aku berhenti kerja hari ini, berapa lama dana daruratku bertahan, dan bagaimana posisi aset vs kewajibanku?'
+        : 'If I stopped working today, how long is my survival runway, and how does my asset vs. liability balance look?',
     });
   } else if (b.savingsTarget > 0 && b.saved < b.savingsTarget) {
     out.push({
@@ -253,6 +271,12 @@ type Props = {
   allTxs: TxView[];
   /** Individual fixed bills and their verification status this cycle. */
   fixedBills?: FixedBillStatus[];
+  /** Unified Rich Dad + Jakarta behavioral snapshot for holistic coaching. */
+  wealth?: WealthSnapshot;
+  impulse?: ImpulseSummary;
+  fortDip?: FortAssetsAlert | null;
+  lifestyleCreep?: LifestyleCreepSignal | null;
+  pyfStreak?: number;
   /** Asked as soon as the panel opens (e.g. from Summary's greeting or alerts). */
   ask?: string | null;
   /** On mobile, render as a standalone full-screen page (no underlying page DOM). */
@@ -264,7 +288,7 @@ type Props = {
  * Chat with Maxie about this cycle. Persists across panel close/reopen within this browser session, supports Quick vs
  * Deep reasoning modes, context-aware starters, one-tap follow-up chips, and safe Apply/Undo action cards.
  */
-export function Chat({ cycle, budget, allTxs, fixedBills, ask, pageMode, onClose }: Props) {
+export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortDip, lifestyleCreep, pyfStreak, ask, pageMode, onClose }: Props) {
   const { settings, update, short } = useSettings();
   const { notes } = useData();
   const sessionKey = 'maxie.chat.' + toISO(cycle.start);
@@ -288,7 +312,7 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, pageMode, onClose
   const input = useRef<HTMLTextAreaElement>(null);
 
   const isId = settings.maxieLanguage === 'id';
-  const starters = useMemo(() => buildStarters(cycle, budget, short, isId), [cycle, budget, short, isId]);
+  const starters = useMemo(() => buildStarters(cycle, budget, short, isId, wealth), [cycle, budget, short, isId, wealth]);
   const openingPulse = useMemo(() => buildOpeningPulse(cycle, budget, short, isId), [cycle, budget, short, isId]);
   const left = budget.budget - budget.spent - budget.fixedDue;
   const bufferCount = useMemo(() => budget.txs.filter(t => t.cat === 'Buffer' && !t.isIncome && !t.isTransfer).length, [budget.txs]);
@@ -371,7 +395,10 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, pageMode, onClose
     const id = ++asking.current;
     const timeout = new Promise<'slow'>(r => setTimeout(() => r('slow'), TIMEOUT_MS));
     try {
-      const a = await Promise.race([askGemini(convo, chatContext({ cycle, budget, settings, notes, withNotes, fixedBills }), useDeep), timeout]);
+      const a = await Promise.race([
+        askGemini(convo, chatContext({ cycle, budget, settings, notes, withNotes, fixedBills, wealth, impulse, fortDip, lifestyleCreep, pyfStreak }), useDeep),
+        timeout,
+      ]);
       if (id !== asking.current) return;
       if (a === 'slow') setProblem({ kind: 'slow' });
       else if ('error' in a) setProblem({ kind: a.error, detail: a.detail });
@@ -581,7 +608,7 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, pageMode, onClose
                 <div className={s.chatTheirsCol}>
                   <div className={s.chatTheirs}>
                     <Rich text={clean.reply} />
-                    <ReplyWidget question={prevUserQ} cycle={cycle} budget={budget} short={short} isId={isId} />
+                    <ReplyWidget question={prevUserQ} cycle={cycle} budget={budget} wealth={wealth} short={short} isId={isId} />
                     {m.actions && m.actions.length > 0 && <ActionGroup actions={m.actions} allTxs={allTxs} />}
                     <span className={s.chatRate}>
                       {(['up', 'down'] as const).map(r => (
@@ -730,16 +757,51 @@ function ReplyWidget({
   question,
   cycle,
   budget: b,
+  wealth,
   short,
   isId,
 }: {
   question: string;
   cycle: Cycle;
   budget: Budget;
+  wealth?: WealthSnapshot;
   short: (v: number) => string;
   isId: boolean;
 }) {
   if (!question) return null;
+
+  if (wealth && /runway|darurat|emergency|freedom|rat race|aset|asset|liabilit|kewajiban|net worth|pasif|passive|rich dad|bebas|survive|bertahan/i.test(question)) {
+    return (
+      <div className={s.chatWidget}>
+        <span className={s.chatWidgetEyebrow}>{isId ? 'Runway & Kebebasan Aset' : 'Survival Runway & Asset Freedom'}</span>
+        <div className={s.chatWidgetStats}>
+          <span>
+            <span className={s.caption}>{isId ? 'Runway darurat' : 'Emergency runway'}</span>
+            <strong style={{ color: wealth.runwayMonths >= wealth.emergencyTargetMonths ? C.good : undefined }}>
+              {wealth.runwayMonths > 0 ? `${wealth.runwayMonths.toFixed(1)} mo` : 'Not set'}
+            </strong>
+          </span>
+          <span>
+            <span className={s.caption}>{isId ? 'Aset produktif' : 'Assets'}</span>
+            <strong>{short(wealth.assetsTotal)}</strong>
+          </span>
+          <span>
+            <span className={s.caption}>{isId ? 'Kewajiban' : 'Liabilities'}</span>
+            <strong style={{ color: wealth.liabilitiesTotal > 0 ? C.amberInk : C.good }}>{short(wealth.liabilitiesTotal)}</strong>
+          </span>
+        </div>
+        <div className={s.chatWidgetRow}>
+          <div className={s.chatWidgetTop}>
+            <span>{isId ? 'Rasio kebebasan (pasif / pengeluaran)' : 'Freedom ratio (passive / expenses)'}</span>
+            <strong style={{ color: wealth.freedomPct >= 100 ? C.good : undefined }}>{wealth.freedomPct.toFixed(1)}%</strong>
+          </div>
+          <span className={s.chatWidgetTrack}>
+            <span className={s.chatWidgetFill} style={{ width: `${Math.min(100, Math.max(2, wealth.freedomPct))}%`, background: 'var(--good)' }} />
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   if (/merchant|going|biggest|perginya|terbesar|most|banyak/i.test(question)) {
     const m = new Map<string, { name: string; count: number; total: number }>();
@@ -1042,6 +1104,53 @@ function usePrepareAction(allTxs: TxView[]) {
           const next = [...prev.filter(c => c.category !== cat.name), startChallenge(cat.name, new Date())];
           update({ challenges: next });
           return () => update({ challenges: prev });
+        },
+      };
+    }
+    if (a.type === 'wishlist') {
+      const name = String(a.name ?? '').trim().slice(0, 60);
+      const amount = Math.max(0, Math.round(Number(a.amount) || 0));
+      const coolDays = Math.max(1, Math.min(90, Math.round(Number(a.coolDays) || 3)));
+      if (!name || !(amount > 0)) return null;
+      return {
+        title: (
+          <>
+            Pause <strong>{name}</strong> ({short(amount)}) in Cooling-Off Wishlist
+          </>
+        ),
+        preview: `${coolDays}-day pause before buying — fund from assets or surplus, not impulse.`,
+        why: a.why,
+        apply: () => {
+          const prev = settings.wishlist ?? [];
+          const id = 'wl_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+          const next = [
+            { id, name, amount, addedAt: toISO(new Date()), coolDays, fundingMode: 'assets' as const, status: 'cooling' as const },
+            ...prev,
+          ];
+          update({ wishlist: next });
+          return () => update({ wishlist: prev });
+        },
+      };
+    }
+    if (a.type === 'pay_yourself_first') {
+      const nextSave = a.savingsPct != null ? Math.max(0, Math.min(90, Math.round(Number(a.savingsPct)))) : undefined;
+      const nextInv = a.investPct != null ? Math.max(0, Math.min(90, Math.round(Number(a.investPct)))) : undefined;
+      if (nextSave == null && nextInv == null) return null;
+      const parts: string[] = [];
+      if (nextSave != null) parts.push(`Savings ${settings.savingsPct}% → ${nextSave}%`);
+      if (nextInv != null) parts.push(`Invest ${settings.investPct}% → ${nextInv}%`);
+      return {
+        title: <>Update Pay-Yourself-First targets</>,
+        preview: parts.join(' · '),
+        why: a.why,
+        apply: () => {
+          const prevSave = settings.savingsPct;
+          const prevInv = settings.investPct;
+          update({
+            ...(nextSave != null ? { savingsPct: nextSave } : {}),
+            ...(nextInv != null ? { investPct: nextInv } : {}),
+          });
+          return () => update({ savingsPct: prevSave, investPct: prevInv });
         },
       };
     }

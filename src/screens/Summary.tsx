@@ -21,14 +21,23 @@ import { UpcomingBills } from '../components/UpcomingBills';
 import type { ActivityFilter } from './Activity';
 import { TargetIcon } from './categoriesExtras';
 import { CycleStoryModal, resolveVignetteScene, VignetteSvg } from './SummaryRituals';
+import { WealthCompactStrip } from './WealthSection';
+import type { FortAssetsAlert, ImpulseSummary, LifestyleCreepSignal, WealthSnapshot } from '../lib/wealth';
 
 type TxPatch = Pick<ActivityFilter, 'range'> & Partial<ActivityFilter>;
 
 type SummaryProps = {
   cycle: Cycle;
   budget: Budget;
+  wealth?: WealthSnapshot;
+  impulse?: ImpulseSummary;
+  fortDip?: FortAssetsAlert | null;
+  lifestyleCreep?: LifestyleCreepSignal | null;
+  pyfStreak?: number;
   onOpenCategory: (name: string) => void;
   onOpenCategories: () => void;
+  onOpenPlan?: () => void;
+  onOpenInvest?: () => void;
   /** Skip or remove an upcoming bill for this cycle. */
   onDismissBill: (b: Bill) => void;
   /** 1-tap mark a fixed bill as paid for this cycle. */
@@ -43,10 +52,27 @@ type SummaryProps = {
 
 /**
  * The cycle at a glance, charts first: one unified Maxie companion bar (vignette, greeting, and Cycle Story),
- * gentle alerts, what's left, three warm interactive tiles, spending by day, where the money went (treemap),
+ * gentle alerts, what's left, three warm interactive tiles, wealth runway pulse, spending by day, where the money went (treemap),
  * upcoming bills, and recent activity.
  */
-export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, onDismissBill, onMarkBillPaid, onShowTransactions, onPlanNext, onAskMaxie }: SummaryProps) {
+export function Summary({
+  cycle,
+  budget: b,
+  wealth,
+  impulse,
+  fortDip,
+  lifestyleCreep,
+  pyfStreak,
+  onOpenCategory,
+  onOpenCategories,
+  onOpenPlan,
+  onOpenInvest,
+  onDismissBill,
+  onMarkBillPaid,
+  onShowTransactions,
+  onPlanNext,
+  onAskMaxie,
+}: SummaryProps) {
   const { ofIncome, settings } = useSettings();
   const id = toISO(cycle.start);
   const todayISO = toISO(cycle.today);
@@ -95,6 +121,18 @@ export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, on
         onSavings={() => onShowTransactions({ range: 'cycle', cat: b.saved > 0 ? SAVINGS_CATEGORY : TRANSFER_CATEGORY })}
         onBills={scrollToBills}
       />
+      {wealth && impulse && (
+        <WealthCompactStrip
+          wealth={wealth}
+          impulse={impulse}
+          fortDip={fortDip ?? null}
+          lifestyleCreep={lifestyleCreep ?? null}
+          pyfStreak={pyfStreak ?? 0}
+          onOpenPlan={onOpenPlan ?? onPlanNext}
+          onOpenInvest={onOpenInvest ?? onOpenCategories}
+          onAskMaxie={onAskMaxie}
+        />
+      )}
       <DailyBars cycle={cycle} budget={b} onOpenDay={iso => onShowTransactions({ range: 'custom', from: iso, to: iso })} />
       <WhereMap cycle={cycle} budget={b} onOpenCategory={onOpenCategory} onOpenCategories={onOpenCategories} />
       <UpcomingBills id="summary-bills" cycle={cycle} bills={b.bills} limit={5} compact onDismiss={onDismissBill} onMarkPaid={onMarkBillPaid} />
@@ -104,7 +142,7 @@ export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, on
         onSeeAll={range => onShowTransactions({ range })}
         onOpenTx={t => onShowTransactions({ range: 'custom', from: toISO(t.date), to: toISO(t.date), cat: categoryByName(t.cat) ? t.cat : '' })}
       />
-      <CycleStoryModal cycle={cycle} budget={b} open={storyOpen} onClose={() => setStoryOpen(false)} />
+      <CycleStoryModal cycle={cycle} budget={b} wealth={wealth} pyfStreak={pyfStreak} open={storyOpen} onClose={() => setStoryOpen(false)} />
     </div>
   );
 }

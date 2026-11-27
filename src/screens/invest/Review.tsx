@@ -2,18 +2,25 @@ import s from '../../styles/ui.module.css';
 import { Card, CardHead, Stat } from '../../components/ui';
 import { Logo } from '../../components/Logo';
 import { fullDate } from '../../lib/format';
+import { useSettings } from '../../lib/settings';
 import { C, plInk } from '../../lib/tokens';
+import { evaluateNoiseVsAnalysis } from '../../lib/wealth';
 import { fmtR } from './model';
 import { reviewStats, type AnyTrade, type Group } from './trades';
 
 /**
  * How well you trade, from one account's closed trades in the chosen period: three numbers, what they say, and
- * where the results come from — by name, side, setup and the mistakes you tagged. `dS` shows money in the
- * account's own currency (items are in rupiah).
+ * where the results come from — by name, side, setup, idea source (analysis vs. noise), and the mistakes you tagged.
+ * `dS` shows money in the account's own currency (items are in rupiah).
  */
 export function Review({ today, items, from, dS }: { today: Date; items: AnyTrade[]; from: number; dS: (idr: number, signed?: boolean) => string }) {
+  const { settings } = useSettings();
   const closed = items.filter(t => t.closed && t.closed.getTime() >= from);
   const st = reviewStats(closed);
+  const noiseRows = evaluateNoiseVsAnalysis(
+    closed.filter(t => t.manual).map(t => ({ id: t.manual!.id, pnl: t.pnl })),
+    settings.tradeSources ?? {},
+  );
   const nextReview = new Date(today.getFullYear(), today.getMonth() + 1, 1);
   const n = (k: number) => k + (k === 1 ? ' trade' : ' trades');
   const wins = (g: Group) => Math.round((g.wins / g.trades) * 100) + '% wins';
@@ -31,6 +38,14 @@ export function Review({ today, items, from, dS }: { today: Date; items: AnyTrad
       ink: st.avgFollowed >= st.avgNotFollowed ? C.good : C.amberInk,
       text: `Following your plan averaged ${dS(st.avgFollowed, true)} a trade; not following it, ${dS(st.avgNotFollowed, true)}.`,
     });
+  if (noiseRows.length === 2) {
+    const own = noiseRows.find(r => r.group === 'Own analysis')!;
+    const noise = noiseRows.find(r => r.group === 'Tips & social noise')!;
+    findings.push({
+      ink: own.pnl >= noise.pnl ? C.good : C.amberInk,
+      text: `Own analysis made ${dS(own.pnl, true)} (${Math.round(own.winRate)}% wins); tips & social noise made ${dS(noise.pnl, true)} (${Math.round(noise.winRate)}% wins).`,
+    });
+  }
   const costs = st.fees - st.funding;
   if (costs > 0 && st.count)
     findings.push({
@@ -101,6 +116,17 @@ export function Review({ today, items, from, dS }: { today: Date; items: AnyTrad
                   By setup
                 </h3>
                 <Breakdown rows={[...st.bySetup].reverse()} fmt={v => dS(v, true)} />
+              </>
+            )}
+            {noiseRows.length > 0 && (
+              <>
+                <h3 className={s.sideTitle} style={{ marginTop: 6 }}>
+                  Noise vs. analysis
+                </h3>
+                <Breakdown
+                  rows={noiseRows.map(r => ({ key: r.group, trades: r.trades, wins: r.wins, pnl: r.pnl }))}
+                  fmt={v => dS(v, true)}
+                />
               </>
             )}
             {st.liquidated > 0 && <span style={{ fontSize: 13, color: C.redInk }}>{n(st.liquidated)} liquidated.</span>}

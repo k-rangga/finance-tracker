@@ -12,6 +12,9 @@ import {
   type JournalEntry,
 } from '../../lib/journal';
 import { C, plInk } from '../../lib/tokens';
+import type { Budget } from '../../lib/budget';
+import { useSettings } from '../../lib/settings';
+import type { ImpulseSummary, WealthSnapshot } from '../../lib/wealth';
 import { JournalImage, JournalReader } from './JournalArticle';
 import { JournalEditor } from './JournalEditor';
 import { needsReview, reviewStats, SOURCE_NAME, type AnyTrade, type Source } from './trades';
@@ -22,6 +25,10 @@ type Props = {
   items: AnyTrade[];
   /** Money from rupiah, in the account's own currency. */
   dS: (idr: number, signed?: boolean) => string;
+  /** Optional cycle & wealth context for guided Rich Dad / Jakarta reflection templates. */
+  wealth?: WealthSnapshot;
+  budget?: Budget;
+  impulse?: ImpulseSummary;
   /** Opens the quick review, when trades are waiting. */
   onReview?: () => void;
   /** Optional trade to immediately start a new journal entry from. */
@@ -43,7 +50,8 @@ const monthOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padS
  * - Click any entry for the Reader view (with inline images, embedded trade cards, and bottom Reflections/Comments)
  * - Distraction-free Editor with autosave, paste/drop image upload, live trade embeds, and Maxie drafting
  */
-export function JournalFeed({ account, items, dS, onReview, draftFromTrade, onConsumedDraftTrade }: Props) {
+export function JournalFeed({ account, items, dS, wealth, budget, impulse, onReview, draftFromTrade, onConsumedDraftTrade }: Props) {
+  const { short } = useSettings();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -197,6 +205,92 @@ export function JournalFeed({ account, items, dS, onReview, draftFromTrade, onCo
     });
   };
 
+  /** Guided reflection 1 (Jakarta study: parental & cultural money scripts). */
+  const startMoneyScripts = () => {
+    startNewEntry({
+      title: 'My Money Scripts — What I Keep vs. Rewrite',
+      subtitle: 'Understanding the saving & spending beliefs I grew up with',
+      tags: ['Money scripts', 'Mindset'],
+      body: [
+        '## 1. Habits I inherited from home',
+        'What did my parents or family teach me about saving, debt, and investing?',
+        '',
+        '- ',
+        '',
+        '## 2. Which beliefs still serve me',
+        '',
+        '- ',
+        '',
+        '## 3. Which scripts I am rewriting now',
+        '(e.g., shifting from "I can\'t afford it" to "How can I afford it?", or building an asset column before upgrading lifestyle)',
+        '',
+        '- ',
+        '',
+        '> One calm money habit I am practicing this cycle: ',
+      ].join('\n'),
+    });
+  };
+
+  /** Guided reflection 2 (Rich Dad: Full Personal Cash-Flow Statement letter). */
+  const startCashflowLetter = () => {
+    const snapshotLines = wealth
+      ? [
+          `- **Survival Runway:** ${wealth.runwayMonths.toFixed(1)} months (${wealth.runwayDays} days forward)`,
+          `- **Freedom Ratio:** ${wealth.freedomPct.toFixed(1)}% (${short(wealth.passiveMonthly)}/mo passive vs. ${short(wealth.monthlyExpenses)}/mo expenses · ${wealth.freedomStage})`,
+          `- **Balance Sheet:** ${short(wealth.assetsTotal)} productive assets vs. ${short(wealth.liabilitiesTotal)} liabilities (net ${short(wealth.netProductiveWealth)})`,
+          ...(budget ? [`- **Savings Rate this cycle:** ${Math.round(budget.savedPct)}% (${short(budget.saved)} saved, ${short(budget.invested)} invested)`] : []),
+          ...(impulse && impulse.skipCount > 0
+            ? [`- **Impulse Leaks Tagged:** ${impulse.skipCount}× (${short(impulse.skipTotal)})${impulse.topTrigger ? ` · #1 trigger: ${impulse.topTrigger.label}` : ''}`]
+            : []),
+        ]
+      : ['- **Survival Runway:** ', '- **Freedom Ratio:** ', '- **Assets vs. Liabilities:** '];
+    startNewEntry({
+      title: `${curMonthName} — Personal Cash-Flow Letter`,
+      subtitle: wealth ? `Runway ${wealth.runwayMonths.toFixed(1)} mo · Freedom ${wealth.freedomPct.toFixed(1)}%` : 'Monthly wealth & cash-flow check-in',
+      tags: ['Cash-flow letter', 'Wealth'],
+      body: [
+        '## Snapshot',
+        ...snapshotLines,
+        '',
+        '## Assets I added or strengthened',
+        '',
+        '- ',
+        '',
+        '## Liabilities or impulse leaks I cut',
+        '',
+        '- ',
+        '',
+        '## Next cycle focus ("How can I grow my asset column?")',
+        '',
+        '> ',
+      ].join('\n'),
+    });
+  };
+
+  /** Guided reflection 3 (Rich Dad: Loss -> Lesson post-mortem). */
+  const startLossToLesson = () => {
+    const lastLoss = items.find(t => t.closed && t.pnl < 0);
+    startNewEntry({
+      title: lastLoss ? `Lesson from ${lastLoss.name} (${curMonthName})` : `Loss → Lesson Post-Mortem (${curMonthName})`,
+      subtitle: 'Winners are inspired by losses — turning tuition into a repeatable rule',
+      tags: ['Loss to lesson', 'Process'],
+      body: [
+        ...(lastLoss ? [`[[trade:${lastLoss.key}]]`, ''] : []),
+        '## What actually happened (facts only)',
+        '',
+        '- ',
+        '',
+        '## Was it my thesis, sizing, timing, or outside noise?',
+        '',
+        '- ',
+        '',
+        '## The exact rule I am adding to my checklist',
+        '',
+        '> ',
+      ].join('\n'),
+    });
+  };
+
   // All tags across entries (sorted by frequency).
   const allTags = useMemo(() => {
     const freq = new Map<string, number>();
@@ -305,6 +399,20 @@ export function JournalFeed({ account, items, dS, onReview, draftFromTrade, onCo
           </span>
         </div>
       )}
+
+      {/* Guided Rich Dad & Behavioral Reflection Starters */}
+      <div className={s.subTagFilterRow} role="group" aria-label="Guided reflection templates">
+        <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 600, alignSelf: 'center', marginRight: 2 }}>Templates:</span>
+        <button type="button" className={s.subTagChip} onClick={startCashflowLetter}>
+          + Cash-Flow Letter
+        </button>
+        <button type="button" className={s.subTagChip} onClick={startMoneyScripts}>
+          + Money Scripts
+        </button>
+        <button type="button" className={s.subTagChip} onClick={startLossToLesson}>
+          + Loss → Lesson
+        </button>
+      </div>
 
       {/* Search & Filter Bar */}
       {entries.length > 0 && (

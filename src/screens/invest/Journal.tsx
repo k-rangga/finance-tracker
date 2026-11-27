@@ -4,7 +4,9 @@ import { Dot } from '../../components/ui';
 import { usd } from '../../lib/perps';
 import { IC, Icon } from '../../components/Icon';
 import { diffDays, fmtPct, parseISO } from '../../lib/format';
+import { useSettings } from '../../lib/settings';
 import { C, plInk } from '../../lib/tokens';
+import { computeReturnOfCapital, IDEA_SOURCES } from '../../lib/wealth';
 import {
   dirOf,
   fmtD,
@@ -18,6 +20,8 @@ import {
   qtyLabel,
   rMultiple,
   isAdd,
+  totalBoughtCostOf,
+  trimmedProceedsOf,
   type FollowedPlan,
   type Portfolio,
   type Trade,
@@ -148,6 +152,7 @@ function ManualReview({ ex, onSave }: { ex: NonNullable<Trade['ex']>; onSave: (e
 }
 
 export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onClose, stored, updates, onEdit, onSaveUpdate, onDeleteUpdate, onJournalTrade }: Props) {
+  const { settings } = useSettings();
   const { dS } = useInvestFmt();
   /** Add/edit update form, and the detail view of one update. */
   const [form, setForm] = useState<{ t: Trade; editing?: TradeUpdate } | null>(null);
@@ -232,6 +237,19 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
               ? 'No date set'
               : 'Add one so the position has a reason to move';
 
+          const raw = storedOf(t);
+          const toDisp = (idr: number) => (settings.currency === 'USD' ? idr / settings.fxRate : idr);
+          const roc = computeReturnOfCapital({
+            initialCostDisplay: toDisp(P.toIdr(totalBoughtCostOf(raw, updates), t.mk)),
+            recoveredFromTrimsDisplay: toDisp(P.toIdr(trimmedProceedsOf(raw, updates), t.mk)),
+            ticker: t.tk,
+            assetCashflows: settings.assetCashflows ?? [],
+          });
+          const srcKey = settings.tradeSources?.[t.id];
+          const srcMeta = srcKey ? IDEA_SOURCES.find(x => x.key === srcKey) : undefined;
+          const closePxNum = closing === t.id ? numIn(cd.px, t.mk) : NaN;
+          const isClosingLoss = closePxNum > 0 && (closePxNum - t.px) * dirOf(t) < 0;
+
           return (
             <div key={t.id} style={{ borderBottom: `1px solid ${C.divider}`, background: isOpen ? C.bg : 'transparent' }}>
               <TradeHead
@@ -242,7 +260,14 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
                 }}
                 dot={MK_COLOR[t.mk]}
                 name={t.tk}
-                tag={[t.nm || t.mk, t.st, levTag(t)].filter(Boolean).join(', ')}
+                tag={[
+                  t.nm || t.mk,
+                  t.st,
+                  levTag(t),
+                  roc.isFreeRoll ? 'Free-Roll Asset' : roc.recoveredPct >= 1 ? `${Math.round(roc.recoveredPct)}% principal back` : '',
+                ]
+                  .filter(Boolean)
+                  .join(', ')}
                 line={
                   (cl ? `${fmtD(t.d)} → ${fmtD(t.ex!.d)}` : 'Since ' + fmtD(t.d)) +
                   `, ${qtyLabel(t)} @ ${nat(t.px, t.mk)}` +
@@ -254,6 +279,32 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
               />
               {isOpen && (
                 <div className="fade-in" style={{ padding: '4px 24px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+                  {(roc.totalRecovered > 0 || srcMeta) && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                      {roc.isFreeRoll ? (
+                        <span className={s.badge} style={{ background: C.goodTint, color: C.good, padding: '4px 10px', fontSize: 12.5 }}>
+                          Free-Roll Asset · {Math.round(roc.recoveredPct)}% principal recovered
+                        </span>
+                      ) : roc.totalRecovered > 0 ? (
+                        <span className={s.badge} style={{ background: C.skyTint, color: C.sky, padding: '4px 10px', fontSize: 12.5 }}>
+                          Return of capital: {Math.round(roc.recoveredPct)}% back
+                        </span>
+                      ) : null}
+                      {srcMeta && (
+                        <span
+                          className={s.badge}
+                          style={{
+                            background: srcMeta.group === 'noise' ? C.amberTint : C.divider,
+                            color: srcMeta.group === 'noise' ? C.amberInk : C.textSoft,
+                            padding: '4px 10px',
+                            fontSize: 12.5,
+                          }}
+                        >
+                          Source: {srcMeta.label}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '20px 32px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <span className={s.eyebrow}>Thesis</span>
@@ -324,6 +375,11 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
                           <input className={s.input} type="date" value={cd.d} onChange={e => setCd({ ...cd, d: e.target.value })} />
                         </label>
                       </div>
+                      {isClosingLoss && (
+                        <div style={{ background: C.amberTint, color: C.amberInk, borderRadius: 10, padding: '10px 14px', fontSize: 13, lineHeight: 1.45 }}>
+                          <strong>Turn this loss into an asset:</strong> Before moving on, capture one rule or thesis flaw below so this tuition pays you back on future trades.
+                        </div>
+                      )}
                       <ReviewFields value={cd.review} onChange={review => setCd({ ...cd, review })} />
                       {err && (
                         <span className={s.error} role="alert">

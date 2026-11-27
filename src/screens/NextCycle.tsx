@@ -31,6 +31,7 @@ import { fixedBillsForNextCycle } from '../lib/fixedBills';
 import { Logo, type MaxieMood } from '../components/Logo';
 import { ThinkingArcs, thinkingLabel } from '../components/Chat';
 import { dayLabel, dayMonth, sum, tidyName, toISO } from '../lib/format';
+import { computeWindfallSplit } from '../lib/wealth';
 import { useSettings } from '../lib/settings';
 import { C } from '../lib/tokens';
 import { AmountEditor } from './Categories';
@@ -336,6 +337,20 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
     });
   };
 
+  const applyWindfallSplit = () => {
+    if (!(extrasTotal > 0)) return;
+    const prev = structuredClone(latest.current);
+    const invShare = settings.savingsPct > 0 ? Math.min(1, settings.investPct / settings.savingsPct) : 0.6;
+    const split = computeWindfallSplit(extrasTotal, invShare);
+    const nextSav = regularSavings + split.toAssets;
+    const nextInv = Math.min(nextSav, regularInvest + split.toInvest);
+    setManyEveryday({}, nextSav, nextInv);
+    setToast({
+      text: `Asset-first 70/30 split applied: +${short(split.toAssets)} of extra inflows routed to Savings & Investing.`,
+      undo: () => save(prev),
+    });
+  };
+
   const segs = [
     { key: 'Savings', label: 'Savings & investing', amount: savings, ink: SAVE_INK },
     { key: 'Committed', label: 'Fixed, installments & one-offs', amount: committed, ink: FIXED_INK },
@@ -423,6 +438,11 @@ export function NextCycle({ cycle, next, budget, known }: Props) {
               {label}
             </button>
           ))}
+          {extrasTotal > 0 && (
+            <button type="button" className={s.modelPresetChip} onClick={applyWindfallSplit} title="Route 70% of extra inflows (Bonus/THR/Freelance) straight into Assets">
+              70/30 Asset-first windfall
+            </button>
+          )}
           {left < -1 && (
             <button type="button" className={s.btnPrimarySm} style={{ marginLeft: 'auto' }} onClick={runAutoBalance}>
               Auto-balance

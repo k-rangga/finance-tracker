@@ -10,7 +10,7 @@ import { ONBOARDING_STEP_KEY, OnboardingWizard } from './components/OnboardingWi
 import { KEYS, storage } from './lib/storage';
 import { getCycle, paydayRule, type Cycle } from './lib/cycle';
 import { computeBudget, txViews } from './lib/budget';
-import { addDays, dayLabel, dayMonth, ordinal, startOfToday, tidyName, toISO } from './lib/format';
+import { addDays, dayLabel, dayMonth, ordinal, startOfToday, sum, tidyName, toISO } from './lib/format';
 import { useSettings } from './lib/settings';
 import { useData } from './lib/data';
 import { billKey, merchantKey, expectedBills, inCycle, installmentPayments, resolveSubs, toTransaction, withMerchantRules, type Bill, type Transaction } from './data/transactions';
@@ -27,7 +27,15 @@ import { SavingsPlan } from './screens/SavingsPlan';
 import { Subscriptions } from './screens/Subscriptions';
 import { chargesBySub, subscriptionBills, subState, suggestSubscriptions } from './lib/subscriptions';
 import { Invest } from './screens/invest/Invest';
+import { computePortfolio, effectiveTrade } from './screens/invest/model';
 import { Chat } from './components/Chat';
+import {
+  computeImpulseSummary,
+  computePayYourselfFirstStreak,
+  computeWealthSnapshot,
+  detectFortAssetsDip,
+  detectLifestyleCreep,
+} from './lib/wealth';
 import { useIsPhone } from './lib/media';
 import { PULL_TO_SYNC, usePageGestures } from './lib/gestures';
 import { haptic } from './lib/haptics';
@@ -50,7 +58,7 @@ export default function App() {
     const t = storage.getRaw(KEYS.tab) as Tab | null;
     return t && TABS.some(x => x.key === t) ? t : 'summary';
   });
-  const { recat: fixed, links, shares, removed, installments, rules, ruleSubs, subs: picked, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email, refreshImports, subscriptions, notes } = useData();
+  const { recat: fixed, links, shares, removed, installments, rules, ruleSubs, subs: picked, setOverride, setLink, setShare, setRemoved, saveError, dismissError, txRows, gmail, email, refreshImports, subscriptions, notes, journal, updates, prices } = useData();
   // Transactions remembers your last dates, category and search on this device.
   const [txFilter, setTxFilterState] = useState<ActivityFilter>(() => storage.get<ActivityFilter>(KEYS.txFilter, { range: 'week', cat: '', q: '' }));
   const setTxFilter = useCallback((f: ActivityFilter) => {
@@ -292,6 +300,91 @@ export default function App() {
   useEffect(() => {
     writeBootHint(buildBootHint({ cycle, budget, settings, plans }));
   }, [cycle, budget, settings, plans]);
+
+  /** Unified Rich Dad + Jakarta behavioral snapshot (runway, freedom ratio, assets vs liabilities, impulse leaks). */
+  const portfolioValueDisplay = useMemo(() => {
+    const eff = journal.map(t => effectiveTrade(t, updates));
+    const idrTot = computePortfolio(eff, prices, settings.fxRate, today.getFullYear()).tot;
+    return settings.currency === 'USD' ? idrTot / settings.fxRate : idrTot;
+  }, [journal, updates, prices, settings.fxRate, settings.currency, today]);
+
+  const { installmentLiabilities, monthlyInstallments } = useMemo(() => {
+    let rem = 0;
+    let thisCycle = 0;
+    for (const p of plans) {
+      for (const pay of p.payments) {
+        if (pay.date > today && !pay.paid) rem += pay.amount;
+        if (pay.date >= cycle.start && pay.date <= cycle.end) thisCycle += pay.amount;
+      }
+    }
+    return { installmentLiabilities: rem, monthlyInstallments: thisCycle };
+  }, [plans, today, cycle]);
+
+  const wealth = useMemo(
+    () =>
+      computeWealthSnapshot({
+        budget,
+        emergencyFund: settings.emergencyFund ?? 0,
+        emergencyTargetMonths: settings.emergencyTargetMonths ?? 6,
+        portfolioValue: portfolioValueDisplay,
+        installmentLiabilities,
+        monthlyInstallments,
+        assetCashflows: settings.assetCashflows ?? [],
+        todayISO: toISO(today),
+        giveFirstPct: settings.giveFirstPct,
+      }),
+    [
+      budget,
+      settings.emergencyFund,
+      settings.emergencyTargetMonths,
+      settings.assetCashflows,
+      settings.giveFirstPct,
+      portfolioValueDisplay,
+      installmentLiabilities,
+      monthlyInstallments,
+      today,
+    ],
+  );
+
+  const impulse = useMemo(() => computeImpulseSummary(budget.txs, settings.joyChecks ?? {}), [budget.txs, settings.joyChecks]);
+
+  const fortDip = useMemo(
+    () =>
+      detectFortAssetsDip({
+        txs: budget.txs,
+        spent: budget.spent,
+        budget: budget.budget,
+        income: Math.max(budget.income, budget.incomeReceived),
+        saved: budget.saved,
+        dayN: cycle.dayN,
+      }),
+    [budget, cycle.dayN],
+  );
+
+  const lifestyleCreep = useMemo(() => {
+    const prevInc = sum(prevTransactions.filter(t => t.type === 'income').map(t => t.amount));
+    const prevExp = sum(prevTransactions.filter(t => t.type === 'expense').map(t => t.amount));
+    const curInc = Math.max(budget.income, budget.incomeReceived);
+    return detectLifestyleCreep({
+      currentIncome: curInc,
+      prevIncome: prevInc > 0 ? prevInc : settings.income,
+      currentExpenses: budget.projTotal,
+      prevExpenses: prevExp,
+    });
+  }, [prevTransactions, budget.income, budget.incomeReceived, budget.projTotal, settings.income]);
+
+  const pyfStreak = useMemo(() => {
+    const cid = toISO(cycle.start);
+    const rec = settings.payYourselfFirst?.[cid];
+    const saveGoal = (settings.savingsPct / 100) * settings.income;
+    const investGoal = Math.min(saveGoal, (settings.investPct / 100) * settings.income);
+    const cashGoal = Math.max(0, saveGoal - investGoal);
+    const curComplete = !!(
+      (rec?.savedDone || saveGoal <= 0 || budget.saved >= Math.max(1, cashGoal * 0.95)) &&
+      (rec?.investedDone || investGoal <= 0 || budget.invested >= Math.max(1, investGoal * 0.95))
+    );
+    return computePayYourselfFirstStreak(settings.payYourselfFirst ?? {}, cid, curComplete);
+  }, [cycle.start, settings.payYourselfFirst, settings.savingsPct, settings.investPct, settings.income, budget.saved, budget.invested]);
   /** Every synced transaction, for the Transactions screen's own date range. */
   const allTxs = useMemo(() => txViews(all, all, { recat, links, shares, cycle, subs, ownNames }).txs, [all, recat, links, shares, cycle, subs, ownNames]);
   const removedTxs = useMemo(
@@ -383,7 +476,20 @@ export default function App() {
   if (phone && chat) {
     return (
       <PlansProvider value={plansCtx}>
-        <Chat cycle={cycle} budget={budget} allTxs={allTxs} fixedBills={fixedBillStatuses} ask={chat.ask} onClose={() => setChat(null)} pageMode />
+        <Chat
+          cycle={cycle}
+          budget={budget}
+          allTxs={allTxs}
+          fixedBills={fixedBillStatuses}
+          wealth={wealth}
+          impulse={impulse}
+          fortDip={fortDip}
+          lifestyleCreep={lifestyleCreep}
+          pyfStreak={pyfStreak}
+          ask={chat.ask}
+          onClose={() => setChat(null)}
+          pageMode
+        />
       </PlansProvider>
     );
   }
@@ -554,11 +660,21 @@ export default function App() {
               <Summary
                 cycle={cycle}
                 budget={budget}
+                wealth={wealth}
+                impulse={impulse}
+                fortDip={fortDip}
+                lifestyleCreep={lifestyleCreep}
+                pyfStreak={pyfStreak}
                 onOpenCategory={showCategory}
                 onOpenCategories={() => {
                   setOpenCat(null);
                   setTab('categories');
                 }}
+                onOpenPlan={() => {
+                  setPlanView('this');
+                  setTab('plan');
+                }}
+                onOpenInvest={() => setTab('invest')}
                 onDismissBill={dismissBill}
                 onMarkBillPaid={markBillPaid}
                 onShowTransactions={patch => {
@@ -593,6 +709,10 @@ export default function App() {
               <SavingsPlan
                 cycle={cycle}
                 budget={budget}
+                wealth={wealth}
+                impulse={impulse}
+                fortDip={fortDip}
+                lifestyleCreep={lifestyleCreep}
                 onOpenInvest={() => setTab('invest')}
                 onShowTransactions={showTransactions}
                 view={planView}
@@ -600,11 +720,11 @@ export default function App() {
                 next={nextCycle}
                 nextKnown={nextKnown}
               >
-                <InstallmentsAhead cycle={cycle} />
+                <InstallmentsAhead cycle={cycle} monthlyAssetAdded={wealth.monthlyAssetAdded} />
                 <Subscriptions budget={budget} states={subStates} txs={all} catOf={catOf} />
               </SavingsPlan>
             )}
-            {tab === 'invest' && <Invest cycle={cycle} />}
+            {tab === 'invest' && <Invest cycle={cycle} wealth={wealth} budget={budget} impulse={impulse} />}
           </div>
         </div>
       </main>
@@ -632,7 +752,21 @@ export default function App() {
           onClose={() => setBillUndo(null)}
         />
       )}
-      {chat && <Chat cycle={cycle} budget={budget} allTxs={allTxs} fixedBills={fixedBillStatuses} ask={chat.ask} onClose={() => setChat(null)} />}
+      {chat && (
+        <Chat
+          cycle={cycle}
+          budget={budget}
+          allTxs={allTxs}
+          fixedBills={fixedBillStatuses}
+          wealth={wealth}
+          impulse={impulse}
+          fortDip={fortDip}
+          lifestyleCreep={lifestyleCreep}
+          pyfStreak={pyfStreak}
+          ask={chat.ask}
+          onClose={() => setChat(null)}
+        />
+      )}
       {settingsOpen && (
         <SettingsDialog
           email={email}

@@ -7,6 +7,7 @@ import { useSettings } from '../../lib/settings';
 import { C } from '../../lib/tokens';
 import { entryRules, nat, numIn, type Draft, type FollowedPlan, type Market, type Trade } from './model';
 import { useInvestFmt } from './Invest';
+import { IDEA_SOURCES, type TradeIdeaSource } from '../../lib/wealth';
 
 const THESIS_STARTERS = ['Setup: ', 'Edge: ', 'Exit if: '];
 
@@ -45,13 +46,14 @@ const draftOf = (t: Trade): Draft => ({
 });
 
 export function EntryModal({ todayISO, portfolioValue, editing, onClose, onSave }: Props) {
-  const { settings } = useSettings();
+  const { settings, update } = useSettings();
   const { dF } = useInvestFmt();
   const [D, setDraft] = useState<Draft>(() =>
     editing
       ? draftOf(editing)
       : { mk: 'IDX', tk: '', nm: '', d: todayISO, px: '', q: '', fee: '', st: 'Swing', th: '', cat: '', cd: '', tg: '', sl: '', cv: null, lev: 1, dir: 'Long', tags: '' },
   );
+  const [ideaSource, setIdeaSource] = useState<TradeIdeaSource | undefined>(() => (editing ? settings.tradeSources?.[editing.id] : undefined));
   const ex0 = editing?.ex;
   const [X, setX] = useState<ExitDraft | null>(() => (ex0 ? { px: String(ex0.px), d: ex0.d, fp: ex0.fp ?? 'Yes', rt: ex0.rt ?? 3, ls: ex0.ls ?? '' } : null));
   const [moreOpen, setMoreOpen] = useState(() => !!(editing?.nm || editing?.fee || editing?.cat || editing?.cd || editing?.tags));
@@ -123,6 +125,13 @@ export function EntryModal({ todayISO, portfolioValue, editing, onClose, onSave 
       ...(lev > 1 ? { lev, dir: dr < 0 ? 'Short' : 'Long' } : {}),
       ...(X ? { ex: { px: exPx, d: X.d || todayISO, fp: X.fp, rt: X.rt, ls: X.ls.trim() } } : {}),
     };
+    if (ideaSource) {
+      update({ tradeSources: { ...(settings.tradeSources ?? {}), [t.id]: ideaSource } });
+    } else if (editing && settings.tradeSources?.[t.id]) {
+      const next = { ...(settings.tradeSources ?? {}) };
+      delete next[t.id];
+      update({ tradeSources: next });
+    }
     haptic('success', settings.quietMode);
     onSave(t);
   };
@@ -229,6 +238,30 @@ export function EntryModal({ todayISO, portfolioValue, editing, onClose, onSave 
               + {st.replace(': ', '')}
             </button>
           ))}
+        </div>
+        <div className={s.field} style={{ marginTop: 4 }}>
+          <span>
+            Idea source <span style={{ fontWeight: 400, color: C.textMuted }}>(tracks own analysis vs. tips/noise)</span>
+          </span>
+          <div className={s.pills} role="group" aria-label="Idea source">
+            {IDEA_SOURCES.map(src => {
+              const on = ideaSource === src.key;
+              return (
+                <button
+                  key={src.key}
+                  type="button"
+                  aria-pressed={on}
+                  className={on ? s.optOn : s.opt}
+                  onClick={() => {
+                    haptic('tick', settings.quietMode);
+                    setIdeaSource(on ? undefined : src.key);
+                  }}
+                >
+                  {src.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 

@@ -5,10 +5,18 @@ import { Logo } from '../components/Logo';
 import { categoryByName, SAVINGS_TARGET_PCT } from '../data/categories';
 import type { Budget, TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
-import { dayMonth, tidyName } from '../lib/format';
+import { dayMonth, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { storage } from '../lib/storage';
 import { haptic } from '../lib/haptics';
+import {
+  buildShareableFlexSummary,
+  evaluateBenchmarks,
+  IMPULSE_TRIGGERS,
+  type ImpulseTrigger,
+  type JoyVote,
+  type WealthSnapshot,
+} from '../lib/wealth';
 
 export type VignetteScene = 'payday' | 'bloom' | 'cozy' | 'rain' | 'steady';
 
@@ -143,8 +151,6 @@ export function VignetteSvg({ scene }: { scene: VignetteScene }) {
   );
 }
 
-type JoyVote = 'worth' | 'everyday' | 'skip';
-
 /**
  * "Story of Your Cycle" — a calm, 4-card full-bleed interactive pop-up deck with unique Siberian Husky illustrations
  * (mountain ridge run, serene alpine lake trot, twilight camp lantern, and golden-hour meadow daily check-in).
@@ -153,19 +159,24 @@ type JoyVote = 'worth' | 'everyday' | 'skip';
 export function CycleStoryModal({
   cycle,
   budget: b,
+  wealth,
+  pyfStreak,
   open,
   onClose,
 }: {
   cycle: Cycle;
   budget: Budget;
+  wealth?: WealthSnapshot;
+  pyfStreak?: number;
   open: boolean;
   onClose: () => void;
 }) {
-  const { short, full, settings } = useSettings();
+  const { short, full, settings, update } = useSettings();
   const [idx, setIdx] = useState(0);
   const [dir, setDir] = useState<-1 | 0 | 1>(0);
   const [slot, setSlot] = useState(() => cycle.today.getDate() % 3);
   const [revealed, setRevealed] = useState(false);
+  const [flexCopied, setFlexCopied] = useState(false);
   const [drag, setDrag] = useState<{ x: number; y: number; active: boolean }>({ x: 0, y: 0, active: false });
   const touchRef = useRef<{ x: number; y: number; axis?: 'h' | 'v'; top: number } | null>(null);
   const didGestureRef = useRef(false);
@@ -188,16 +199,40 @@ export function CycleStoryModal({
   }, [b.txs, cycle.dayIdx]);
 
   const voteKey = targetTx ? `moneyTracker.joy.${targetTx.id}` : '';
-  const [vote, setVote] = useState<JoyVote | null>(() => (voteKey ? storage.get<JoyVote | null>(voteKey, null) : null));
+  const storedCheck = targetTx ? settings.joyChecks?.[targetTx.id] : undefined;
+  const [vote, setVote] = useState<JoyVote | null>(() => storedCheck?.vote ?? (voteKey ? storage.get<JoyVote | null>(voteKey, null) : null));
+  const [trigger, setTrigger] = useState<ImpulseTrigger | undefined>(() => storedCheck?.trigger);
   useEffect(() => {
-    setVote(voteKey ? storage.get<JoyVote | null>(voteKey, null) : null);
-  }, [voteKey]);
+    setVote(storedCheck?.vote ?? (voteKey ? storage.get<JoyVote | null>(voteKey, null) : null));
+    setTrigger(storedCheck?.trigger);
+  }, [voteKey, storedCheck?.vote, storedCheck?.trigger]);
 
   const castVote = (v: JoyVote) => {
-    if (!voteKey) return;
+    if (!voteKey || !targetTx) return;
     haptic('tap', settings.quietMode);
     storage.set(voteKey, v);
     setVote(v);
+    const nextTrigger = v === 'skip' ? trigger : undefined;
+    setTrigger(nextTrigger);
+    update({
+      joyChecks: {
+        ...(settings.joyChecks ?? {}),
+        [targetTx.id]: { vote: v, ...(nextTrigger ? { trigger: nextTrigger } : {}), at: toISO(cycle.today) },
+      },
+    });
+  };
+
+  const pickTrigger = (tr: ImpulseTrigger) => {
+    if (!targetTx) return;
+    haptic('tick', settings.quietMode);
+    const next = trigger === tr ? undefined : tr;
+    setTrigger(next);
+    update({
+      joyChecks: {
+        ...(settings.joyChecks ?? {}),
+        [targetTx.id]: { vote: 'skip', ...(next ? { trigger: next } : {}), at: toISO(cycle.today) },
+      },
+    });
   };
 
   useEffect(() => {
@@ -293,6 +328,31 @@ export function CycleStoryModal({
     skip: 'Good catch — small awareness like this quietly saves a lot next cycle.',
   };
 
+  const benchmark = evaluateBenchmarks({
+    savedPct: b.savedPct,
+    runwayMonths: wealth?.runwayMonths ?? 0,
+    emergencyFund: wealth?.emergencyFund ?? 0,
+    targetMonths: settings.emergencyTargetMonths,
+  });
+
+  const copyCalmFlex = () => {
+    const text = buildShareableFlexSummary({
+      cycleLabel: `${dayMonth(cycle.start)} – ${dayMonth(cycle.end)}`,
+      savedPct: b.savedPct,
+      zeroSpendDays: stats.zeroDays,
+      dayN: cycle.dayN,
+      cycleDays: cycle.cycleDays,
+      runwayMonths: wealth?.runwayMonths,
+      pyfStreak,
+      freedomPct: wealth?.freedomPct,
+    });
+    navigator.clipboard?.writeText(text).then(() => {
+      haptic('success', settings.quietMode);
+      setFlexCopied(true);
+      setTimeout(() => setFlexCopied(false), 2200);
+    });
+  };
+
   const cards = [
     {
       kicker: `Day ${cycle.dayN} of ${cycle.cycleDays} · Your Rhythm`,
@@ -307,6 +367,7 @@ export function CycleStoryModal({
         { label: 'Daily pace', val: `${short(b.velDay)}/day` },
       ],
       interactive: false,
+      showFlex: false,
     },
     {
       kicker: 'Your Signatures',
@@ -322,22 +383,27 @@ export function CycleStoryModal({
         ...(stats.topVar ? [{ label: 'Top everyday', val: stats.topVar.name }] : []),
       ],
       interactive: false,
+      showFlex: false,
     },
     {
       kicker: `${cycle.daysLeft + 1} ${cycle.daysLeft === 0 ? 'day' : 'days'} to payday · Your Trajectory`,
       title: stats.left >= 0 ? `${short(stats.left)} of breathing room left` : `Slightly above plan by ${short(-stats.left)}`,
       art: <TwilightCampSvg />,
       body:
-        SAVINGS_TARGET_PCT > 0 && b.savedPct >= SAVINGS_TARGET_PCT
-          ? `Savings goal is already met at ${Math.round(b.savedPct)}% — cruise gently into payday ${dayMonth(cycle.next)}.`
+        (SAVINGS_TARGET_PCT > 0 && b.savedPct >= SAVINGS_TARGET_PCT
+          ? `Savings goal is already met at ${Math.round(b.savedPct)}% — cruise gently into payday ${dayMonth(cycle.next)}. `
           : stats.left >= 0
-            ? `Keeping near ${short(b.safeDay)}/day carries you calmly to payday on ${dayMonth(cycle.next)}.`
-            : `No stress — a couple of quiet days brings your pace smoothly back toward plan by ${dayMonth(cycle.next)}.`,
+            ? `Keeping near ${short(b.safeDay)}/day carries you calmly to payday on ${dayMonth(cycle.next)}. `
+            : `No stress — a couple of quiet days brings your pace smoothly back toward plan by ${dayMonth(cycle.next)}. `) +
+        benchmark.savingSummary,
       chips: [
         { label: 'Saved so far', val: `${Math.round(b.savedPct)}%` },
-        { label: 'Safe daily pace', val: short(b.safeDay) },
+        ...(wealth && wealth.runwayMonths > 0
+          ? [{ label: 'Runway', val: `${wealth.runwayMonths.toFixed(1)} mo` }]
+          : [{ label: 'Safe daily pace', val: short(b.safeDay) }]),
       ],
       interactive: false,
+      showFlex: true,
     },
     {
       kicker: 'Daily Check-In',
@@ -351,6 +417,7 @@ export function CycleStoryModal({
       body: '',
       chips: [] as { label: string; val: string }[],
       interactive: true,
+      showFlex: false,
     },
   ];
 
@@ -514,6 +581,14 @@ export function CycleStoryModal({
                     ))}
                   </div>
                 )}
+                {card.showFlex && (
+                  <div className={s.storyPillRow} style={{ marginTop: 4 }}>
+                    <button type="button" className={s.storyPill} data-active={flexCopied || undefined} onClick={copyCalmFlex}>
+                      <Icon d={flexCopied ? IC.check : IC.copy} size={13} />{' '}
+                      {flexCopied ? 'Copied (% only, no amounts)' : 'Share calm flex (% only)'}
+                    </button>
+                  </div>
+                )}
               </>
             ) : activePrompt === 'joy' && targetTx ? (
               <>
@@ -540,6 +615,26 @@ export function CycleStoryModal({
                     </button>
                   ))}
                 </div>
+                {vote === 'skip' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                    <span className={s.storyNote}>What sparked it? (spot impulse lures)</span>
+                    <div className={s.storyPillRow} role="group" aria-label="Impulse trigger">
+                      {IMPULSE_TRIGGERS.map(tr => (
+                        <button
+                          key={tr.key}
+                          type="button"
+                          className={s.storyPill}
+                          data-active={trigger === tr.key || undefined}
+                          aria-pressed={trigger === tr.key}
+                          onClick={() => pickTrigger(tr.key)}
+                          title={tr.hint}
+                        >
+                          {tr.short}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {vote && <span className={s.storyNote}>{voteReply[vote]}</span>}
               </>
             ) : activePrompt === 'curiosity' ? (
