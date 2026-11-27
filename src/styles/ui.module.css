@@ -10286,3 +10286,251 @@ button.sxTile:active:not(:disabled),
 .sxDayBar {
   border-radius: 999px 999px 3px 3px;
 }
+/* ---- Gemini-style Calm Ask Maxie Layout & Personal Starter Chips ---- */
+.chatHeadSub {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chatEmptyStage {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 24px;
+  padding: 20px 4px 12px;
+}
+.chatEmptyHero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+.chatEmptyHalo {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--surface) 92%, transparent), color-mix(in srgb, var(--clay) 12%, transparent));
+  border: 1px solid color-mix(in srgb, var(--clay) 24%, var(--border));
+  box-shadow: 0 8px 24px -10px color-mix(in srgb, var(--clay) 25%, transparent);
+  margin-bottom: 4px;
+}
+.chatEmptyTitle {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 27px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.chatEmptySub {
+  margin: 0;
+  max-width: 320px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.chatStarterGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.chatStarterCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 13px;
+  border-radius: 15px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fffaf2 8%, transparent);
+  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+.chatStarterCard:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--clay) 45%, var(--border));
+  background: color-mix(in srgb, var(--clay) 5%, var(--surface));
+}
+.chatStarterTop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  line-height: 1.25;
+  color: var(--ink);
+}
+.chatStarterTop strong {
+  font-weight: 600;
+}
+.chatStarterSub {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+/* Borderless Gemini-like Maxie replies directly on the warm background */
+.chatTheirs {
+  padding: 2px 2px 4px;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  font-size: 15px;
+  line-height: 1.65;
+}
+.chatMine {
+  border-radius: 20px 20px 6px 20px;
+  padding: 10px 15px;
+  border: 1px solid color-mix(in srgb, var(--clay) 18%, transparent);
+}
+@media (max-width: 360px) {
+  .chatStarterGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.chatOverlay {
+  overscroll-behavior: contain;
+  touch-action: none;
+}
+.chatList {
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+/* ---- Ask Maxie Premium Polish: Ambient Glow, Inline Widgets, Voice Mic & Quiet Actions ---- */
+.chatEmptyStage {
+  position: relative;
+}
+.chatEmptyGlow {
+  position: absolute;
+  inset: -40px -24px auto;
+  height: 220px;
+  pointer-events: none;
+  background: radial-gradient(60% 70% at 50% 30%, color-mix(in srgb, var(--clay) 14%, transparent) 0%, color-mix(in srgb, var(--amber) 6%, transparent) 45%, transparent 78%);
+}
+.chatEmptyHero,
+.chatStarterGrid {
+  position: relative;
+  z-index: 1;
+}
+.chatTheirsRow {
+  animation: chatFadeIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes chatFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.chatTheirs h3,
+.chatTheirs h4 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.chatRate {
+  opacity: 0.58;
+  transition: opacity 0.16s ease;
+}
+.chatTheirs:hover .chatRate,
+.chatTheirs:focus-within .chatRate {
+  opacity: 1;
+}
+/* Inline editorial mini-widget inside Maxie replies */
+.chatWidget {
+  margin: 8px 0 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fffaf2 8%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.chatWidgetEyebrow {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.chatWidgetStats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 10px;
+}
+.chatWidgetStats > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chatWidgetStats strong {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.chatWidgetRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.chatWidgetTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+.chatWidgetTrack {
+  display: block;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-200);
+  overflow: hidden;
+}
+.chatWidgetFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--clay);
+}
+/* Voice-to-text mic button */
+.chatMicBtn {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.chatMicBtn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.chatMicBtn[data-on] {
+  background: color-mix(in srgb, var(--clay) 18%, transparent);
+  color: var(--clay-ink);
+  animation: chatMicPulse 1.4s ease-in-out infinite;
+}
+@keyframes chatMicPulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--clay) 35%, transparent); }
+  50% { box-shadow: 0 0 0 6px transparent; }
+}

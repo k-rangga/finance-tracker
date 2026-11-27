@@ -14,7 +14,9 @@ import { onVercel } from '../lib/supabase';
 import { C } from '../lib/tokens';
 import { CATEGORIES, categoryByName, categoryLabel, OTHER_CATEGORIES } from '../data/categories';
 import { merchantKey } from '../data/transactions';
-import { sum, tidyName, toISO } from '../lib/format';
+import { tidyName, toISO } from '../lib/format';
+import { paceInsight, weekendSafeSplit } from '../lib/pace';
+import { newJournalId, saveJournalEntry } from '../lib/journal';
 import { startChallenge } from '../screens/categoriesExtras';
 
 /** Stop waiting after this long; per-model fetches abort at 22s and fall back automatically. */
@@ -62,7 +64,7 @@ type StoredChat = { messages: ChatMessage[]; deep?: boolean };
 
 function readSession(key: string): StoredChat {
   try {
-    const raw = sessionStorage.getItem(key);
+    const raw = localStorage.getItem(key) ?? sessionStorage.getItem(key);
     if (!raw) return { messages: [] };
     const parsed = JSON.parse(raw) as StoredChat;
     const msgs = Array.isArray(parsed.messages)
@@ -80,42 +82,167 @@ function readSession(key: string): StoredChat {
 
 function writeSession(key: string, data: StoredChat) {
   try {
-    sessionStorage.setItem(key, JSON.stringify(data));
+    // Keep the last 40 messages per cycle so storage stays light and snappy.
+    const trimmed: StoredChat = { ...data, messages: data.messages.slice(-40) };
+    localStorage.setItem(key, JSON.stringify(trimmed));
   } catch {
     // Ignore storage quota / private mode failures.
   }
 }
 
-/** Up to 4 cycle-aware starter prompts tuned to your current numbers and Maxie language setting. */
-function buildStarters(b: Budget, isId: boolean): string[] {
+/** One cheerful, live-computed sentence summarizing your cycle pulse for the empty state. */
+function buildOpeningPulse(cycle: Cycle, b: Budget, short: (v: number) => string, isId: boolean): string {
   const left = b.budget - b.spent - b.fixedDue;
-  const overCat = b.cats
-    .filter(c => c.type === 'variable' && c.status.key === 'over')
-    .sort((a, z) => z.used - a.used)[0];
-  const bufferCount = b.txs.filter(t => t.cat === 'Buffer' && !t.isIncome && !t.isTransfer).length;
-  const owed = sum(b.cards.map(c => Math.max(0, c.owed)));
-  const out: string[] = [];
-
+  const insight = paceInsight({
+    budget: b.budget,
+    projTotal: b.projTotal,
+    oneOffs: b.proj.oneOffs,
+    remainingVar: b.proj.remainingVar,
+    daysLeft: cycle.daysLeft,
+    dayN: cycle.dayN,
+    cycleDays: cycle.cycleDays,
+    cats: b.cats,
+  });
+  const dayTag = isId ? `Hari ke-${cycle.dayN} dari ${cycle.cycleDays}` : `Day ${cycle.dayN} of ${cycle.cycleDays}`;
   if (left < 0) {
-    out.push(isId ? 'Kenapa siklus ini lewat rencana dan gimana aturnya?' : 'Why am I over plan and how do I recover?');
-  } else if (overCat) {
-    out.push(isId ? `Gimana cara ngerem ${overCat.name}?` : `How do I rein in ${overCat.name}?`);
+    return isId
+      ? `${dayTag} — sedang ${short(-left)} di atas rencana, yuk kita atur pelan-pelan.`
+      : `${dayTag} — ${short(-left)} above plan, easy to ease back together.`;
+  }
+  if (insight.oneOffExplains) {
+    return isId
+      ? `${dayTag} — ritme harianmu tenang; lonjakan hanya dari transaksi besar ${short(b.proj.oneOffs)}.`
+      : `${dayTag} — everyday pace is calm; ${short(b.proj.oneOffs)} in one-offs accounts for the bump.`;
+  }
+  if (insight.tier !== 'calm' && insight.trimPerDay > 0) {
+    const drv = insight.topDriver ? (isId ? ` (terutama ${insight.topDriver.name})` : ` (mostly ${insight.topDriver.name})`) : '';
+    return isId
+      ? `${dayTag} — kurangi ~${short(insight.trimPerDay)}/hari${drv} agar finis tetap pas rencana.`
+      : `${dayTag} — trimming ~${short(insight.trimPerDay)}/day${drv} brings you right back on plan.`;
+  }
+  if (insight.spareBy > 0) {
+    return isId
+      ? `${dayTag} — proyeksi masih punya ruang lega ${short(insight.spareBy)}, dengan aman ${short(b.safeDay)}/hari.`
+      : `${dayTag} — on track for ${short(insight.spareBy)} spare, with a calm ${short(b.safeDay)}/day ahead.`;
+  }
+  return isId
+    ? `${dayTag} — ruang aman masih ${short(b.safeDay)}/hari sampai gajian.`
+    : `${dayTag} — looking steady with ${short(b.safeDay)}/day of breathing room to payday.`;
+}
+
+type StarterChip = {
+  icon: string;
+  title: string;
+  sub: string;
+  prompt: string;
+};
+
+/** Up to 4 personal, cycle-aware prompt chips using your actual pace, categories, and top merchant. */
+function buildStarters(
+  cycle: Cycle,
+  b: Budget,
+  short: (v: number) => string,
+  isId: boolean,
+): StarterChip[] {
+  const left = b.budget - b.spent - b.fixedDue;
+  const insight = paceInsight({
+    budget: b.budget,
+    projTotal: b.projTotal,
+    oneOffs: b.proj.oneOffs,
+    remainingVar: b.proj.remainingVar,
+    daysLeft: cycle.daysLeft,
+    dayN: cycle.dayN,
+    cycleDays: cycle.cycleDays,
+    cats: b.cats,
+  });
+  const wkSplit = weekendSafeSplit(left, cycle.daysLeft + 1, cycle.today.getDay(), b.proj.weekendRatio);
+  const bufferCount = b.txs.filter(t => t.cat === 'Buffer' && !t.isIncome && !t.isTransfer).length;
+
+  // Find #1 merchant this cycle for a personal touch.
+  const merch = new Map<string, { name: string; total: number }>();
+  for (const t of b.txs) {
+    if (t.isIncome || t.isTransfer || t.net <= 0) continue;
+    const k = merchantKey(t.title) || t.title.toLowerCase();
+    const cur = merch.get(k);
+    if (cur) cur.total += t.net;
+    else merch.set(k, { name: tidyName(t.title), total: t.net });
+  }
+  const topMerch = [...merch.values()].sort((a, z) => z.total - a.total)[0];
+
+  const out: StarterChip[] = [];
+
+  // 1. Pace / Recovery chip (personal to your actual projection)
+  if (left < 0) {
+    out.push({
+      icon: IC.trend,
+      title: isId ? 'Atur ritme kembali' : 'Ease back to plan',
+      sub: isId ? `${short(-left)} di atas rencana` : `${short(-left)} above plan`,
+      prompt: isId ? 'Kenapa siklus ini lewat rencana dan gimana cara pelan-pelan ngeremnya?' : 'Why am I over plan and how can I gently ease back?',
+    });
+  } else if (insight.tier !== 'calm' && insight.trimPerDay > 0) {
+    const driver = insight.topDriver?.name;
+    out.push({
+      icon: IC.trend,
+      title: driver ? (isId ? `Rem ${driver}?` : `Ease back ${driver}?`) : isId ? 'Cek ritme siklus' : 'Check my pace',
+      sub: isId ? `Kurangi ~${short(insight.trimPerDay)}/hari` : `Trim ~${short(insight.trimPerDay)}/day`,
+      prompt: driver
+        ? isId
+          ? `Gimana cara ngerem ${driver} supaya siklus ini finis sesuai rencana?`
+          : `How can I gently ease back ${driver} to finish on plan?`
+        : isId
+          ? 'Gimana cara ngerem pengeluaran pelan-pelan sampai gajian?'
+          : 'How can I gently ease back spending until payday?',
+    });
   } else {
-    out.push(isId ? 'Siklus ini masih aman gak?' : 'Am I on track this cycle?');
-    out.push(isId ? 'Ceritakan pencapaianku siklus ini' : 'Highlight my wins this cycle');
+    out.push({
+      icon: IC.sparkle,
+      title: isId ? 'Bagaimana ritmeku?' : "How's my pace?",
+      sub: insight.spareBy > 0 ? (isId ? `Proyeksi sisa ${short(insight.spareBy)}` : `On track for ${short(insight.spareBy)} spare`) : `${short(b.safeDay)}/day left`,
+      prompt: isId ? 'Siklus ini ritmeku gimana, dan apa yang sudah bagus?' : "How's my pace this cycle, and what's going well?",
+    });
   }
 
+  // 2. Affordability / Weekend budget chip
+  out.push({
+    icon: IC.wallet,
+    title: isId ? 'Bisa jajan berapa?' : 'Can I afford a treat?',
+    sub: wkSplit
+      ? isId
+        ? `Akhir pekan ${short(wkSplit.weekendSafe)}/hr`
+        : `Weekends ${short(wkSplit.weekendSafe)}/day`
+      : isId
+        ? `Aman ${short(b.safeDay)}/hari`
+        : `Safe at ${short(b.safeDay)}/day`,
+    prompt: isId
+      ? 'Dengan sisa anggaran dan tagihan yang akan datang, berapa ruang aman buat belanja santai minggu ini?'
+      : 'Based on my remaining budget and upcoming bills, what can I comfortably spend on a treat this week?',
+  });
+
+  // 3. Tidy Buffer OR Savings goal
   if (bufferCount > 0) {
-    out.push(isId ? `Bantu rapikan ${bufferCount} transaksi Buffer` : `Sort my ${bufferCount} Buffer ${bufferCount === 1 ? 'transaction' : 'transactions'}`);
-  }
-  if (b.savingsTarget > 0 && b.saved < b.savingsTarget) {
-    out.push(isId ? 'Gimana biar target tabungan tercapai?' : 'How do I hit my savings goal?');
-  } else if (owed > 0) {
-    out.push(isId ? 'Cek rincian tagihan kartu siklus ini' : 'Break down my card bill this cycle');
+    out.push({
+      icon: IC.tag,
+      title: isId ? `Rapikan ${bufferCount} Buffer` : `Tidy ${bufferCount} in Buffer`,
+      sub: isId ? 'Bantu pilah otomatis' : 'Suggest categories & rules',
+      prompt: isId ? `Bantu rapikan ${bufferCount} transaksi di Buffer dan sarankan kategorinya.` : `Help me sort my ${bufferCount} Buffer ${bufferCount === 1 ? 'transaction' : 'transactions'} and suggest categories.`,
+    });
+  } else if (b.savingsTarget > 0 && b.saved < b.savingsTarget) {
+    out.push({
+      icon: IC.piggy,
+      title: isId ? 'Target tabungan' : 'Hit my savings goal',
+      sub: isId ? `Kurang ${short(b.savingsTarget - b.saved)}` : `${short(b.savingsTarget - b.saved)} to go`,
+      prompt: isId ? 'Gimana cara terbaik supaya target tabungan siklus ini tercapai?' : 'What is the easiest way to hit my savings goal this cycle?',
+    });
   }
 
-  out.push(isId ? 'Merchant mana yang paling besar?' : 'Which merchants take the most?');
-  out.push(isId ? 'Di mana aku bisa hemat tanpa kerasa?' : 'Where can I trim without feeling it?');
+  // 4. Personal top merchant / biggest spend
+  out.push({
+    icon: IC.bag,
+    title: isId ? 'Ke mana perginya?' : 'Where is it going?',
+    sub: topMerch ? `${topMerch.name} · ${short(topMerch.total)}` : isId ? 'Merchant terbesar' : 'Top merchants & habits',
+    prompt: isId ? 'Merchant dan kebiasaan mana yang paling banyak menyedot pengeluaran siklus ini?' : 'Which merchants and habits are taking the most this cycle?',
+  });
+
   return out.slice(0, 4);
 }
 
@@ -149,6 +276,9 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
   const [waited, setWaited] = useState(0);
   /** Which message index was just copied to the clipboard. */
   const [copied, setCopied] = useState<number | null>(null);
+  const [savedToJournal, setSavedToJournal] = useState<number | null>(null);
+  const [listening, setListening] = useState(false);
+  const recRef = useRef<{ stop: () => void } | null>(null);
   /** The question being answered; an answer for an older one (after Stop, timeout, or New chat) is dropped. */
   const asking = useRef(0);
   const [withNotes, setWithNotes] = useState(false);
@@ -156,9 +286,77 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
   const input = useRef<HTMLTextAreaElement>(null);
 
   const isId = settings.maxieLanguage === 'id';
-  const starters = useMemo(() => buildStarters(budget, isId), [budget, isId]);
+  const starters = useMemo(() => buildStarters(cycle, budget, short, isId), [cycle, budget, short, isId]);
+  const openingPulse = useMemo(() => buildOpeningPulse(cycle, budget, short, isId), [cycle, budget, short, isId]);
   const left = budget.budget - budget.spent - budget.fixedDue;
   const bufferCount = useMemo(() => budget.txs.filter(t => t.cat === 'Buffer' && !t.isIncome && !t.isTransfer).length, [budget.txs]);
+
+  const speechCtor =
+    typeof window !== 'undefined'
+      ? ((window as unknown as { SpeechRecognition?: new () => unknown; webkitSpeechRecognition?: new () => unknown }).SpeechRecognition ??
+        (window as unknown as { webkitSpeechRecognition?: new () => unknown }).webkitSpeechRecognition)
+      : undefined;
+
+  const toggleVoice = () => {
+    if (listening) {
+      recRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    if (!speechCtor) return;
+    try {
+      const rec = new speechCtor() as {
+        lang: string;
+        interimResults: boolean;
+        maxAlternatives: number;
+        onresult: (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void;
+        onerror: () => void;
+        onend: () => void;
+        start: () => void;
+        stop: () => void;
+      };
+      rec.lang = isId ? 'id-ID' : 'en-US';
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+      rec.onresult = e => {
+        const spoken = e.results?.[0]?.[0]?.transcript?.trim();
+        if (spoken) setText(prev => (prev.trim() ? `${prev.trim()} ${spoken}` : spoken));
+      };
+      rec.onerror = () => setListening(false);
+      rec.onend = () => setListening(false);
+      recRef.current = rec;
+      setListening(true);
+      rec.start();
+    } catch {
+      setListening(false);
+    }
+  };
+
+  useEffect(() => () => recRef.current?.stop(), []);
+
+  const saveReplyToJournal = async (i: number, replyText: string) => {
+    const q = [...messages.slice(0, i)].reverse().find(x => x.role === 'user')?.text ?? '';
+    const now = new Date().toISOString();
+    const title = q ? q.replace(/\?+$/, '').slice(0, 68) : 'Reflection with Maxie';
+    try {
+      await saveJournalEntry({
+        id: newJournalId('je'),
+        account: 'all',
+        title,
+        subtitle: `Saved from Ask Maxie · Day ${cycle.dayN} of ${cycle.cycleDays}`,
+        body: replyText,
+        coverPath: null,
+        tags: ['Maxie', 'Cycle reflection'],
+        status: 'draft',
+        createdAt: now,
+        updatedAt: now,
+      });
+      setSavedToJournal(i);
+      setTimeout(() => setSavedToJournal(c => (c === i ? null : c)), 2600);
+    } catch {
+      // Ignore if offline/unconfigured
+    }
+  };
 
   useEffect(() => {
     writeSession(sessionKey, { messages, deep });
@@ -250,6 +448,19 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
   const vp = useVisualViewport(true);
 
   useEffect(() => {
+    const scrollY = window.scrollY;
+    const prevOverflow = document.body.style.overflow;
+    const prevOverscroll = document.documentElement.style.overscrollBehavior;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overscrollBehavior = 'none';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.documentElement.style.overscrollBehavior = prevOverscroll;
+      if (window.scrollY !== scrollY) window.scrollTo(0, scrollY);
+    };
+  }, []);
+
+  useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' });
   }, [messages, busy, problem, vp.keyboardOpen]);
 
@@ -269,16 +480,15 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
           </span>
           <span style={{ display: 'flex', flexDirection: 'column', marginRight: 'auto', minWidth: 0 }}>
             <strong style={{ fontFamily: 'var(--font-serif)', fontSize: 20, fontWeight: 500, lineHeight: '22px' }}>Maxie</strong>
-            <span style={{ fontSize: 12, color: C.textMuted }}>{deep ? 'Deeper reasoning · free tier' : 'Fast cycle assistant'}</span>
+            <span className={s.chatHeadSub}>
+              <strong style={{ color: left < 0 ? C.redInk : C.text, fontWeight: 600 }}>
+                {short(Math.abs(left))} {left < 0 ? 'over' : 'left'}
+              </strong>
+              {' · '}
+              {cycle.daysLeft + 1}d left
+              {bufferCount > 0 ? ` · ${bufferCount} Buffer` : ` · ${Math.round(budget.savedPct)}% saved`}
+            </span>
           </span>
-          <div className={s.sxMiniSeg} role="group" aria-label="Answer speed and depth" title="Quick: instant 3.5 Flash-Lite · Deep: smarter 3.6 Flash (free tier)">
-            <button type="button" aria-pressed={!deep} onClick={() => setDeep(false)}>
-              Quick
-            </button>
-            <button type="button" aria-pressed={deep} onClick={() => setDeep(true)}>
-              Deep
-            </button>
-          </div>
           {messages.length > 0 && (
             <button
               type="button"
@@ -299,22 +509,6 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
           </button>
         </header>
 
-        <div className={s.chatContextBar} aria-label="Cycle snapshot sent to Maxie">
-          <span style={{ color: left < 0 ? C.redInk : C.text, fontWeight: 600 }}>
-            {short(Math.abs(left))} {left < 0 ? 'over plan' : 'left'}
-          </span>
-          <span aria-hidden="true">·</span>
-          <span>{cycle.daysLeft + 1}d to payday</span>
-          {bufferCount > 0 && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span>{bufferCount} in Buffer</span>
-            </>
-          )}
-          <span aria-hidden="true">·</span>
-          <span>{Math.round(budget.savedPct)}% saved</span>
-        </div>
-
         <div ref={list} className={s.chatList} aria-live="polite">
           {messages.length === 0 && !busy && (() => {
             const who = settings.name.trim();
@@ -332,25 +526,25 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
                 : hr < 18
                   ? 'Good afternoon'
                   : 'Good evening';
-            const headline = `${hi}${who ? `, ${who}` : ''}!`;
-            const sub = isId
-              ? 'Aku Maxie — siap cek pengeluaran siklus ini, rapikan kategori, atau cari ruang buat nabung. Mau cek apa hari ini?'
-              : "I'm Maxie — ready to check this cycle's spending, tidy up categories, or find room to save. What's on your mind?";
+            const headline = `${hi}${who ? `, ${who}` : ''}.`;
             return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '8px 0' }}>
-                <div className={s.chatTheirsRow}>
-                  <Logo size={36} mood="happy" interactive cheer={isId ? 'Yuk ngobrol!' : 'Ready when you are!'} />
-                  <div className={s.chatTheirs}>
-                    <span className={s.chatName}>Maxie</span>
-                    <p style={{ margin: 0 }}>
-                      <strong>{headline}</strong> {sub}
-                    </p>
-                  </div>
+              <div className={s.chatEmptyStage}>
+                <div className={s.chatEmptyGlow} aria-hidden="true" />
+                <div className={s.chatEmptyHero}>
+                  <span className={s.chatEmptyHalo}>
+                    <Logo size={46} mood="happy" interactive cheer={isId ? 'Yuk ngobrol!' : 'Ready when you are!'} />
+                  </span>
+                  <h2 className={s.chatEmptyTitle}>{headline}</h2>
+                  <p className={s.chatEmptySub}>{openingPulse}</p>
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {starters.map(q => (
-                    <button key={q} type="button" className={s.chatStarter} onClick={() => send(q)}>
-                      {q}
+                <div className={s.chatStarterGrid}>
+                  {starters.map(st => (
+                    <button key={st.title} type="button" className={s.chatStarterCard} onClick={() => send(st.prompt)}>
+                      <span className={s.chatStarterTop}>
+                        <Icon d={st.icon} size={14} color={C.clayInk} />
+                        <strong>{st.title}</strong>
+                      </span>
+                      <span className={s.chatStarterSub}>{st.sub}</span>
                     </button>
                   ))}
                 </div>
@@ -367,13 +561,14 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
               );
             const clean = extractFollowUps(m.text, m.followUps);
             const mood = m.mood ?? inferMood(clean.reply);
+            const prevUserQ = [...messages.slice(0, i)].reverse().find(x => x.role === 'user')?.text ?? '';
             return (
               <div key={i} className={s.chatTheirsRow}>
-                <Logo size={28} mood={mood} interactive cheer="Happy to help!" />
+                <Logo size={26} mood={mood} interactive cheer="Happy to help!" />
                 <div className={s.chatTheirsCol}>
                   <div className={s.chatTheirs}>
-                    <span className={s.chatName}>Maxie</span>
                     <Rich text={clean.reply} />
+                    <ReplyWidget question={prevUserQ} cycle={cycle} budget={budget} short={short} isId={isId} />
                     {m.actions && m.actions.length > 0 && <ActionGroup actions={m.actions} allTxs={allTxs} />}
                     <span className={s.chatRate}>
                       {(['up', 'down'] as const).map(r => (
@@ -386,7 +581,7 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
                           title={r === 'up' ? 'Good answer' : 'Not helpful'}
                           onClick={() => rate(i, r)}
                         >
-                          <Icon d={r === 'up' ? IC.thumbUp : IC.thumbDown} size={15} />
+                          <Icon d={r === 'up' ? IC.thumbUp : IC.thumbDown} size={14} />
                         </button>
                       ))}
                       <button
@@ -396,10 +591,24 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
                         title={copied === i ? 'Copied' : 'Copy answer'}
                         onClick={() => copyReply(i, clean.reply)}
                       >
-                        <Icon d={copied === i ? IC.check : IC.copy} size={15} />
+                        <Icon d={copied === i ? IC.check : IC.copy} size={14} />
                       </button>
-                      {m.rating && <span className={s.chatRateNote}>{m.rating === 'up' ? 'Glad that helped.' : "Got it — I'll tune that next time."}</span>}
-                      {!m.rating && m.model && <span className={s.chatModelTag}>{modelLabel(m.model)}</span>}
+                      <button
+                        type="button"
+                        className={s.chatRateBtn}
+                        aria-label="Save to Journal"
+                        title="Save this reflection as a Journal draft"
+                        onClick={() => void saveReplyToJournal(i, clean.reply)}
+                      >
+                        <Icon d={savedToJournal === i ? IC.check : IC.book} size={14} />
+                      </button>
+                      {savedToJournal === i ? (
+                        <span className={s.chatRateNote}>Saved to Journal draft.</span>
+                      ) : m.rating ? (
+                        <span className={s.chatRateNote}>{m.rating === 'up' ? 'Glad that helped.' : "Got it — I'll tune that next time."}</span>
+                      ) : m.model ? (
+                        <span className={s.chatModelTag}>{modelLabel(m.model)}</span>
+                      ) : null}
                     </span>
                   </div>
                   {i === lastModelIdx && !busy && clean.followUps.length > 0 && (
@@ -419,7 +628,7 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
 
           {busy && (
             <div className={s.chatTheirsRow} role="status" aria-live="polite">
-              <Logo size={28} mood="curious" />
+              <Logo size={26} mood="curious" />
               <span className={s.thinking}>
                 <span className={s.thinkLabel}>{thinkingLabel(waited, deep)}</span>
                 <ThinkingArcs />
@@ -444,7 +653,7 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
               rows={1}
               value={text}
               maxLength={1000}
-              placeholder="Ask Maxie anything…"
+              placeholder={listening ? (isId ? 'Mendengarkan…' : 'Listening…') : isId ? 'Tanya Maxie…' : 'Ask Maxie…'}
               aria-label="Your question"
               onChange={e => setText(e.target.value)}
               onKeyDown={e => {
@@ -454,6 +663,18 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
                 }
               }}
             />
+            {speechCtor && !busy && (
+              <button
+                type="button"
+                className={s.chatMicBtn}
+                data-on={listening || undefined}
+                onClick={toggleVoice}
+                aria-label={listening ? 'Stop voice input' : 'Voice input'}
+                title={listening ? 'Stop listening' : 'Speak your question'}
+              >
+                <Icon d={IC.mic} size={17} />
+              </button>
+            )}
             {busy ? (
               <button type="button" className={s.chatStop} onClick={stop} aria-label="Stop waiting" title="Stop waiting">
                 <span className={s.chatStopSquare} aria-hidden="true" />
@@ -465,6 +686,14 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
             )}
           </div>
           <div className={s.chatFootRow}>
+            <div className={s.sxMiniSeg} role="group" aria-label="Answer speed and depth" title="Quick: instant · Deep: deeper reasoning">
+              <button type="button" aria-pressed={!deep} onClick={() => setDeep(false)}>
+                Quick
+              </button>
+              <button type="button" aria-pressed={deep} onClick={() => setDeep(true)}>
+                Deep
+              </button>
+            </div>
             <button
               type="button"
               className={s.chatNotesChip}
@@ -473,14 +702,126 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
               title="Include your personal transaction notes when asking Maxie"
             >
               <Icon d={withNotes ? IC.check : IC.plus} size={12} />
-              Include notes
+              Notes
             </button>
-            <span className={s.chatDisclosure}>Runs on Gemini · double-check big numbers</span>
+            <span className={s.chatDisclosure} style={{ marginLeft: 'auto' }}>Gemini</span>
           </div>
         </form>
       </section>
     </div>
   );
+}
+
+/** Inline editorial mini-widget attached automatically to relevant Maxie answers (merchants, affordability, savings, cards). */
+function ReplyWidget({
+  question,
+  cycle,
+  budget: b,
+  short,
+  isId,
+}: {
+  question: string;
+  cycle: Cycle;
+  budget: Budget;
+  short: (v: number) => string;
+  isId: boolean;
+}) {
+  if (!question) return null;
+
+  if (/merchant|going|biggest|perginya|terbesar|most|banyak/i.test(question)) {
+    const m = new Map<string, { name: string; count: number; total: number }>();
+    for (const t of b.txs) {
+      if (t.isIncome || t.isTransfer || t.net <= 0) continue;
+      const k = merchantKey(t.title) || t.title.toLowerCase();
+      const cur = m.get(k);
+      if (cur) (cur.count++, (cur.total += t.net));
+      else m.set(k, { name: tidyName(t.title), count: 1, total: t.net });
+    }
+    const top = [...m.values()].sort((a, z) => z.total - a.total).slice(0, 4);
+    if (!top.length) return null;
+    const mx = top[0].total || 1;
+    return (
+      <div className={s.chatWidget}>
+        <span className={s.chatWidgetEyebrow}>{isId ? 'Merchant terbesar siklus ini' : 'Top merchants this cycle'}</span>
+        {top.map(item => (
+          <div key={item.name} className={s.chatWidgetRow}>
+            <div className={s.chatWidgetTop}>
+              <span>
+                <strong>{item.name}</strong> <span className={s.caption}>({item.count}×)</span>
+              </span>
+              <strong>{short(item.total)}</strong>
+            </div>
+            <span className={s.chatWidgetTrack}>
+              <span className={s.chatWidgetFill} style={{ width: `${Math.max(6, (item.total / mx) * 100)}%` }} />
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (/afford|treat|buy|jajan|belanja|beli|spend|ruang aman/i.test(question)) {
+    const left = b.budget - b.spent - b.fixedDue;
+    const wk = weekendSafeSplit(left, cycle.daysLeft + 1, cycle.today.getDay(), b.proj.weekendRatio);
+    const spare = Math.max(0, b.budget - b.projTotal);
+    return (
+      <div className={s.chatWidget}>
+        <span className={s.chatWidgetEyebrow}>{isId ? 'Ruang aman belanja' : 'Comfortable spending room'}</span>
+        <div className={s.chatWidgetStats}>
+          <span>
+            <span className={s.caption}>{isId ? 'Aman/hari' : 'Safe / day'}</span>
+            <strong>{short(b.safeDay)}</strong>
+          </span>
+          {wk && (
+            <span>
+              <span className={s.caption}>{isId ? 'Akhir pekan' : 'Weekends'}</span>
+              <strong>{short(wk.weekendSafe)}</strong>
+            </span>
+          )}
+          <span>
+            <span className={s.caption}>{spare > 0 ? (isId ? 'Proyeksi sisa' : 'Projected spare') : isId ? 'Sisa rencana' : 'Left in plan'}</span>
+            <strong style={{ color: left < 0 ? C.redInk : C.good }}>{short(spare > 0 ? spare : Math.max(0, left))}</strong>
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (/saving|tabungan|nabung|goal|target/i.test(question) && b.savingsTarget > 0) {
+    const pct = Math.min(100, Math.round((b.saved / b.savingsTarget) * 100));
+    return (
+      <div className={s.chatWidget}>
+        <span className={s.chatWidgetEyebrow}>{isId ? 'Progres tabungan' : 'Savings progress'}</span>
+        <div className={s.chatWidgetTop}>
+          <strong>{short(b.saved)}</strong>
+          <span className={s.caption}>
+            {pct}% of {short(b.savingsTarget)}
+          </span>
+        </div>
+        <span className={s.chatWidgetTrack}>
+          <span className={s.chatWidgetFill} style={{ width: `${pct}%`, background: 'var(--good)' }} />
+        </span>
+      </div>
+    );
+  }
+
+  if (/card|kartu|tagihan/i.test(question)) {
+    const owed = b.cards.filter(c => c.owed > 0);
+    if (!owed.length) return null;
+    return (
+      <div className={s.chatWidget}>
+        <span className={s.chatWidgetEyebrow}>{isId ? 'Tagihan kartu aktif' : 'Active card bills'}</span>
+        {owed.map(c => (
+          <div key={c.account} className={s.chatWidgetTop}>
+            <span>{c.account}</span>
+            <strong>{short(c.owed)}</strong>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return null;
 }
 
 /** Gemini's text: headings, "- " bullets, "1. " numbered lists, **bold**, *italic*, and `code`. */

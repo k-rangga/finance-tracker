@@ -6,6 +6,7 @@ import { tidyName, toISO } from './format';
 import { CATEGORIES, OTHER_CATEGORIES, SAVINGS_TARGET_PCT } from '../data/categories';
 import { merchantKey } from '../data/transactions';
 import type { FixedBillStatus } from './fixedBills';
+import { paceInsight, weekendSafeSplit } from './pace';
 
 /** A change Gemini suggests; shown as a card you apply yourself (see askGemini_ in apps-script/Gemini.js). */
 export type ChatAction =
@@ -153,13 +154,26 @@ export function chatContext({
       ...(x.status === 'paid' ? { actual: r(x.actual), verified: !!x.matchedTx } : {}),
     }));
 
+  const insight = paceInsight({
+    budget: b.budget,
+    projTotal: b.projTotal,
+    oneOffs: b.proj.oneOffs,
+    remainingVar: b.proj.remainingVar,
+    daysLeft: cycle.daysLeft,
+    dayN: cycle.dayN,
+    cycleDays: cycle.cycleDays,
+    cats: b.cats,
+  });
+  const left = b.budget - b.spent - b.fixedDue;
+  const wkSplit = weekendSafeSplit(left, cycle.daysLeft + 1, cycle.today.getDay(), b.proj.weekendRatio);
+
   return {
     today: toISO(cycle.today),
     cycle: { start: toISO(cycle.start), end: toISO(cycle.dateOf(cycle.cycleDays - 1)), day: cycle.dayN, days: cycle.cycleDays, daysLeft: cycle.daysLeft, daysToPayday: cycle.daysLeft + 1 },
     currency: settings.currency,
     ...(name ? { name } : {}),
     ...(settings.city ? { city: settings.city } : {}),
-    language: 'English',
+    language: settings.maxieLanguage === 'id' ? 'Indonesian' : 'English',
     income: r(settings.income),
     savingsTargetPct: SAVINGS_TARGET_PCT,
     savingsTarget: r(b.savingsTarget),
@@ -168,11 +182,19 @@ export function chatContext({
     budget: r(b.budget),
     spent: r(b.spent),
     billsStillDue: r(b.fixedDue),
-    left: r(b.budget - b.spent - b.fixedDue),
+    left: r(left),
     variableAveragePerDay: r(b.velDay),
     projectedSpendByPayday: r(b.projTotal),
     ...(b.proj.oneOffs > 0 ? { oneOffsCountedOnce: r(b.proj.oneOffs) } : {}),
     perDayToFinishOnBudget: r(b.safeDay),
+    projectionInsight: {
+      tier: insight.tier,
+      oneOffExplains: insight.oneOffExplains,
+      ...(insight.overBy > 0 ? { overBy: r(insight.overBy), trimPerDay: r(insight.trimPerDay), zeroDaysToFix: insight.zeroDaysToFix } : {}),
+      ...(insight.spareBy > 0 ? { spareBy: r(insight.spareBy) } : {}),
+      ...(insight.topDriver ? { topDriver: { name: insight.topDriver.name, ahead: r(insight.topDriver.ahead) } } : {}),
+      ...(wkSplit ? { weekdaySafe: r(wkSplit.weekdaySafe), weekendSafe: r(wkSplit.weekendSafe), weekendsLeft: wkSplit.weekendsLeft } : {}),
+    },
     bufferCount,
     ...(cards.length ? { cards } : {}),
     ...(trackedFixed.length ? { fixedBills: trackedFixed } : {}),
