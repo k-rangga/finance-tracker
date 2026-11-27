@@ -16,6 +16,8 @@ export const emptyReview = (): ReviewDraft => ({ followed: '', rating: 0, setup:
 const FIRST_SETUPS = 4;
 const FIRST_MISTAKES = 4;
 
+const LESSON_STARTERS = ['Worked because ', "Next time I'll ", 'Felt rushed when '];
+
 /** Followed plan, tags (setup, then mistakes) and a one-line lesson: three compact rows. */
 export function ReviewFields({ value: v, onChange }: { value: ReviewDraft; onChange: (v: ReviewDraft) => void }) {
   const set = (patch: Partial<ReviewDraft>) => onChange({ ...v, ...patch });
@@ -31,6 +33,12 @@ export function ReviewFields({ value: v, onChange }: { value: ReviewDraft; onCha
     el.style.height = 'auto';
     el.style.height = el.scrollHeight + 2 + 'px';
   }, [v.note]);
+
+  const appendStarter = (s0: string) => {
+    const cur = v.note.trimEnd();
+    set({ note: cur ? `${cur} ${s0}` : s0 });
+    note.current?.focus();
+  };
 
   return (
     <div className={s.reviewForm}>
@@ -75,15 +83,26 @@ export function ReviewFields({ value: v, onChange }: { value: ReviewDraft; onCha
       </div>
       <div className={s.reviewRow}>
         <span className={s.reviewLabel}>Lesson</span>
-        <textarea
-          ref={note}
-          className={s.input}
-          rows={1}
-          value={v.note}
-          onChange={e => set({ note: e.target.value })}
-          placeholder="One line: what you'd repeat or change"
-          style={{ resize: 'none', minHeight: 40, padding: '9px 12px', flex: 1 }}
-        />
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <textarea
+            ref={note}
+            className={s.input}
+            rows={1}
+            value={v.note}
+            onChange={e => set({ note: e.target.value })}
+            placeholder="One line: what you'd repeat or change"
+            style={{ resize: 'none', minHeight: 40, padding: '9px 12px', width: '100%' }}
+          />
+          {!v.note.trim() && (
+            <div className={s.invStarterRow}>
+              {LESSON_STARTERS.map(st => (
+                <button key={st} type="button" className={s.invStarterChip} onClick={() => appendStarter(st)}>
+                  + {st.trim()}…
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

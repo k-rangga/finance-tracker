@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import s from '../styles/ui.module.css';
 import { IC, Icon } from './Icon';
 import { addDays, parseISO, toISO } from '../lib/format';
+import { useSwipeDown } from '../lib/gestures';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 const monthTitle = (d: Date) => d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
@@ -151,8 +152,11 @@ export function DateRangePicker({ from, to, min, max, cycleStart, onChange, onCl
     ['Last 30D', addDays(today, -29), today],
   ];
 
+  const swipe = useSwipeDown(onClose);
+
   return (
-    <div ref={box} className={s.calPop} role="dialog" aria-label="Pick a date range">
+    <div ref={box} className={s.calPop} role="dialog" aria-label="Pick a date range" style={swipe.style} {...swipe.handlers}>
+      <div className={s.sheetGrab} aria-hidden="true" />
       <div className={s.sheetHeadMobile}>
         <span className={s.mxPopTitle}>Date range</span>
         <button type="button" className={s.iconBtnSm} aria-label="Close date range" onClick={onClose}>

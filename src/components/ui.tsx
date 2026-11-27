@@ -2,10 +2,11 @@ import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from 're
 import s from '../styles/ui.module.css';
 import { IC, Icon } from './Icon';
 import { dayMonth, pc } from '../lib/format';
+import { useSwipeDown } from '../lib/gestures';
 
-export function Card({ children, style, flush }: { children: ReactNode; style?: CSSProperties; flush?: boolean }) {
+export function Card({ children, style, flush, className }: { children: ReactNode; style?: CSSProperties; flush?: boolean; className?: string }) {
   return (
-    <section className={flush ? s.cardFlush : s.card} style={style}>
+    <section className={`${flush ? s.cardFlush : s.card}${className ? ' ' + className : ''}`} style={style}>
       {children}
     </section>
   );
@@ -132,6 +133,7 @@ export function Modal({ title, onClose, children, width = 520 }: { title: string
   const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const swipe = useSwipeDown(onClose);
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     const first = ref.current?.querySelector<HTMLElement>('input, select, textarea, button:not([data-close])');
@@ -165,7 +167,16 @@ export function Modal({ title, onClose, children, width = 520 }: { title: string
 
   return (
     <div className={s.overlay} onMouseDown={e => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={id} className={`${s.dialog} fade-in`} style={{ maxWidth: width }}>
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={id}
+        className={`${s.dialog} fade-in`}
+        style={{ maxWidth: width, ...swipe.style }}
+        {...swipe.handlers}
+      >
+        <div className={s.sheetGrab} aria-hidden="true" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <h2 id={id} className={s.h2} style={{ flex: 1, minWidth: 0 }}>
             {title}

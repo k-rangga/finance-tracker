@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from 'react';
 import s from '../styles/ui.module.css';
 import { IC, Icon } from '../components/Icon';
 import { Logo } from '../components/Logo';
@@ -8,6 +8,7 @@ import type { Cycle } from '../lib/cycle';
 import { dayMonth, tidyName } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { storage } from '../lib/storage';
+import { haptic } from '../lib/haptics';
 
 export type VignetteScene = 'payday' | 'bloom' | 'cozy' | 'rain' | 'steady';
 
@@ -160,10 +161,23 @@ export function CycleStoryModal({
   open: boolean;
   onClose: () => void;
 }) {
-  const { short, full } = useSettings();
+  const { short, full, settings } = useSettings();
   const [idx, setIdx] = useState(0);
+  const [dir, setDir] = useState<-1 | 0 | 1>(0);
   const [slot, setSlot] = useState(() => cycle.today.getDate() % 3);
   const [revealed, setRevealed] = useState(false);
+  const [drag, setDrag] = useState<{ x: number; y: number; active: boolean }>({ x: 0, y: 0, active: false });
+  const touchRef = useRef<{ x: number; y: number; axis?: 'h' | 'v'; top: number } | null>(null);
+  const didGestureRef = useRef(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const goCard = (next: number) => {
+    const clamped = Math.max(0, Math.min(3, next));
+    if (clamped === idx) return;
+    setDir(clamped > idx ? 1 : -1);
+    setIdx(clamped);
+    haptic('tick', settings.quietMode);
+  };
 
   // Yesterday's biggest everyday spend (or latest everyday spend if yesterday was zero).
   const targetTx: TxView | null = useMemo(() => {
@@ -181,6 +195,7 @@ export function CycleStoryModal({
 
   const castVote = (v: JoyVote) => {
     if (!voteKey) return;
+    haptic('tap', settings.quietMode);
     storage.set(voteKey, v);
     setVote(v);
   };
@@ -188,14 +203,26 @@ export function CycleStoryModal({
   useEffect(() => {
     if (!open) return;
     setIdx(0);
+    setDir(0);
     setRevealed(false);
+    setDrag({ x: 0, y: 0, active: false });
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
-      else if (e.key === 'ArrowRight') setIdx(i => Math.min(3, i + 1));
-      else if (e.key === 'ArrowLeft') setIdx(i => Math.max(0, i - 1));
+      else if (e.key === 'ArrowRight') {
+        setDir(1);
+        setIdx(i => Math.min(3, i + 1));
+      } else if (e.key === 'ArrowLeft') {
+        setDir(-1);
+        setIdx(i => Math.max(0, i - 1));
+      }
     };
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [open, onClose]);
 
   const stats = useMemo(() => {
@@ -329,9 +356,94 @@ export function CycleStoryModal({
 
   const card = cards[idx];
 
+  const onStoryTouchStart = (e: ReactTouchEvent) => {
+    if (e.touches.length !== 1) return;
+    const p = e.touches[0];
+    didGestureRef.current = false;
+    touchRef.current = { x: p.clientX, y: p.clientY, top: contentRef.current?.scrollTop ?? 0 };
+  };
+  const onStoryTouchMove = (e: ReactTouchEvent) => {
+    const st = touchRef.current;
+    if (!st || e.touches.length !== 1) return;
+    const p = e.touches[0];
+    const dx = p.clientX - st.x;
+    const dy = p.clientY - st.y;
+    if (!st.axis) {
+      if (Math.hypot(dx, dy) < 10) return;
+      if (Math.abs(dx) > Math.abs(dy) * 1.15) st.axis = 'h';
+      else if (dy > 0 && st.top <= 2) st.axis = 'v';
+      else {
+        touchRef.current = null;
+        return;
+      }
+    }
+    didGestureRef.current = true;
+    if (st.axis === 'h') {
+      setDrag({ x: Math.max(-96, Math.min(96, dx * 0.45)), y: 0, active: true });
+    } else if (st.axis === 'v') {
+      setDrag({ x: 0, y: Math.max(0, Math.min(220, dy)), active: true });
+    }
+  };
+  const onStoryTouchEnd = () => {
+    const st = touchRef.current;
+    touchRef.current = null;
+    if (st?.axis === 'h') {
+      if (drag.x <= -22) goCard(idx + 1);
+      else if (drag.x >= 22) goCard(idx - 1);
+    } else if (st?.axis === 'v' && drag.y >= 78) {
+      haptic('tick', settings.quietMode);
+      setDrag({ x: 0, y: 0, active: false });
+      onClose();
+      return;
+    }
+    setDrag({ x: 0, y: 0, active: false });
+  };
+  const onStoryClick = (e: ReactMouseEvent<HTMLElement>) => {
+    if (didGestureRef.current) {
+      didGestureRef.current = false;
+      return;
+    }
+    if ((e.target as HTMLElement).closest('button, a, input, select, textarea, [role="tab"], [role="group"]')) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relX = (e.clientX - rect.left) / Math.max(1, rect.width);
+    if (relX < 0.3) {
+      goCard(idx - 1);
+    } else if (!card.interactive) {
+      goCard(idx + 1);
+    }
+  };
+
+  const modalTransform =
+    drag.y > 0
+      ? `translateY(${drag.y.toFixed(1)}px) scale(${(1 - Math.min(0.06, drag.y / 2400)).toFixed(3)})`
+      : drag.x !== 0
+        ? `translateX(${drag.x.toFixed(1)}px)`
+        : undefined;
+
   return (
     <div className={s.storyOverlay} onMouseDown={e => e.target === e.currentTarget && onClose()}>
-      <section className={`${s.storyModal} fade-in`} data-card={idx} role="dialog" aria-modal="true" aria-label="Story of your cycle">
+      <section
+        className={`${s.storyModal} fade-in`}
+        data-card={idx}
+        data-own-gestures
+        role="dialog"
+        aria-modal="true"
+        aria-label="Story of your cycle"
+        onTouchStart={onStoryTouchStart}
+        onTouchMove={onStoryTouchMove}
+        onTouchEnd={onStoryTouchEnd}
+        onTouchCancel={onStoryTouchEnd}
+        onClick={onStoryClick}
+        style={
+          modalTransform
+            ? {
+                transform: modalTransform,
+                opacity: drag.y > 0 ? Math.max(0.55, 1 - drag.y / 360) : undefined,
+                transition: drag.active ? 'none' : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease',
+              }
+            : undefined
+        }
+      >
         {/* Full-bleed seamless background illustration covering the entire card */}
         <div key={`art-${idx}`} className={s.storyBg} aria-hidden="true">
           {card.art}
@@ -350,7 +462,7 @@ export function CycleStoryModal({
                 className={s.storyDot}
                 data-active={i === idx || undefined}
                 data-past={i < idx || undefined}
-                onClick={() => setIdx(i)}
+                onClick={() => goCard(i)}
               />
             ))}
           </div>
@@ -359,9 +471,18 @@ export function CycleStoryModal({
           </button>
         </div>
 
+        {idx === 0 && (
+          <span className={`${s.storyHint} ${s.mobileOnly}`} aria-hidden="true">
+            Tap edges or swipe · pull down to close
+          </span>
+        )}
+
         {/* Lower seamless editorial overlay floating over the landscape's atmospheric fade */}
-        <div className={s.storyContent}>
-          <div key={`copy-${idx}-${card.interactive ? activePrompt : 'static'}`} className={s.storyCopy}>
+        <div ref={contentRef} className={s.storyContent}>
+          <div
+            key={`copy-${idx}-${card.interactive ? activePrompt : 'static'}`}
+            className={`${s.storyCopy} ${dir > 0 ? s.storyCopyNext : dir < 0 ? s.storyCopyPrev : ''}`}
+          >
             <div className={s.storyKickerRow}>
               <span className={s.storyKicker}>{card.kicker}</span>
               {card.interactive && prompts.length > 1 && (
@@ -369,6 +490,7 @@ export function CycleStoryModal({
                   type="button"
                   className={s.storyPromptSwitch}
                   onClick={() => {
+                    haptic('tick', settings.quietMode);
                     setRevealed(false);
                     setSlot(n => n + 1);
                   }}
@@ -425,7 +547,14 @@ export function CycleStoryModal({
                 <>
                   <p className={s.storyText}>Curious how your weekend spending compares to your weekdays this cycle?</p>
                   <div className={s.storyPillRow}>
-                    <button type="button" className={s.storyPill} onClick={() => setRevealed(true)}>
+                    <button
+                      type="button"
+                      className={s.storyPill}
+                      onClick={() => {
+                        haptic('tap', settings.quietMode);
+                        setRevealed(true);
+                      }}
+                    >
                       Tap to reveal
                     </button>
                   </div>
@@ -471,16 +600,23 @@ export function CycleStoryModal({
             <Logo size={26} mood={idx === 2 ? 'happy' : idx === 3 ? 'curious' : 'calm'} followCursor />
             <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
               {idx > 0 && (
-                <button type="button" className={s.storyBtnGhost} onClick={() => setIdx(i => i - 1)}>
+                <button type="button" className={s.storyBtnGhost} onClick={() => goCard(idx - 1)}>
                   Back
                 </button>
               )}
               {idx < cards.length - 1 ? (
-                <button type="button" className={s.storyBtnPrimary} onClick={() => setIdx(i => i + 1)}>
+                <button type="button" className={s.storyBtnPrimary} onClick={() => goCard(idx + 1)}>
                   Next
                 </button>
               ) : (
-                <button type="button" className={s.storyBtnPrimary} onClick={onClose}>
+                <button
+                  type="button"
+                  className={s.storyBtnPrimary}
+                  onClick={() => {
+                    haptic('success', settings.quietMode);
+                    onClose();
+                  }}
+                >
                   Continue to Summary
                 </button>
               )}

@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import s from '../../styles/ui.module.css';
 import { Modal, Options } from '../../components/ui';
+import { IC, Icon } from '../../components/Icon';
+import { haptic } from '../../lib/haptics';
 import { useSettings } from '../../lib/settings';
 import { C } from '../../lib/tokens';
 import { entryRules, nat, numIn, type Draft, type FollowedPlan, type Market, type Trade } from './model';
 import { useInvestFmt } from './Invest';
+
+const THESIS_STARTERS = ['Setup: ', 'Edge: ', 'Exit if: '];
 
 type Props = {
   todayISO: string;
@@ -50,6 +54,7 @@ export function EntryModal({ todayISO, portfolioValue, editing, onClose, onSave 
   );
   const ex0 = editing?.ex;
   const [X, setX] = useState<ExitDraft | null>(() => (ex0 ? { px: String(ex0.px), d: ex0.d, fp: ex0.fp ?? 'Yes', rt: ex0.rt ?? 3, ls: ex0.ls ?? '' } : null));
+  const [moreOpen, setMoreOpen] = useState(() => !!(editing?.nm || editing?.fee || editing?.cat || editing?.cd || editing?.tags));
   const [err, setErr] = useState('');
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => {
     setDraft(d => ({ ...d, [k]: v }));
@@ -78,6 +83,13 @@ export function EntryModal({ todayISO, portfolioValue, editing, onClose, onSave 
   }
   if (lev > 1 && px > 0) parts.push('Liquidation ≈ ' + nat(px * (1 - dr / lev), D.mk));
   const preview = parts.length ? parts.join(', ') : 'Add price and quantity to see the cost, then a target and stop for reward : risk and max loss.';
+
+  const addStarter = (prefix: string) => {
+    haptic('tick', settings.quietMode);
+    if (D.th.includes(prefix.trim())) return;
+    const next = D.th.trim() ? `${D.th.trimEnd()}\n${prefix}` : prefix;
+    set('th', next);
+  };
 
   const save = () => {
     const tk = D.tk.trim().toUpperCase();
@@ -111,6 +123,7 @@ export function EntryModal({ todayISO, portfolioValue, editing, onClose, onSave 
       ...(lev > 1 ? { lev, dir: dr < 0 ? 'Short' : 'Long' } : {}),
       ...(X ? { ex: { px: exPx, d: X.d || todayISO, fp: X.fp, rt: X.rt, ls: X.ls.trim() } } : {}),
     };
+    haptic('success', settings.quietMode);
     onSave(t);
   };
 
@@ -131,68 +144,119 @@ export function EntryModal({ todayISO, portfolioValue, editing, onClose, onSave 
 
   return (
     <Modal title={editing ? `Edit ${editing.tk}` : 'New journal entry'} onClose={onClose} width={680}>
-      <div style={{ ...grid(220), gap: 16 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <span className={s.label}>Market</span>
-          <Options label="Market" items={['IDX', 'US', 'Crypto'] as const} value={D.mk} onChange={v => set('mk', v)} />
+      {/* Section 1: The position */}
+      <div className={s.invSection}>
+        <span className={s.invSectionTitle}>1. Position</span>
+        <div style={{ ...grid(200), gap: 14 }}>
+          <div className={s.field}>
+            <span>Market</span>
+            <Options label="Market" items={['IDX', 'US', 'Crypto'] as const} value={D.mk} onChange={v => set('mk', v)} />
+          </div>
+          <div className={s.field}>
+            <span>Style</span>
+            <Options label="Style" items={['Long-term', 'Swing'] as const} value={D.st} onChange={v => set('st', v)} />
+          </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <span className={s.label}>Style</span>
-          <Options label="Style" items={['Long-term', 'Swing'] as const} value={D.st} onChange={v => set('st', v)} />
+        {D.mk === 'Crypto' && (
+          <div style={{ ...grid(200), gap: 14 }}>
+            <div className={s.field}>
+              <span>Leverage</span>
+              <Options label="Leverage" items={[1, 2, 3, 5, 10] as const} value={D.lev as 1} onChange={v => set('lev', v)} render={v => v + 'x'} />
+            </div>
+            {lev > 1 && (
+              <div className={s.field}>
+                <span>Direction</span>
+                <Options label="Direction" items={['Long', 'Short'] as const} value={D.dir} onChange={v => set('dir', v)} />
+              </div>
+            )}
+          </div>
+        )}
+        <div style={grid(140)}>
+          {text('tk', 'Ticker', { placeholder: D.mk === 'IDX' ? 'BBCA' : D.mk === 'US' ? 'AAPL' : 'BTC', upper: true })}
+          <label className={s.field}>
+            Buy date
+            <input className={s.input} type="date" value={D.d} onChange={e => set('d', e.target.value)} />
+          </label>
+          {text('px', `Price (${cur})`, { numeric: true })}
+          {text('q', D.mk === 'IDX' ? 'Lots (100 shares)' : D.mk === 'US' ? 'Shares' : 'Units', { numeric: true })}
         </div>
       </div>
-      {D.mk === 'Crypto' && (
-        <div style={{ ...grid(220), gap: 16 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <span className={s.label}>Leverage</span>
-            <Options label="Leverage" items={[1, 2, 3, 5, 10] as const} value={D.lev as 1} onChange={v => set('lev', v)} render={v => v + 'x'} />
+
+      {/* Section 2: Plan & risk */}
+      <div className={s.invSection}>
+        <span className={s.invSectionTitle}>2. Plan &amp; risk</span>
+        <div style={grid(180)}>
+          {text('sl', `Stop (${cur})`, { numeric: true, placeholder: 'Price that proves you wrong' })}
+          {text('tg', `Target (${cur}, optional)`, { numeric: true })}
+        </div>
+        <div className={s.field}>
+          <span>
+            Conviction <span style={{ fontWeight: 400, color: C.textMuted }}>(required)</span>
+          </span>
+          <Options label="Conviction" round items={[1, 2, 3, 4, 5] as const} value={D.cv as Trade['cv']} onChange={v => set('cv', v)} />
+        </div>
+        {rules.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingTop: 2 }}>
+            {rules.map(r => (
+              <span
+                key={r.label}
+                className={s.badge}
+                style={{ fontSize: 12.5, padding: '5px 10px', background: r.ok ? C.goodTint : C.redTint, color: r.ok ? C.good : C.redInk }}
+              >
+                {r.ok ? '✓' : '✕'} {r.label}
+              </span>
+            ))}
           </div>
-          {lev > 1 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <span className={s.label}>Direction</span>
-              <Options label="Direction" items={['Long', 'Short'] as const} value={D.dir} onChange={v => set('dir', v)} />
-            </div>
-          )}
+        )}
+      </div>
+
+      {/* Section 3: Your thesis */}
+      <div className={s.invSection}>
+        <span className={s.invSectionTitle}>3. Your thesis</span>
+        <label className={s.field}>
+          <span>Why this trade?</span>
+          <textarea
+            className={s.input}
+            rows={3}
+            value={D.th}
+            onChange={e => set('th', e.target.value)}
+            placeholder="The setup, what the market is missing, and what would prove you wrong"
+          />
+        </label>
+        <div className={s.invStarterRow} aria-label="Thesis starters">
+          {THESIS_STARTERS.map(st => (
+            <button key={st} type="button" className={s.invStarterChip} onClick={() => addStarter(st)}>
+              + {st.replace(': ', '')}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Optional details folded by default so mobile stays compact */}
+      <button type="button" className={s.invMoreToggle} aria-expanded={moreOpen} onClick={() => setMoreOpen(v => !v)}>
+        <Icon d={moreOpen ? IC.chevDown : IC.plus} size={14} style={moreOpen ? { transform: 'rotate(180deg)' } : undefined} />
+        {moreOpen ? 'Hide extra details' : 'Add company name, fee, catalyst or tags'}
+      </button>
+      {moreOpen && (
+        <div className={s.invSection}>
+          <div style={grid(180)}>
+            {text('nm', 'Name (optional)')}
+            {text('fee', `Fee (${cur})`, { numeric: true, placeholder: D.mk === 'IDX' ? 'Auto 0.15%' : 'Auto 0.1%' })}
+          </div>
+          <div style={grid(180)}>
+            {text('cat', 'Catalyst (optional)', { placeholder: 'Earnings, dividend, RUPS' })}
+            <label className={s.field}>
+              Catalyst date (optional)
+              <input className={s.input} type="date" value={D.cd} onChange={e => set('cd', e.target.value)} />
+            </label>
+          </div>
+          {text('tags', 'Tags (optional)', { placeholder: 'bank, dividend' })}
         </div>
       )}
-      <div style={grid(200)}>
-        {text('tk', 'Ticker', { placeholder: D.mk === 'IDX' ? 'BBCA' : D.mk === 'US' ? 'AAPL' : 'BTC', upper: true })}
-        {text('nm', 'Name (optional)')}
-      </div>
-      <div style={grid(140)}>
-        <label className={s.field}>
-          Buy date
-          <input className={s.input} type="date" value={D.d} onChange={e => set('d', e.target.value)} />
-        </label>
-        {text('px', `Price (${cur})`, { numeric: true })}
-        {text('q', D.mk === 'IDX' ? 'Lots (100 shares)' : D.mk === 'US' ? 'Shares' : 'Units', { numeric: true })}
-        {text('fee', `Fee (${cur})`, { numeric: true, placeholder: D.mk === 'IDX' ? 'Auto 0.15%' : 'Auto 0.1%' })}
-      </div>
-      <div style={grid(200)}>
-        {text('tg', `Target (${cur}, optional)`, { numeric: true })}
-        {text('sl', `Stop (${cur})`, { numeric: true, placeholder: 'Price that proves you wrong' })}
-      </div>
-      <div style={grid(200)}>
-        {text('cat', 'Catalyst (optional)', { placeholder: 'Earnings, dividend, RUPS, rate decision' })}
-        <label className={s.field}>
-          Catalyst date (optional)
-          <input className={s.input} type="date" value={D.cd} onChange={e => set('cd', e.target.value)} />
-        </label>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <span className={s.label}>
-          Conviction <span style={{ fontWeight: 500, color: C.textMuted }}>(required)</span>
-        </span>
-        <Options label="Conviction" round items={[1, 2, 3, 4, 5] as const} value={D.cv as Trade['cv']} onChange={v => set('cv', v)} />
-      </div>
-      <label className={s.field}>
-        Thesis
-        <textarea className={s.input} rows={3} value={D.th} onChange={e => set('th', e.target.value)} placeholder="The setup, what the market is missing, and what would prove you wrong" />
-      </label>
-      {text('tags', 'Tags', { placeholder: 'bank, dividend' })}
+
       {X && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, borderTop: `1px solid ${C.divider}`, paddingTop: 16 }}>
-          <span className={s.label}>Exit</span>
+        <div className={s.invSection}>
+          <span className={s.invSectionTitle}>Exit &amp; review</span>
           <div style={grid(160)}>
             <label className={s.field}>
               Exit price ({cur})
@@ -206,12 +270,12 @@ export function EntryModal({ todayISO, portfolioValue, editing, onClose, onSave 
               <input className={s.input} type="date" value={X.d} onChange={e => setX({ ...X, d: e.target.value })} />
             </label>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <span className={s.label}>Followed plan?</span>
+          <div className={s.field}>
+            <span>Followed plan?</span>
             <Options label="Followed plan" items={['Yes', 'Partly', 'No'] as const} value={X.fp} onChange={fp => setX({ ...X, fp })} />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <span className={s.label}>Rating (process, not outcome)</span>
+          <div className={s.field}>
+            <span>Rating (process, not outcome)</span>
             <Options label="Rating" round items={[1, 2, 3, 4, 5] as const} value={X.rt as 1} onChange={rt => setX({ ...X, rt })} />
           </div>
           <label className={s.field}>
@@ -221,24 +285,6 @@ export function EntryModal({ todayISO, portfolioValue, editing, onClose, onSave 
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <span className={s.label}>Entry rules</span>
-        {rules.length === 0 ? (
-          <span style={{ fontSize: 14, color: C.textMuted }}>Long-term spot holdings don't need a stop or target.</span>
-        ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {rules.map(r => (
-              <span
-                key={r.label}
-                className={s.badge}
-                style={{ fontSize: 13, padding: '6px 12px', background: r.ok ? C.goodTint : C.redTint, color: r.ok ? C.good : C.redInk }}
-              >
-                {r.ok ? '✓' : '✕'} {r.label}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
       <div className={s.note} style={{ color: C.textSoft }} aria-live="polite">
         {preview}
       </div>
@@ -247,7 +293,7 @@ export function EntryModal({ todayISO, portfolioValue, editing, onClose, onSave 
           {err}
         </span>
       )}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div className={s.invModalFoot}>
         <button type="button" className={s.btnPrimary} onClick={save}>
           {editing ? 'Save changes' : 'Save entry'}
         </button>

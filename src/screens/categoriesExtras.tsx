@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { Icon, IC } from '../components/Icon';
 import { Logo, type MaxieMood } from '../components/Logo';
@@ -6,6 +6,7 @@ import { useCountUp } from '../components/Delight';
 import type { TxView } from '../lib/budget';
 import { getCycle, type Cycle } from '../lib/cycle';
 import { dayMonth, sum, tidyName, toISO } from '../lib/format';
+import { haptic } from '../lib/haptics';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
@@ -213,9 +214,18 @@ export function ChallengeBox({
   onStart: () => void;
   onClear: () => void;
 }) {
+  const { settings } = useSettings();
   if (!state)
     return (
-      <button type="button" className={s.btnOutlineSm} onClick={onStart} title={`Spend nothing on ${name} for 7 days`}>
+      <button
+        type="button"
+        className={s.btnOutlineSm}
+        onClick={() => {
+          haptic('success', settings.quietMode);
+          onStart();
+        }}
+        title={`Spend nothing on ${name} for 7 days`}
+      >
         <TargetIcon size={15} />
         Try a no-spend week
       </button>
@@ -240,6 +250,7 @@ export function ChallengeBox({
               data-hit={hit || undefined}
               data-done={state.key === 'done' || undefined}
               data-missed={missedHere || undefined}
+              style={hit ? ({ '--stamp-i': i } as CSSProperties) : undefined}
               title={`Day ${i + 1}`}
             >
               {hit ? <Icon d={IC.check} size={13} strokeWidth={2.25} /> : i + 1}
@@ -384,30 +395,53 @@ export function MoveBudget({
 }
 
 /** Swipe a row right to tick it off (phones); the row follows the finger a little. */
-export function useSwipeRight(onSwipe: () => void) {
+export function useSwipeRight(onSwipe: () => void, { enabled = true, quiet = false }: { enabled?: boolean; quiet?: boolean } = {}) {
   const [dx, setDx] = useState(0);
-  const [start, setStart] = useState<{ x: number; y: number } | null>(null);
+  const startRef = useRef<{ x: number; y: number } | null>(null);
+  const tickedRef = useRef(false);
+  const didSwipeRef = useRef(false);
   const handlers = {
     onPointerDown: (e: React.PointerEvent) => {
-      if (e.pointerType !== 'touch') return;
-      setStart({ x: e.clientX, y: e.clientY });
+      if (!enabled || e.pointerType !== 'touch') return;
+      startRef.current = { x: e.clientX, y: e.clientY };
+      tickedRef.current = false;
+      didSwipeRef.current = false;
     },
     onPointerMove: (e: React.PointerEvent) => {
+      const start = startRef.current;
       if (!start) return;
       const x = e.clientX - start.x;
       // Mostly sideways only, so scrolling the page still works.
-      if (Math.abs(e.clientY - start.y) > 24) return setStart(null), setDx(0);
-      setDx(Math.max(0, Math.min(90, x)));
+      if (Math.abs(e.clientY - start.y) > 24) {
+        startRef.current = null;
+        setDx(0);
+        return;
+      }
+      const next = Math.max(0, Math.min(96, x));
+      if (next > 8) didSwipeRef.current = true;
+      if (next >= 64 && !tickedRef.current) {
+        tickedRef.current = true;
+        haptic('tick', quiet);
+      }
+      setDx(next);
     },
     onPointerUp: () => {
-      if (start && dx > 64) onSwipe();
-      setStart(null);
+      if (startRef.current && dx >= 64) {
+        haptic('success', quiet);
+        onSwipe();
+      }
+      startRef.current = null;
       setDx(0);
     },
     onPointerCancel: () => {
-      setStart(null);
+      startRef.current = null;
       setDx(0);
     },
   };
-  return { dx, handlers, swiping: dx > 4 };
+  const consumeClick = () => {
+    if (!didSwipeRef.current) return false;
+    didSwipeRef.current = false;
+    return true;
+  };
+  return { dx, handlers, swiping: dx > 4, ready: dx >= 64, consumeClick };
 }

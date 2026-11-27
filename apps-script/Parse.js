@@ -52,6 +52,16 @@ const SOURCE_RULES = [
 ];
 
 const TOTAL_WORDS = /(grand total|total bayar|total pembayaran|total tagihan|total payment|total paid|total amount|amount paid|top up amount|transfer amount|jumlah (?:bayar|pembayaran|tagihan|transfer)?|nominal|sejumlah|total|tagihan|amount|charged|dibayar|paid)\s*[:\-]?\s*$/i;
+const PROMO_SUBJECT = /\b(promo|promosi|diskon|discount|cashback|voucher|kupon|coupon|flash ?sale|gratis ongkir|free shipping|newsletter|webinar|penawaran|special offer|limited offer|hadiah|giveaway|undian|hemat hingga|save up to|up to \d+%|bonus poin|tukar poin|cicilan 0%|bunga 0%|apply now|daftar sekarang|jangan lewatkan|don'?t miss)\b/i;
+const PROMO_BODY = /\b(promo|promosi|cashback|diskon|flash ?sale|kode promo|promo code|minimal transaksi|min\. transaksi|syarat & ketentuan|s&k berlaku|terms & conditions apply|unsubscribe|berhenti berlangganan|kelola preferensi)\b/i;
+const TX_CONFIRM = /\b(transaksi berhasil|pembayaran berhasil|payment successful|payment confirmation|thank you for your payment|thank you for using|terima kasih atas pembayaran|terima kasih telah bertransaksi|bukti transaksi|bukti pembayaran|e-receipt|receipt|invoice|tagihan|amount charged|amount paid|total paid|total payment|total bayar|total pembayaran|saldo masuk|dana masuk|transfer masuk|incoming transaction|gaji|salary|payroll|payslip)\b/i;
+
+function isPromotional_(subject, text) {
+  if (PROMO_SUBJECT.test(subject) && !TX_CONFIRM.test(subject)) return true;
+  const head = text.slice(0, 1500);
+  if (PROMO_BODY.test(head) && !TX_CONFIRM.test(subject + '\n' + head)) return true;
+  return false;
+}
 
 // ---------------------------------------------------------------- entry point
 
@@ -63,6 +73,7 @@ function parseReceipt(e) {
   const ownerNames = Array.isArray(e && e.ownerNames) ? e.ownerNames : [];
   const hay = subject + '\n' + from + '\n' + text;
   const specific = parseBcaJournal_(subject, text, ownerNames) || parseBcaCard_(subject, text) || parseBlu_(subject, text, ownerNames) || parseGrab_(subject, from, text) || parseTokopedia_(subject, from, text);
+  if (!specific && isPromotional_(subject, text)) return null;
   const p = specific || parseGeneric_(subject, from, text, ownerNames);
   if (!p || !(p.amount > 0)) return null;
   const source = p.source || sourceOf_(hay);

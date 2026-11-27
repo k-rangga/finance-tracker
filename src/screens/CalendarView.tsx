@@ -17,6 +17,7 @@ import {
 import type { Cycle } from '../lib/cycle';
 import type { FixedBillStatus } from '../lib/fixedBills';
 import { dayLabel, dayMonth, tidyName, toISO } from '../lib/format';
+import { haptic } from '../lib/haptics';
 import type { PlanView } from '../lib/installments';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
@@ -146,14 +147,38 @@ export function CalendarMain({
       <Card style={{ gap: 16 }}>
         <div className={s.cfCalHead}>
           <div className={s.cfCalNav}>
-            <button type="button" className={s.iconBtnSm} aria-label="Previous month" onClick={() => onShiftMonth(-1)}>
+            <button
+              type="button"
+              className={s.iconBtnSm}
+              aria-label="Previous month"
+              onClick={() => {
+                haptic('tick', settings.quietMode);
+                onShiftMonth(-1);
+              }}
+            >
               <Icon d={IC.chevLeft} size={16} />
             </button>
             <h2 className={s.calTitle}>{data.label}</h2>
-            <button type="button" className={s.iconBtnSm} aria-label="Next month" onClick={() => onShiftMonth(1)}>
+            <button
+              type="button"
+              className={s.iconBtnSm}
+              aria-label="Next month"
+              onClick={() => {
+                haptic('tick', settings.quietMode);
+                onShiftMonth(1);
+              }}
+            >
               <Icon d={IC.chevRight} size={16} />
             </button>
-            <button type="button" className={s.modelPresetChip} onClick={onJumpToday} style={{ marginLeft: 4 }}>
+            <button
+              type="button"
+              className={s.modelPresetChip}
+              onClick={() => {
+                haptic('tick', settings.quietMode);
+                onJumpToday();
+              }}
+              style={{ marginLeft: 4 }}
+            >
               Today
             </button>
           </div>
@@ -199,11 +224,19 @@ export function CalendarMain({
             ))}
           </div>
           <div className={s.cfCalGrid} role="grid" aria-label={`Cashflow calendar for ${data.label}`}>
-            {data.days.map(d => {
+            {data.days.map((d, i) => {
               const visEvents = d.events.filter(e => eventVisible(e, layer));
               const showSpend = (layer === 'all' || layer === 'spending') && d.spend > 0;
               const heat = showSpend ? Math.min(0.24, 0.05 + (d.spend / data.maxSpend) * 0.19) : 0;
               const isSelected = d.iso === selectedISO;
+              const prevDay = data.days[i - 1];
+              const nextDay = data.days[i + 1];
+              const quietStreak =
+                !showSpend &&
+                d.inMonth &&
+                d.zeroSpend &&
+                (layer === 'all' || layer === 'spending') &&
+                ((prevDay?.inMonth && prevDay.zeroSpend) || (nextDay?.inMonth && nextDay.zeroSpend));
               const hasInflow = visEvents.some(e => e.kind === 'payday' || e.kind === 'inflow');
               const hasBill = visEvents.some(e => e.kind === 'fixed' || e.kind === 'subscription' || e.kind === 'installment' || e.kind === 'planned');
               const hasCard = visEvents.some(e => e.kind === 'card_statement' || e.kind === 'card_due');
@@ -216,10 +249,12 @@ export function CalendarMain({
                   data-outside={!d.inMonth || undefined}
                   data-today={d.isToday || undefined}
                   data-selected={isSelected || undefined}
+                  data-quiet-streak={quietStreak || undefined}
                   aria-pressed={isSelected}
                   aria-label={`${dayLabel(d.date)}${d.spend > 0 ? `, spent ${short(d.spend)}` : ''}${visEvents.length ? `, ${visEvents.length} scheduled` : ''}`}
                   style={heat > 0 ? { background: `color-mix(in srgb, var(--clay) ${Math.round(heat * 100)}%, var(--surface))` } : undefined}
                   onClick={() => {
+                    haptic('tick', settings.quietMode);
                     onSelectDay(d.iso);
                     if (phone) requestAnimationFrame(() => document.getElementById('cal-day-detail')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
                   }}

@@ -10,7 +10,8 @@ import { cycleKey, hasPlan, nextCycleOf } from '../lib/cyclePlans';
 import { changeBadge, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { billLandingDay, paceInsight, weekendSafeSplit } from '../lib/pace';
-import { dayLabel, dayMonth, sum, tidyName, toISO } from '../lib/format';
+import { addDays, dayLabel, dayMonth, sum, tidyName, toISO } from '../lib/format';
+import { haptic } from '../lib/haptics';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
@@ -75,7 +76,10 @@ export function Summary({ cycle, budget: b, onOpenCategory, onOpenCategories, on
         budget={b}
         target={target}
         onAskMaxie={onAskMaxie}
-        onOpenStory={() => setStoryOpen(true)}
+        onOpenStory={() => {
+          haptic('tap', settings.quietMode);
+          setStoryOpen(true);
+        }}
       />
       {cycle.daysLeft <= 4 && <PlanNextNudge cycle={cycle} planned={hasPlan(settings.cyclePlans?.[cycleKey(nextCycleOf(cycle))])} onOpen={onPlanNext} />}
       <NeedsAttention
@@ -146,14 +150,27 @@ function MaxieGreeting({
   const name = settings.name.trim();
   const pledgeKey = `moneyTracker.zeroPledge.${toISO(cycle.today)}`;
   const [pledged, setPledged] = useState(() => storage.get<boolean>(pledgeKey, false));
+  const [pledgePop, setPledgePop] = useState(false);
   useEffect(() => {
     setPledged(storage.get<boolean>(pledgeKey, false));
   }, [pledgeKey]);
+  useEffect(() => {
+    if (!pledgePop) return;
+    const t = setTimeout(() => setPledgePop(false), 1400);
+    return () => clearTimeout(t);
+  }, [pledgePop]);
 
   const togglePledge = () => {
     setPledged(prev => {
       const next = !prev;
       storage.set(pledgeKey, next);
+      if (next) {
+        haptic('success', settings.quietMode);
+        if (!settings.quietMode) setPledgePop(true);
+      } else {
+        haptic('tick', settings.quietMode);
+        setPledgePop(false);
+      }
       return next;
     });
   };
@@ -181,6 +198,8 @@ function MaxieGreeting({
     cycle.dayIdx > 0
       ? sum(b.txs.filter(t => t.offset === cycle.dayIdx - 1 && categoryByName(t.cat) && !t.isIncome && !t.isTransfer).map(t => t.net))
       : null;
+  const yesterdayPledged = cycle.dayIdx > 0 && storage.get<boolean>(`moneyTracker.zeroPledge.${toISO(addDays(cycle.today, -1))}`, false);
+  const keptYesterday = yesterdayPledged && yesterdaySpend === 0;
   const recentSavings = b.txs.some(t => t.isSavings && t.offset >= Math.max(0, cycle.dayIdx - 1));
   const streak = smoothStreakDays(cycle, b);
   const sceneInfo = resolveVignetteScene({ cycle, budget: b, target, streak, todaySpend });
@@ -272,7 +291,7 @@ function MaxieGreeting({
             ? `Masih ada ${short(left)} ruang lega.`
             : `${short(left)} of breathing room.`;
 
-  const hasActions = todaySpend === 0 || !!quickAsk;
+  const hasActions = todaySpend === 0 || !!quickAsk || keptYesterday;
 
   return (
     <section className={s.vigCard} data-wide data-scene={sceneInfo.scene} aria-label={`Maxie: ${sceneInfo.label}`}>
@@ -299,6 +318,7 @@ function MaxieGreeting({
                 type="button"
                 className={s.mxPledgeBtn}
                 data-active={pledged || undefined}
+                data-pop={pledgePop || undefined}
                 aria-pressed={pledged}
                 onClick={togglePledge}
               >
@@ -311,6 +331,12 @@ function MaxieGreeting({
                     ? 'Target hari nol pengeluaran'
                     : 'Aim for a zero-spend day'}
               </button>
+            )}
+            {keptYesterday && (
+              <span className={s.pledgeKeptBadge}>
+                <Icon d={IC.check} size={11} strokeWidth={2.5} />
+                {id ? 'Target kemarin tercapai' : 'Pledge kept yesterday'}
+              </span>
             )}
             {quickAsk && (
               <button type="button" className={s.sxAttnPill} onClick={() => onAskMaxie(quickAsk)}>
@@ -750,7 +776,7 @@ function CycleLine({ cycle, budget: b }: { cycle: Cycle; budget: Budget }) {
 
 /** Three interactive StatTiles (Maxie): Saved (with Rp progress), Bills to come (scrolls to bills), and Card bill (expandable per-card view). */
 function Tiles({ budget: b, onSavings, onBills }: { budget: Budget; onSavings: () => void; onBills: () => void }) {
-  const { short, full, ofIncome } = useSettings();
+  const { short, full, ofIncome, settings } = useSettings();
   const [cardsOpen, setCardsOpen] = useState(false);
   const bills = b.bills;
   const billTotal = sum(bills.map(x => x.amount));
@@ -790,7 +816,15 @@ function Tiles({ budget: b, onSavings, onBills }: { budget: Budget; onSavings: (
   return (
     <div className={s.sxTilesWrap}>
       <div className={s.sxTiles}>
-        <button type="button" className={s.sxTile} data-tone="saved" onClick={onSavings}>
+        <button
+          type="button"
+          className={s.sxTile}
+          data-tone="saved"
+          onClick={() => {
+            haptic('tick', settings.quietMode);
+            onSavings();
+          }}
+        >
           <span className={s.sxTileLabel}>
             <span className={s.sxTileIcon} data-tone="saved" aria-hidden="true">
               <Icon d={IC.piggy} size={14} />
@@ -803,7 +837,15 @@ function Tiles({ budget: b, onSavings, onBills }: { budget: Budget; onSavings: (
           </span>
           <span className={s.sxTileNote}>{savedNote}</span>
         </button>
-        <button type="button" className={s.sxTile} data-tone="bills" onClick={onBills}>
+        <button
+          type="button"
+          className={s.sxTile}
+          data-tone="bills"
+          onClick={() => {
+            haptic('tick', settings.quietMode);
+            onBills();
+          }}
+        >
           <span className={s.sxTileLabel}>
             <span className={s.sxTileIcon} data-tone="bills" aria-hidden="true">
               <Icon d={IC.calendar} size={14} />
@@ -819,7 +861,12 @@ function Tiles({ budget: b, onSavings, onBills }: { budget: Budget; onSavings: (
           data-tone="cards"
           aria-expanded={activeCards.length > 0 ? cardsOpen : undefined}
           disabled={activeCards.length === 0}
-          onClick={() => activeCards.length > 0 && setCardsOpen(o => !o)}
+          onClick={() => {
+            if (activeCards.length > 0) {
+              haptic('tick', settings.quietMode);
+              setCardsOpen(o => !o);
+            }
+          }}
         >
           <span className={s.sxTileLabel}>
             <span className={s.sxTileIcon} data-tone="cards" aria-hidden="true">
@@ -855,7 +902,7 @@ function Tiles({ budget: b, onSavings, onBills }: { budget: Budget; onSavings: (
  * and a visually hidden data table.
  */
 function DailyBars({ cycle, budget: b, onOpenDay }: { cycle: Cycle; budget: Budget; onOpenDay: (iso: string) => void }) {
-  const { short, full } = useSettings();
+  const { short, full, settings } = useSettings();
   const phone = useIsPhone();
   const [hover, setHover] = useState<number | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
@@ -946,7 +993,10 @@ function DailyBars({ cycle, budget: b, onOpenDay }: { cycle: Cycle; budget: Budg
               onMouseEnter={() => !phone && setHover(i)}
               onFocus={() => !phone && setHover(i)}
               onBlur={() => setHover(null)}
-              onClick={() => setPicked(p => (p === i ? null : i))}
+              onClick={() => {
+                haptic('tick', settings.quietMode);
+                setPicked(p => (p === i ? null : i));
+              }}
               aria-label={`${dayMonth(cycle.dateOf(i))}: ${full(v)}`}
               aria-pressed={picked === i}
             >

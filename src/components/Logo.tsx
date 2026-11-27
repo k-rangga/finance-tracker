@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import s from '../styles/ui.module.css';
 import { reducedMotion } from './Delight';
+import { haptic } from '../lib/haptics';
 
 export type MaxieMood = 'calm' | 'happy' | 'curious' | 'steady' | 'cozy' | 'wink';
 
@@ -67,6 +68,7 @@ export function Logo({
   const [bubble, setBubble] = useState<BubblePos | null>(null);
   const [gaze, setGaze] = useState({ x: 0, y: 0 });
   const [blinking, setBlinking] = useState(false);
+  const [idleEar, setIdleEar] = useState<-1 | 0 | 1>(0);
   const tapCount = useRef(0);
   const btnRef = useRef<HTMLButtonElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -111,9 +113,9 @@ export function Logo({
     };
   }, [followCursor]);
 
-  // Natural calm blink every ~4.5s when tracking cursor.
+  // Natural calm blink every ~4.6s when alive (tracking cursor or interactive on phones).
   useEffect(() => {
-    if (!followCursor || reducedMotion()) return;
+    if ((!followCursor && !interactive) || reducedMotion()) return;
     let blinkOff = 0;
     const interval = window.setInterval(() => {
       setBlinking(true);
@@ -123,7 +125,23 @@ export function Logo({
       window.clearInterval(interval);
       window.clearTimeout(blinkOff);
     };
-  }, [followCursor]);
+  }, [followCursor, interactive]);
+
+  // Subtle idle ear flick every ~7.8s when interactive so Maxie feels warmly alive on touch devices.
+  useEffect(() => {
+    if (!interactive || reducedMotion()) return;
+    let off = 0;
+    let side: -1 | 1 = 1;
+    const interval = window.setInterval(() => {
+      side = side === 1 ? -1 : 1;
+      setIdleEar(side);
+      off = window.setTimeout(() => setIdleEar(0), 420);
+    }, 7800);
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(off);
+    };
+  }, [interactive]);
 
   const small = size <= 24;
   const activeMood: MaxieMood = perked ? 'happy' : mood;
@@ -135,8 +153,8 @@ export function Logo({
   const headDy = followCursor ? gaze.y * 0.85 : 0;
   const eyeDx = followCursor ? gaze.x * 1.45 : 0;
   const eyeDy = followCursor ? gaze.y * 0.95 : 0;
-  const leftEarDeg = followCursor && gaze.x < -0.15 ? gaze.x * 4.2 : 0;
-  const rightEarDeg = followCursor && gaze.x > 0.15 ? gaze.x * 4.2 : 0;
+  const leftEarDeg = (followCursor && gaze.x < -0.15 ? gaze.x * 4.2 : 0) + (idleEar === -1 ? -4.5 : 0);
+  const rightEarDeg = (followCursor && gaze.x > 0.15 ? gaze.x * 4.2 : 0) + (idleEar === 1 ? 4.5 : 0);
   const headTransform =
     deg !== 0 || headDx !== 0 || headDy !== 0
       ? `translate(${headDx.toFixed(2)} ${headDy.toFixed(2)}) rotate(${deg.toFixed(2)} 32 34)`
@@ -240,6 +258,7 @@ export function Logo({
 
   if (!interactive) return svg;
   const onPet = () => {
+    haptic('tap');
     const idx = tapCount.current++;
     const lang = currentLang();
     const list = PET_CHEERS[lang];

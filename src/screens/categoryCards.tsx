@@ -3,7 +3,7 @@
  * spent against its limit, the last 7 days, the top expenses and one Maxie suggestion), and fixed bills as a list
  * with a status tag on each, an Installments group, and Maxie's fixes inline.
  */
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { IC, Icon } from '../components/Icon';
 import { Logo } from '../components/Logo';
@@ -12,6 +12,7 @@ import { FlameIcon } from './categoriesExtras';
 import type { CatView, TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import { dayMonth, sum, tidyName, toISO } from '../lib/format';
+import { haptic } from '../lib/haptics';
 import { leftAfter } from '../lib/installments';
 import { useData } from '../lib/data';
 import { useSettings } from '../lib/settings';
@@ -164,7 +165,23 @@ export function BudgetCard({
   const [choosing, setChoosing] = useState(false);
   const [srcIdx, setSrc] = useState(0);
   const [sharing, setSharing] = useState(false);
+  const [deltaFloat, setDeltaFloat] = useState<{ id: number; text: string; pos: boolean } | null>(null);
   const step = settings.currency === 'USD' ? 25 : 100_000;
+
+  useEffect(() => {
+    if (!deltaFloat) return;
+    const t = setTimeout(() => setDeltaFloat(null), 900);
+    return () => clearTimeout(t);
+  }, [deltaFloat]);
+
+  const fireNudge = (delta: number) => {
+    if (!onNudgeLimit || delta === 0) return;
+    onNudgeLimit(delta);
+    haptic('tap', settings.quietMode);
+    if (!settings.quietMode) {
+      setDeltaFloat({ id: Date.now(), text: `${delta > 0 ? '+' : '−'}${short(Math.abs(delta))}`, pos: delta > 0 });
+    }
+  };
 
   // The last 7 days, today last.
   const days = Array.from({ length: 7 }, (_, i) => new Date(cycle.today.getFullYear(), cycle.today.getMonth(), cycle.today.getDate() - 6 + i));
@@ -229,7 +246,14 @@ export function BudgetCard({
             </div>
           )}
           <div className={s.mxActions}>
-            <button type="button" className={s.btnPrimarySm} onClick={() => onMove(src.name, coverAmt)}>
+            <button
+              type="button"
+              className={s.btnPrimarySm}
+              onClick={() => {
+                haptic('success', settings.quietMode);
+                onMove(src.name, coverAmt);
+              }}
+            >
               Cover {full(coverAmt)}
             </button>
             {!choosing && donors.length > 1 && (
@@ -329,6 +353,11 @@ export function BudgetCard({
             <div className={s.mxNudgeBar}>
               <span className={s.mxNudgeLabel}>
                 Limit <strong>{full(lim)}</strong>
+                {deltaFloat && (
+                  <span key={deltaFloat.id} className={s.mxDeltaFloat} data-pos={deltaFloat.pos || undefined} aria-hidden="true">
+                    {deltaFloat.text}
+                  </span>
+                )}
               </span>
               <span className={s.mxNudgeBtns}>
                 <button
@@ -337,7 +366,7 @@ export function BudgetCard({
                   disabled={lim <= 0}
                   aria-label={`Decrease ${c.name} limit by ${short(step)}`}
                   title={`-${short(step)}`}
-                  onClick={() => onNudgeLimit(-Math.min(step, lim))}
+                  onClick={() => fireNudge(-Math.min(step, lim))}
                 >
                   <Icon d={IC.minus} size={13} /> {short(step)}
                 </button>
@@ -346,7 +375,7 @@ export function BudgetCard({
                   className={s.mxNudgeBtn}
                   aria-label={`Increase ${c.name} limit by ${short(step)}`}
                   title={`+${short(step)}`}
-                  onClick={() => onNudgeLimit(step)}
+                  onClick={() => fireNudge(step)}
                 >
                   <Icon d={IC.plus} size={13} /> {short(step)}
                 </button>
@@ -365,6 +394,7 @@ export function BudgetCard({
                     type="button"
                     className={s.mxSource}
                     onClick={() => {
+                      haptic('success', settings.quietMode);
                       onShareRoom(t.name, shareAmt);
                       setSharing(false);
                     }}

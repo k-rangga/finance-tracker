@@ -9,9 +9,11 @@ import { useData } from '../lib/data';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { dayMonth, ordinal, tidyName, toISO } from '../lib/format';
+import { haptic } from '../lib/haptics';
 import { C } from '../lib/tokens';
 import { CATEGORIES, categoryByName } from '../data/categories';
 import { merchantKey, type Transaction } from '../data/transactions';
+import { useSwipeRight } from './categoriesExtras';
 import {
   FIXED_BILL_PRESETS,
   newBillId,
@@ -362,13 +364,15 @@ function FixedBillRow({
   onDelete: () => void;
   onShowTransactions: (cat: string) => void;
 }) {
-  const { full, short } = useSettings();
+  const { settings, full, short } = useSettings();
   const phone = useIsPhone();
   const [pickingTx, setPickingTx] = useState(false);
   const [txQuery, setTxQuery] = useState('');
   const [editing, setEditing] = useState(false);
   const { bill, dueDate, expected, status, matchKind, matchedTx, actual, variance, possibleTx } = item;
   const cat = categoryByName(bill.category);
+  const canSwipePay = status === 'due' || status === 'overdue';
+  const swipe = useSwipeRight(() => onMarkPaid(true), { enabled: canSwipePay, quiet: settings.quietMode });
 
   const badge = (() => {
     if (status === 'paid') {
@@ -424,26 +428,48 @@ function FixedBillRow({
 
   return (
     <div className={s.mxBill} data-open={open || undefined}>
-      <button type="button" className={s.mxHead} aria-expanded={open} onClick={onToggle}>
-        <span className={s.mxIcon} style={{ background: cat?.tint ?? 'var(--surface-200)', color: 'var(--ink)' }}>
-          <Icon d={cat?.icon ?? IC.calendar} size={19} />
-        </span>
-        <span className={s.mxTitles} style={{ gap: 4 }}>
-          <span className={s.fbNameRow}>
-            <span className={s.mxLabel}>{bill.name}</span>
-            <span className={s.fbCatTag}>{bill.category}</span>
+      <div className={s.fbSwipeWrap}>
+        {canSwipePay && (
+          <span className={s.fbSwipeBg} data-ready={swipe.ready || undefined} style={{ opacity: Math.min(1, swipe.dx / 44) }} aria-hidden="true">
+            <Icon d={IC.check} size={15} strokeWidth={2.5} /> Mark paid
           </span>
-          <span className={s.mxMeta}>
-            {badge}
-            {varianceNote}
-            {status !== 'paid' && bill.varies && <span className={s.mxNoteText}>Est.</span>}
+        )}
+        <button
+          type="button"
+          className={s.mxHead}
+          aria-expanded={open}
+          data-own-gestures={canSwipePay ? true : undefined}
+          {...(canSwipePay ? swipe.handlers : undefined)}
+          style={
+            swipe.dx > 0
+              ? { transform: `translateX(${swipe.dx}px)`, transition: 'none', background: 'var(--surface)' }
+              : undefined
+          }
+          onClick={() => {
+            if (swipe.consumeClick()) return;
+            onToggle();
+          }}
+        >
+          <span className={s.mxIcon} style={{ background: cat?.tint ?? 'var(--surface-200)', color: 'var(--ink)' }}>
+            <Icon d={cat?.icon ?? IC.calendar} size={19} />
           </span>
-        </span>
-        <span className={s.mxBillAmt} data-unpaid={status === 'due' || status === 'overdue' || undefined}>
-          {(phone ? short : full)(status === 'paid' ? actual : expected)}
-        </span>
-        <Icon d={IC.chevDown} size={18} color={C.textMuted} style={{ flex: 'none', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.16s ease-out' }} />
-      </button>
+          <span className={s.mxTitles} style={{ gap: 4 }}>
+            <span className={s.fbNameRow}>
+              <span className={s.mxLabel}>{bill.name}</span>
+              <span className={s.fbCatTag}>{bill.category}</span>
+            </span>
+            <span className={s.mxMeta}>
+              {badge}
+              {varianceNote}
+              {status !== 'paid' && bill.varies && <span className={s.mxNoteText}>Est.</span>}
+            </span>
+          </span>
+          <span className={s.mxBillAmt} data-unpaid={status === 'due' || status === 'overdue' || undefined}>
+            {(phone ? short : full)(status === 'paid' ? actual : expected)}
+          </span>
+          <Icon d={IC.chevDown} size={18} color={C.textMuted} style={{ flex: 'none', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.16s ease-out' }} />
+        </button>
+      </div>
 
       {possibleTx && (status === 'due' || status === 'overdue') && (
         <div className={s.fbMatchBar}>
@@ -492,7 +518,14 @@ function FixedBillRow({
                 <button type="button" className={s.btnOutlineSm} onClick={() => setPickingTx(v => !v)}>
                   <Icon d={IC.clip} size={13} /> {pickingTx ? 'Close picker' : 'Link transaction'}
                 </button>
-                <button type="button" className={s.btnOutlineSm} onClick={() => onMarkPaid(true)}>
+                <button
+                  type="button"
+                  className={s.btnOutlineSm}
+                  onClick={() => {
+                    haptic('success', settings.quietMode);
+                    onMarkPaid(true);
+                  }}
+                >
                   <Icon d={IC.check} size={13} /> Mark paid (cash)
                 </button>
                 {status !== 'skipped' ? (

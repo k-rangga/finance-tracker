@@ -165,6 +165,8 @@ const cases = [
     { cats: 'Cafe,Cafe,Cafe,Dining,Take out' },
   ],
   ['Newsletter → null', parse('Newsletter', 'News <n@x.com>', 'No amounts here'), null],
+  ['Bank promo cashback with Rp amount → null', parse('Promo Spesial Akhir Bulan! Cashback Rp500.000', 'BCA <promo@bca.co.id>', 'Nikmati diskon Rp 50.000 dengan minimal transaksi Rp 200.000 menggunakan Kartu Kredit BCA.\nSyarat & ketentuan berlaku.'), null],
+  ['Marketplace flash sale with Rp amount → null', parse('Flash Sale 12.12 — Diskon hingga Rp1.000.000', 'Tokopedia <info@tokopedia.com>', 'Pakai kode promo HEMAT12 untuk potongan Rp 100.000! Berhenti berlangganan.'), null],
   ['Plain Netflix (not forwarded)', parse('Your Netflix bill', 'Netflix <info@netflix.com>', 'Amount charged: Rp 186.000\nPlan: Premium'), { amount: 186000, title: 'Netflix', category: 'Subscriptions' }],
 ];
 

@@ -183,7 +183,11 @@ export function Invest({ cycle }: { cycle: Cycle }) {
                 setQ('');
               }}
             >
-              <span className={s.badgeDot} style={{ background: ink, display: 'inline-block', marginRight: 7, verticalAlign: 'middle' }} aria-hidden="true" />
+              <span
+                className={s.badgeDot}
+                style={{ background: world === k ? 'rgba(255, 250, 242, 0.92)' : ink, display: 'inline-block', marginRight: 7, verticalAlign: 'middle' }}
+                aria-hidden="true"
+              />
               {label}
             </button>
           ))}
@@ -282,7 +286,20 @@ export function Invest({ cycle }: { cycle: Cycle }) {
           </div>}
 
           {view === 'journal' ? (
-            <JournalFeed key={world} account={world} items={mine} dS={money} onReview={toReview.length ? () => setReviewing(toReview) : undefined} />
+            <JournalFeed
+              key={world}
+              account={world}
+              items={mine}
+              dS={money}
+              onReview={toReview.length ? () => setReviewing(toReview) : undefined}
+              onOpenTrade={id => {
+                setView('trades');
+                setStatus('all');
+                setQ('');
+                setJOpen(id);
+              }}
+              onNewEntry={!perps ? () => setFormOpen(true) : undefined}
+            />
           ) : view === 'trades' ? (
             <Journal
               today={cycle.today}

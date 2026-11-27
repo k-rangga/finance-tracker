@@ -6,11 +6,13 @@ import { Select } from './Select';
 import type { Cycle } from '../lib/cycle';
 import { cycleKey, type PlannedCost } from '../lib/cyclePlans';
 import { addDays, dayMonth, sum, tidyName, toISO } from '../lib/format';
+import { haptic } from '../lib/haptics';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
 import { CATEGORIES, categoryByName } from '../data/categories';
 import type { Bill } from '../data/transactions';
+import { useSwipeRight } from '../screens/categoriesExtras';
 
 type Props = {
   id?: string;
@@ -27,7 +29,7 @@ type Props = {
 
 /**
  * Clean, consistent, minimalistic Upcoming bills card shared by Summary and Transactions:
- * vertically aligned rows, 1-tap pay / remove on bills (with Undo), and a lightweight inline "+ Add" form.
+ * vertically aligned rows, 1-tap or swipe-right mark-paid on fixed bills (with Undo), and an inline "+ Add" form.
  */
 export function UpcomingBills({ id, cycle, bills, limit, compact, onDismiss, onMarkPaid }: Props) {
   const { settings, update, short, full } = useSettings();
@@ -67,6 +69,7 @@ export function UpcomingBills({ id, cycle, bills, limit, compact, onDismiss, onM
       category,
     };
     update({ cyclePlans: { ...plans, [key]: { ...cur, costs: [...(cur.costs ?? []), cost] } } });
+    haptic('success', settings.quietMode);
     setName('');
     setAmtText('');
     setDate(defaultDate);
@@ -147,46 +150,17 @@ export function UpcomingBills({ id, cycle, bills, limit, compact, onDismiss, onM
       ) : (
         <>
           <div className={s.ubList}>
-            {visible.map((x, idx) => {
-              const overdue = /\(overdue\)$/i.test(x.title);
-              const cleanTitle = tidyName(x.title.replace(/\s*\(overdue\)$/i, ''));
-              const inDays = cycle.offsetOf(x.date) - cycle.dayIdx;
-              const dateLabel = overdue ? 'Overdue' : inDays <= 0 ? 'Today' : inDays === 1 ? 'Tomorrow' : dayMonth(x.date);
-              return (
-                <div key={`${toISO(x.date)}-${x.title}-${x.amount}-${idx}`} className={s.ubRow}>
-                  <span className={s.sxLegendDot} style={{ background: categoryByName(x.category)?.color ?? C.textSoft }} />
-                  <span className={s.ubTitle} title={`${cleanTitle} · ${x.category}`}>
-                    {cleanTitle}
-                  </span>
-                  <span className={s.ubDate} data-overdue={overdue || undefined}>
-                    {dateLabel}
-                  </span>
-                  <span className={s.ubAmt}>{fmt(x.amount)}</span>
-                  <span className={s.ubActions}>
-                    {onMarkPaid && x.billId && (
-                      <button
-                        type="button"
-                        className={s.ubPayBtn}
-                        aria-label={`Mark ${cleanTitle} paid for this cycle`}
-                        title="Mark paid for this cycle"
-                        onClick={() => onMarkPaid(x)}
-                      >
-                        <Icon d={IC.check} size={13} strokeWidth={2.4} />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className={s.ubRemove}
-                      aria-label={`Remove ${cleanTitle} for this cycle`}
-                      title="Skip or remove for this cycle"
-                      onClick={() => onDismiss(x)}
-                    >
-                      <Icon d={IC.close} size={14} />
-                    </button>
-                  </span>
-                </div>
-              );
-            })}
+            {visible.map((x, idx) => (
+              <UpcomingBillRow
+                key={`${toISO(x.date)}-${x.title}-${x.amount}-${idx}`}
+                bill={x}
+                cycle={cycle}
+                fmt={fmt}
+                quiet={!!settings.quietMode}
+                onDismiss={onDismiss}
+                onMarkPaid={onMarkPaid}
+              />
+            ))}
           </div>
           {limit != null && bills.length > limit && (
             <button type="button" className={s.textBtnSm} style={{ alignSelf: 'flex-start', padding: 0 }} onClick={() => setShowAll(v => !v)}>
@@ -196,5 +170,88 @@ export function UpcomingBills({ id, cycle, bills, limit, compact, onDismiss, onM
         </>
       )}
     </section>
+  );
+}
+
+function UpcomingBillRow({
+  bill: x,
+  cycle,
+  fmt,
+  quiet,
+  onDismiss,
+  onMarkPaid,
+}: {
+  bill: Bill;
+  cycle: Cycle;
+  fmt: (n: number) => string;
+  quiet: boolean;
+  onDismiss: (b: Bill) => void;
+  onMarkPaid?: (b: Bill) => void;
+}) {
+  const canPay = !!(onMarkPaid && x.billId);
+  const swipe = useSwipeRight(() => onMarkPaid?.(x), { enabled: canPay, quiet });
+  const overdue = /\(overdue\)$/i.test(x.title);
+  const cleanTitle = tidyName(x.title.replace(/\s*\(overdue\)$/i, ''));
+  const inDays = cycle.offsetOf(x.date) - cycle.dayIdx;
+  const dateLabel = overdue ? 'Overdue' : inDays <= 0 ? 'Today' : inDays === 1 ? 'Tomorrow' : dayMonth(x.date);
+
+  const row = (
+    <div
+      className={s.ubRow}
+      data-own-gestures={canPay ? true : undefined}
+      {...(canPay ? swipe.handlers : undefined)}
+      style={
+        swipe.dx > 0
+          ? { transform: `translateX(${swipe.dx}px)`, transition: 'none', background: 'var(--surface)' }
+          : undefined
+      }
+    >
+      <span className={s.sxLegendDot} style={{ background: categoryByName(x.category)?.color ?? C.textSoft }} />
+      <span className={s.ubTitle} title={`${cleanTitle} · ${x.category}`}>
+        {cleanTitle}
+      </span>
+      <span className={s.ubDate} data-overdue={overdue || undefined}>
+        {dateLabel}
+      </span>
+      <span className={s.ubAmt}>{fmt(x.amount)}</span>
+      <span className={s.ubActions}>
+        {canPay && (
+          <button
+            type="button"
+            className={s.ubPayBtn}
+            aria-label={`Mark ${cleanTitle} paid for this cycle`}
+            title="Mark paid for this cycle"
+            onClick={() => {
+              haptic('success', quiet);
+              onMarkPaid!(x);
+            }}
+          >
+            <Icon d={IC.check} size={13} strokeWidth={2.4} />
+          </button>
+        )}
+        <button
+          type="button"
+          className={s.ubRemove}
+          aria-label={`Remove ${cleanTitle} for this cycle`}
+          title="Skip or remove for this cycle"
+          onClick={() => {
+            haptic('tick', quiet);
+            onDismiss(x);
+          }}
+        >
+          <Icon d={IC.close} size={14} />
+        </button>
+      </span>
+    </div>
+  );
+
+  if (!canPay) return row;
+  return (
+    <div className={s.ubSwipeWrap}>
+      <span className={s.ubSwipeBg} data-ready={swipe.ready || undefined} style={{ opacity: Math.min(1, swipe.dx / 44) }} aria-hidden="true">
+        <Icon d={IC.check} size={14} strokeWidth={2.6} /> Paid
+      </span>
+      {row}
+    </div>
   );
 }

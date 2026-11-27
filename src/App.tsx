@@ -30,6 +30,7 @@ import { Invest } from './screens/invest/Invest';
 import { Chat } from './components/Chat';
 import { useIsPhone } from './lib/media';
 import { PULL_TO_SYNC, usePageGestures } from './lib/gestures';
+import { haptic } from './lib/haptics';
 import { syncNow } from './lib/gmail';
 import { buildBootHint, writeBootHint } from './lib/bootHint';
 
@@ -301,14 +302,17 @@ export default function App() {
 
   // Phones: swipe sideways between tabs; pull down from the top to sync Gmail.
   const [syncNote, setSyncNote] = useState<string | null>(null);
+  const [tabDir, setTabDir] = useState<-1 | 0 | 1>(0);
   const pullSync = async () => {
     if (!ready) return setGmailOpen(true);
     setSyncNote('Syncing…');
     try {
       const r = await syncNow();
       await refreshImports();
+      haptic('success', settings.quietMode);
       setSyncNote(r.busy ? 'Already syncing — hang tight!' : r.imported ? `Synced! ${r.imported} new ${r.imported === 1 ? 'entry' : 'entries'} in.` : 'All caught up — nothing new.');
     } catch {
+      haptic('warn', settings.quietMode);
       setSyncNote("Couldn't sync. Try again from the Synced button.");
     }
     setTimeout(() => setSyncNote(null), 2200);
@@ -325,21 +329,28 @@ export default function App() {
     ro.observe(el);
     return () => ro.disconnect();
   }, [header, phone]);
+
+  const setTab = useCallback((t: Tab) => {
+    storage.setRaw(KEYS.tab, t);
+    setTabState(prev => {
+      const a = TABS.findIndex(x => x.key === prev);
+      const b = TABS.findIndex(x => x.key === t);
+      setTabDir(b > a ? 1 : b < a ? -1 : 0);
+      return t;
+    });
+    window.scrollTo({ top: 0 });
+  }, []);
+
   const { pull, handlers } = usePageGestures({
     onSwipe: dir => {
       const next = TABS[TABS.findIndex(x => x.key === tab) + dir];
       if (next) setTab(next.key);
     },
     onPull: pullSync,
+    quiet: settings.quietMode,
   });
   const syncLabel = !ready ? 'Connect Gmail' : gmail.last_sync_status?.startsWith('error') ? 'Gmail sync failed' : `Synced ${syncedAgo(gmail.last_synced_at)}`;
   const syncWarn = !ready || !!gmail.last_sync_status?.startsWith('error');
-
-  const setTab = useCallback((t: Tab) => {
-    storage.setRaw(KEYS.tab, t);
-    setTabState(t);
-    window.scrollTo({ top: 0 });
-  }, []);
   const setNav = (mini: boolean) => {
     storage.setRaw(KEYS.nav, mini ? 'mini' : 'full');
     setCollapsed(mini);
@@ -361,6 +372,7 @@ export default function App() {
 
 
   const current = TABS.find(t => t.key === tab)!;
+  const activeTabIdx = Math.max(0, TABS.findIndex(t => t.key === tab));
   const rule = paydayRule();
   const nextMonthDays = new Date(cycle.next.getFullYear(), cycle.next.getMonth() + 1, 0).getDate();
   const targetDay = Math.min(rule.day, nextMonthDays);
@@ -422,8 +434,19 @@ export default function App() {
       </aside>
 
       <nav className={s.bottomNav} aria-label="Main navigation">
+        <span className={s.bottomNavPill} aria-hidden="true" style={{ transform: `translateX(${activeTabIdx * 100}%)` }} />
         {TABS.map(t => (
-          <button key={t.key} type="button" className={tab === t.key ? s.bottomBtnActive : s.bottomBtn} aria-label={t.label} aria-current={tab === t.key ? 'page' : undefined} onClick={() => setTab(t.key)}>
+          <button
+            key={t.key}
+            type="button"
+            className={tab === t.key ? s.bottomBtnActive : s.bottomBtn}
+            aria-label={t.label}
+            aria-current={tab === t.key ? 'page' : undefined}
+            onClick={() => {
+              if (tab !== t.key) haptic('tick', settings.quietMode);
+              setTab(t.key);
+            }}
+          >
             <Icon d={t.icon} size={20} />
             <span>{t.short}</span>
           </button>
@@ -432,8 +455,16 @@ export default function App() {
 
       <main className={s.main} {...handlers}>
         {(pull > 0 || syncNote) && (
-          <div className={s.pullNote} role="status" style={{ transform: `translate(-50%, ${Math.min(pull / 2, 56)}px)` }}>
-            {syncNote ?? (pull >= PULL_TO_SYNC ? 'Release to sync' : 'Pull to sync')}
+          <div
+            className={s.pullNote}
+            data-ready={pull >= PULL_TO_SYNC || !!syncNote || undefined}
+            role="status"
+            style={{ transform: `translate(-50%, ${Math.min(pull / 2, 56)}px)` }}
+          >
+            <span className={s.pullMascot} aria-hidden="true">
+              <Logo size={22} mood={syncNote ? 'happy' : pull >= PULL_TO_SYNC ? 'wink' : 'curious'} />
+            </span>
+            <span>{syncNote ?? (pull >= PULL_TO_SYNC ? 'Release to sync!' : 'Pull to sync')}</span>
           </div>
         )}
         <div className={s.content}>
@@ -504,8 +535,12 @@ export default function App() {
             </div>
           )}
 
-          {/* Each tab fades in when you switch to it. */}
-          <div key={tab} className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
+          {/* Each tab glides in gently in the direction you moved (or fades in when reduced motion / quiet mode). */}
+          <div
+            key={tab}
+            className={settings.quietMode || tabDir === 0 ? 'fade-in' : tabDir > 0 ? s.tabEnterNext : s.tabEnterPrev}
+            style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}
+          >
             {tab === 'summary' && (
               <Summary
                 cycle={cycle}

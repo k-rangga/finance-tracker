@@ -16,6 +16,7 @@ import type { Cycle } from '../lib/cycle';
 import { dayLabel, dayMonth, parseISO, sum, tidyName, toISO } from '../lib/format';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
+import { useSwipeDown } from '../lib/gestures';
 import { readReceipt, receiptName, receiptTxId } from '../lib/receipt';
 import { ReceiptPreview } from '../components/ReceiptPreview';
 import { UpcomingBills } from '../components/UpcomingBills';
@@ -120,6 +121,7 @@ export function Activity({
   /** "New category" dialog, opened from a row's category menu; the new category is applied to that row. */
   const [creating, setCreating] = useState<{ name: string; tx: TxView } | null>(null);
   const [panel, setPanel] = useState<'cal' | 'filter' | 'sort' | null>(null);
+  const panelSwipe = useSwipeDown(() => setPanel(null));
   const toolbarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!panel || panel === 'cal') return;
@@ -452,7 +454,8 @@ export function Activity({
                   {activeFilterCount > 0 && <span className={s.mxCount}>{activeFilterCount}</span>}
                 </button>
                 {panel === 'filter' && (
-                  <div className={`${s.mxPop} ${s.mxPopFilter}`} role="dialog" aria-label="Filter transactions">
+                  <div className={`${s.mxPop} ${s.mxPopFilter}`} role="dialog" aria-label="Filter transactions" style={panelSwipe.style} {...panelSwipe.handlers}>
+                    <div className={s.sheetGrab} aria-hidden="true" />
                     <div className={s.mxPopHead}>
                       <span className={s.mxPopTitle}>Filters</span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -505,7 +508,8 @@ export function Activity({
                     <span>{sort === 'newest' ? 'Sort' : `Sort: ${SORT_LABELS[sort]}`}</span>
                   </button>
                   {panel === 'sort' && (
-                    <div className={`${s.mxPop} ${s.mxPopSort}`} role="dialog" aria-label="Sort transactions">
+                    <div className={`${s.mxPop} ${s.mxPopSort}`} role="dialog" aria-label="Sort transactions" style={panelSwipe.style} {...panelSwipe.handlers}>
+                      <div className={s.sheetGrab} aria-hidden="true" />
                       <div className={s.mxPopHead}>
                         <span className={s.mxPopTitle}>Sort by</span>
                         <button type="button" className={`${s.iconBtnSm} ${s.mobileOnly}`} aria-label="Close sort" onClick={() => setPanel(null)}>
@@ -646,6 +650,7 @@ export function Activity({
                     <TxRow
                       key={t.id}
                       t={t}
+                      showDate={sort === 'highest' || sort === 'lowest'}
                       sameMerchant={(merchantCount.get(merchantKey(t.title)) ?? 1) - 1}
                       suggested={guesses.suggest(t).filter(o => o.category !== t.cat || (o.sub ?? undefined) !== t.sub).slice(0, 3)}
                       guess={t.cat === 'Buffer' ? guesses.guesses[t.id] : undefined}
@@ -935,11 +940,13 @@ type RowProps = {
   /** Phones: category as plain text, the account only when it isn't the usual one, and tapping the row opens its menu. */
   compact?: boolean;
   usualAccount?: string;
+  /** Show the date inline (e.g. when sorted by highest/lowest without day headers). */
+  showDate?: boolean;
   /** A short message at the bottom of the screen (receipt saved, or why it wasn't). */
   onNotice: (text: string) => void;
 };
 
-function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewCategory, expenses, popover, setPopover, compact, usualAccount, onNotice }: RowProps) {
+function TxRow({ t, showDate, sameMerchant, suggested, guess, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewCategory, expenses, popover, setPopover, compact, usualAccount, onNotice }: RowProps) {
   const { installments, notes, setNote, receipts, attachReceipt, removeReceipt } = useData();
   /** The installment plan this row is (a purchase you split) or pays into (a monthly payment), from the one schedule. */
   const { views: plans, openSchedule, untrack } = usePlans();
@@ -1163,7 +1170,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
             <ReceiptPreview txId={receiptTxId(t)} receipt={receipt} title={`${tidyName(t.title)}, ${dayMonth(t.date)}`} onClose={() => setViewing(false)} />
           ) : null}
           <span className={s.ellipsis}>
-            {t.time}
+            {showDate ? (compact ? dayMonth(t.date) : `${dayMonth(t.date)}, ${t.time}`) : t.time}
             {!compact && note && where ? `, ${where}` : ''}
           </span>
         </span>
@@ -1191,7 +1198,7 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
           <Icon d={IC.more} size={18} strokeWidth={3} />
         </button>
         {popover === 'more' && (
-          <MoreMenu title={tidyName(t.title)} onClose={() => setPopover(null)}>
+          <MoreMenu title={showDate ? `${tidyName(t.title)} · ${dayMonth(t.date)}, ${t.time}` : tidyName(t.title)} onClose={() => setPopover(null)}>
             {more.map(([label, run]) => (
               <button
                 key={label}
@@ -1217,8 +1224,10 @@ function TxRow({ t, sameMerchant, suggested, guess, onRecat, onLink, onShare, on
 /** The row's ⋯ menu. */
 function MoreMenu({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const flip = useFlipUp<HTMLDivElement>({ left: 'auto', right: 0, width: 210 });
+  const swipe = useSwipeDown(onClose);
   return (
-    <div ref={flip.ref} className={`${s.picker} ${s.rowSheet}`} role="menu" style={flip.style}>
+    <div ref={flip.ref} className={`${s.picker} ${s.rowSheet}`} role="menu" style={{ ...flip.style, ...swipe.style }} {...swipe.handlers}>
+      <div className={s.sheetGrab} aria-hidden="true" />
       <div className={s.sheetHeadMobile}>
         <span className={`${s.mxPopTitle} ${s.ellipsis}`}>{title}</span>
         <button type="button" className={s.iconBtnSm} aria-label="Close menu" onClick={onClose}>
@@ -1238,11 +1247,13 @@ function Picker({ income, expenses, onPick, onClose }: { income: TxView; expense
   const needle = q.trim().toLowerCase();
   const suggested = needle ? undefined : expenses.find(e => e.amount === income.amount);
   const flip = useFlipUp<HTMLDivElement>();
+  const swipe = useSwipeDown(onClose);
   const list = needle
     ? expenses.filter(e => `${e.title} ${e.cat} ${e.source}`.toLowerCase().includes(needle))
     : (suggested ? [suggested, ...expenses.filter(e => e !== suggested)] : expenses).slice(0, 5);
   return (
-    <div ref={flip.ref} className={`${s.picker} ${s.rowSheet}`} style={flip.style} role="dialog" aria-label={`Expense paid back by ${income.title}`}>
+    <div ref={flip.ref} className={`${s.picker} ${s.rowSheet}`} style={{ ...flip.style, ...swipe.style }} {...swipe.handlers} role="dialog" aria-label={`Expense paid back by ${income.title}`}>
+      <div className={s.sheetGrab} aria-hidden="true" />
       <div className={s.sheetHeadMobile}>
         <span className={s.mxPopTitle}>Paid back for</span>
         <button type="button" className={s.iconBtnSm} aria-label="Close" onClick={onClose}>
@@ -1276,6 +1287,7 @@ function Picker({ income, expenses, onPick, onClose }: { income: TxView; expense
 function NoteEditor({ t, note, onSave, onClose }: { t: TxView; note: string; onSave: (note: string) => void; onClose: () => void }) {
   const [text, setText] = useState(note);
   const flip = useFlipUp<HTMLFormElement>({ padding: 12, gap: 10 });
+  const swipe = useSwipeDown(onClose);
   return (
     <form
       ref={flip.ref}
@@ -1286,8 +1298,10 @@ function NoteEditor({ t, note, onSave, onClose }: { t: TxView; note: string; onS
         e.preventDefault();
         onSave(text);
       }}
-      style={flip.style}
+      style={{ ...flip.style, ...swipe.style }}
+      {...swipe.handlers}
     >
+      <div className={s.sheetGrab} aria-hidden="true" />
       <div className={s.sheetHeadMobile}>
         <span className={s.mxPopTitle}>Note</span>
         <button type="button" className={s.iconBtnSm} aria-label="Close note" onClick={onClose}>
@@ -1327,6 +1341,7 @@ function ShareEditor({ t, onSave, onClose }: { t: TxView; onSave: (ratio: number
   const valid = text.trim() !== '' && Number.isFinite(value) && value >= 0 && value <= t.amount;
   const save = () => valid && onSave(value >= t.amount ? null : value / t.amount);
   const flip = useFlipUp<HTMLFormElement>({ padding: 12, gap: 10 });
+  const swipe = useSwipeDown(onClose);
   return (
     <form
       ref={flip.ref}
@@ -1337,8 +1352,10 @@ function ShareEditor({ t, onSave, onClose }: { t: TxView; onSave: (ratio: number
         e.preventDefault();
         save();
       }}
-      style={flip.style}
+      style={{ ...flip.style, ...swipe.style }}
+      {...swipe.handlers}
     >
+      <div className={s.sheetGrab} aria-hidden="true" />
       <div className={s.sheetHeadMobile}>
         <span className={s.mxPopTitle}>My share</span>
         <button type="button" className={s.iconBtnSm} aria-label="Close" onClick={onClose}>
@@ -1442,6 +1459,7 @@ function CategoryMenu({
   const [active, setActive] = useState(-1);
   const listRef = useRef<HTMLDivElement>(null);
   const flip = useFlipUp<HTMLDivElement>({ width: 'min(300px, 100vw - 48px)' });
+  const swipe = useSwipeDown(onClose);
   const needle = q.trim().toLowerCase();
   const match = (label: string) => !needle || label.toLowerCase().includes(needle);
   const items: MenuItem[] = [
@@ -1489,7 +1507,8 @@ function CategoryMenu({
   };
 
   return (
-    <div ref={flip.ref} className={`${s.picker} ${s.rowSheet}`} style={flip.style}>
+    <div ref={flip.ref} className={`${s.picker} ${s.rowSheet}`} style={{ ...flip.style, ...swipe.style }} {...swipe.handlers}>
+      <div className={s.sheetGrab} aria-hidden="true" />
       <div className={s.sheetHeadMobile}>
         <span className={s.mxPopTitle}>Choose category</span>
         <button type="button" className={s.iconBtnSm} aria-label="Close categories" onClick={onClose}>
