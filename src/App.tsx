@@ -379,6 +379,15 @@ export default function App() {
   const rawPayday = new Date(cycle.next.getFullYear(), cycle.next.getMonth(), targetDay);
   const nextNote = cycle.next.getDate() !== targetDay ? ` (${ordinal(targetDay)} is ${rawPayday.toLocaleDateString('en-GB', { weekday: 'long' })})` : '';
 
+  // On mobile, Ask Maxie opens as its own standalone page so nothing underneath can bleed through the iOS keyboard.
+  if (phone && chat) {
+    return (
+      <PlansProvider value={plansCtx}>
+        <Chat cycle={cycle} budget={budget} allTxs={allTxs} fixedBills={fixedBillStatuses} ask={chat.ask} onClose={() => setChat(null)} pageMode />
+      </PlansProvider>
+    );
+  }
+
   return (
     <PlansProvider value={plansCtx}>
     <div className={`${s.shell} ${collapsed ? s.collapsed : ''}`}>

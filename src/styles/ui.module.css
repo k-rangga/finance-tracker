@@ -10590,3 +10590,37 @@ button.sxTile:active:not(:disabled),
     gap: 8px;
   }
 }
+/* Standalone mobile Ask Maxie page (nothing mounted behind it) */
+.chatPage {
+  min-height: 100dvh;
+  width: 100%;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior: none;
+}
+.chatPage .chatPanel {
+  width: 100%;
+  height: 100dvh;
+  border: none;
+  box-shadow: none;
+}
+.chatPage[data-kb='1'] .chatForm {
+  padding: 8px 12px 8px;
+  border-top: none;
+  background: var(--bg);
+}
+.chatPage[data-kb='1'] .chatComposer {
+  border-radius: 26px;
+  padding: 6px 8px 6px 16px;
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--line-strong) 80%, transparent);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+.chatPage[data-kb='1'] .chatComposer:focus-within {
+  outline: none;
+  border-color: color-mix(in srgb, var(--clay) 55%, var(--border));
+}
+.chatPage[data-kb='1'] .chatFootRow {
+  display: none;
+}

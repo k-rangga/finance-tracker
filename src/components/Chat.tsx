@@ -255,6 +255,8 @@ type Props = {
   fixedBills?: FixedBillStatus[];
   /** Asked as soon as the panel opens (e.g. from Summary's greeting or alerts). */
   ask?: string | null;
+  /** On mobile, render as a standalone full-screen page (no underlying page DOM). */
+  pageMode?: boolean;
   onClose: () => void;
 };
 
@@ -262,7 +264,7 @@ type Props = {
  * Chat with Maxie about this cycle. Persists across panel close/reopen within this browser session, supports Quick vs
  * Deep reasoning modes, context-aware starters, one-tap follow-up chips, and safe Apply/Undo action cards.
  */
-export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props) {
+export function Chat({ cycle, budget, allTxs, fixedBills, ask, pageMode, onClose }: Props) {
   const { settings, update, short } = useSettings();
   const { notes } = useData();
   const sessionKey = 'maxie.chat.' + toISO(cycle.start);
@@ -468,15 +470,21 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
 
   return (
     <div
-      className={s.chatOverlay}
+      className={pageMode ? s.chatPage : s.chatOverlay}
       data-kb={vp.keyboardOpen ? '1' : undefined}
-      onMouseDown={e => e.target === e.currentTarget && onClose()}
+      onMouseDown={!pageMode ? e => e.target === e.currentTarget && onClose() : undefined}
     >
       <section
         className={`${s.chatPanel} fade-in`}
-        style={vp.keyboardOpen ? { paddingTop: vp.top, paddingBottom: vp.kbHeight } : undefined}
-        role="dialog"
-        aria-modal="true"
+        style={
+          pageMode && vp.height != null
+            ? { height: vp.height, marginTop: vp.top }
+            : vp.keyboardOpen
+              ? { paddingTop: vp.top, paddingBottom: vp.kbHeight }
+              : undefined
+        }
+        role={pageMode ? 'main' : 'dialog'}
+        aria-modal={pageMode ? undefined : true}
         aria-label="Ask Maxie"
       >
         <header className={s.chatHead}>
