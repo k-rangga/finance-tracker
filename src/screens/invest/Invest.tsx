@@ -74,6 +74,7 @@ export function Invest({ cycle }: { cycle: Cycle }) {
   // Hyperliquid, synced once for every tab; its trades join the typed-in ones in one list, in rupiah.
   const hl = usePerps();
   const items = useMemo(() => allTrades(P, journal, hl.trades, hl.notes, settings.fxRate), [P, journal, hl.trades, hl.notes, settings.fxRate]);
+  const [journalDraftTrade, setJournalDraftTrade] = useState<(typeof items)[number] | null>(null);
 
   // Prices from Google Finance (GOOGLEFINANCE via the data spreadsheet). Symbols it can't price keep the typed price.
   const [quoting, setQuoting] = useState(false);
@@ -292,13 +293,8 @@ export function Invest({ cycle }: { cycle: Cycle }) {
               items={mine}
               dS={money}
               onReview={toReview.length ? () => setReviewing(toReview) : undefined}
-              onOpenTrade={id => {
-                setView('trades');
-                setStatus('all');
-                setQ('');
-                setJOpen(id);
-              }}
-              onNewEntry={!perps ? () => setFormOpen(true) : undefined}
+              draftFromTrade={journalDraftTrade}
+              onConsumedDraftTrade={() => setJournalDraftTrade(null)}
             />
           ) : view === 'trades' ? (
             <Journal
@@ -318,6 +314,10 @@ export function Invest({ cycle }: { cycle: Cycle }) {
               onEdit={setEditing}
               onSaveUpdate={saveUpdate}
               onDeleteUpdate={deleteUpdate}
+              onJournalTrade={item => {
+                setJournalDraftTrade(item);
+                setView('journal');
+              }}
             />
           ) : (
             <>

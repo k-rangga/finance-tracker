@@ -122,6 +122,7 @@ type Props = {
   onEdit: (t: Trade) => void;
   onSaveUpdate: (u: TradeUpdate) => void;
   onDeleteUpdate: (id: string) => void;
+  onJournalTrade?: (item: AnyTrade) => void;
 };
 
 /** "Refresh prices" state, shared by Portfolio and Journal. */
@@ -146,7 +147,7 @@ function ManualReview({ ex, onSave }: { ex: NonNullable<Trade['ex']>; onSave: (e
   );
 }
 
-export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onClose, stored, updates, onEdit, onSaveUpdate, onDeleteUpdate }: Props) {
+export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onClose, stored, updates, onEdit, onSaveUpdate, onDeleteUpdate, onJournalTrade }: Props) {
   const { dS } = useInvestFmt();
   /** Add/edit update form, and the detail view of one update. */
   const [form, setForm] = useState<{ t: Trade; editing?: TradeUpdate } | null>(null);
@@ -185,7 +186,18 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
           money={t.closed ? usd(t.pnl, true) : 'Open'}
           review={<ReviewLine item={item} />}
         />
-        {isOpen && <PerpDetail key={t.id} t={t} note={hl.notes[t.id]} onSave={n => hl.saveNote(t.id, n)} />}
+        {isOpen && (
+          <>
+            <PerpDetail key={t.id} t={t} note={hl.notes[t.id]} onSave={n => hl.saveNote(t.id, n)} />
+            {onJournalTrade && (
+              <div style={{ padding: '0 24px 20px', display: 'flex' }}>
+                <button type="button" className={s.btnOutlineSm} onClick={() => onJournalTrade(item)}>
+                  <Icon d={IC.edit} size={13} /> Write in Journal
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     );
   };
@@ -278,6 +290,11 @@ export function Journal({ today, todayISO, P, items, hl, openId, setOpenId, onCl
                       <button type="button" className={s.btnOutline} onClick={() => onEdit(storedOf(t))}>
                         Edit entry
                       </button>
+                      {onJournalTrade && (
+                        <button type="button" className={s.btnGhost} onClick={() => onJournalTrade(item)}>
+                          Write in Journal
+                        </button>
+                      )}
                       {/* Closing is final, so it sits apart from the everyday actions. */}
                       {!cl && (
                         <button type="button" className={s.btnGhost} onClick={() => startClose(t)} style={{ marginLeft: 'auto' }}>

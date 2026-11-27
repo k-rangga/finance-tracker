@@ -1,562 +1,455 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import s from '../../styles/ui.module.css';
-import { Card } from '../../components/ui';
-import { Logo } from '../../components/Logo';
-import { Select } from '../../components/Select';
 import { IC, Icon } from '../../components/Icon';
-import { toISO } from '../../lib/format';
-import { haptic } from '../../lib/haptics';
-import { draftJournalMonth, getJournalMonths, setJournalMonth } from '../../lib/perps';
-import { useSettings } from '../../lib/settings';
+import { Logo } from '../../components/Logo';
+import {
+  deleteJournalEntry,
+  excerptOf,
+  leadImageOf,
+  listJournalEntries,
+  newJournalId,
+  readingTimeMinutes,
+  type JournalEntry,
+} from '../../lib/journal';
 import { C, plInk } from '../../lib/tokens';
-import { FP_COLORS } from './Journal';
+import { JournalImage, JournalReader } from './JournalArticle';
+import { JournalEditor } from './JournalEditor';
 import { needsReview, reviewStats, SOURCE_NAME, type AnyTrade, type Source } from './trades';
 
 type Props = {
   account: Source;
-  /** This account's trades (all of them; the Journal picks the month). */
+  /** This account's trades (used for live trade embeds, monthly recap, and Maxie drafting). */
   items: AnyTrade[];
   /** Money from rupiah, in the account's own currency. */
   dS: (idr: number, signed?: boolean) => string;
   /** Opens the quick review, when trades are waiting. */
   onReview?: () => void;
-  /** Jump to a specific trade in the Trades tab. */
-  onOpenTrade?: (key: string) => void;
-  /** Open the New Entry modal (Stocks & crypto). */
-  onNewEntry?: () => void;
+  /** Optional trade to immediately start a new journal entry from. */
+  draftFromTrade?: AnyTrade | null;
+  onConsumedDraftTrade?: () => void;
 };
 
-type FreeEntry = { id: string; key: string; d: string; mood?: string; text: string };
-type TimelineItem =
-  | { kind: 'trade'; date: Date; trade: AnyTrade; isOpen: boolean; isReviewed: boolean }
-  | { kind: 'free'; date: Date; entry: FreeEntry };
-
-const MOODS = ['Calm', 'Patient', 'Focused', 'Cautious', 'FOMO'] as const;
-const MONTH_STARTERS = ['What worked well:\n', 'Biggest lesson:\n', 'One rule for next month:\n'];
-const FREE_STARTERS = ['Market read: ', 'Mindset check: ', 'Sitting on hands today: '];
-const MAXIE_PROMPTS = [
-  'What made you feel most calm or rushed this month?',
-  'Which decision would you gladly repeat tomorrow?',
-  'Did you stick to your stops and sizing when it mattered?',
-  'What is one habit worth carrying into next month?',
-];
+const fmtDate = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+};
 
 const monthOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-const monthName = (m: string) => new Date(Number(m.slice(0, 4)), Number(m.slice(5)) - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-const dayName = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-/** Monday of the date's week. */
-const weekOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
-const reviewed = (t: AnyTrade) => !!t.closed && !needsReview(t) && !!(t.followed || t.setup || t.mistakes.length || t.lesson || t.rating);
-
-function parseFreeEntries(notes: Record<string, string> | null, account: Source, month: string): FreeEntry[] {
-  if (!notes) return [];
-  const prefix = `free|${account}|${month}|`;
-  const out: FreeEntry[] = [];
-  for (const [k, raw] of Object.entries(notes)) {
-    if (!k.startsWith(prefix) || !raw) continue;
-    try {
-      const parsed = JSON.parse(raw) as { d?: string; mood?: string; text?: string };
-      if (!parsed.text?.trim()) continue;
-      out.push({ id: k.slice(prefix.length), key: k, d: parsed.d || `${month}-01`, mood: parsed.mood, text: parsed.text });
-    } catch {
-      /* ignore malformed entry */
-    }
-  }
-  return out.sort((a, b) => b.d.localeCompare(a.d) || b.id.localeCompare(a.id));
-}
 
 /**
- * The journal to read & write: a month of your trades (open theses + closed trades + reviews) and
- * free-form reflections, sorted by week, plus your warm monthly note on top.
+ * Substack-style Journal Publication:
+ * - Clean editorial feed of your entries (with cover/inline thumbnails, reading time, tags, and comment counts)
+ * - Click any entry for the Reader view (with inline images, embedded trade cards, and bottom Reflections/Comments)
+ * - Distraction-free Editor with autosave, paste/drop image upload, live trade embeds, and Maxie drafting
  */
-export function JournalFeed({ account, items, dS, onReview, onOpenTrade, onNewEntry }: Props) {
-  const { settings } = useSettings();
-  const [notes, setNotes] = useState<Record<string, string> | null>(null);
+export function JournalFeed({ account, items, dS, onReview, draftFromTrade, onConsumedDraftTrade }: Props) {
+  const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+
+  const [mode, setMode] = useState<'feed' | 'read' | 'edit'>('feed');
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [draftEntry, setDraftEntry] = useState<JournalEntry | null>(null);
+
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
+  const [tagFilter, setTagFilter] = useState('');
+  const [query, setQuery] = useState('');
+
+  const tradesById = useMemo(() => new Map(items.map(t => [t.key, t])), [items]);
+
+  // Load entries from Supabase (or local fallback).
   useEffect(() => {
-    getJournalMonths()
-      .then(setNotes)
-      .catch(() => setNotes({}));
+    let alive = true;
+    setLoading(true);
+    setErr('');
+    listJournalEntries()
+      .then(list => {
+        if (alive) setEntries(list);
+      })
+      .catch(e => {
+        if (alive) setErr(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  const months = useMemo(() => {
-    const set = new Set<string>();
-    for (const t of items) {
-      set.add(monthOf(t.closed ?? t.opened));
-      set.add(monthOf(t.opened));
-    }
-    if (notes) {
-      const freePrefix = `free|${account}|`;
-      for (const k of Object.keys(notes)) {
-        if (k.startsWith(freePrefix)) {
-          const m = k.slice(freePrefix.length).split('|')[0];
-          if (/^\d{4}-\d{2}$/.test(m)) set.add(m);
-        }
+  // Start a pre-filled entry when jumping from a trade ("Write in Journal").
+  useEffect(() => {
+    if (!draftFromTrade) return;
+    const now = new Date().toISOString();
+    const when = draftFromTrade.closed
+      ? draftFromTrade.closed.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+      : 'Open';
+    const tags = [draftFromTrade.name, ...(draftFromTrade.setup ? [draftFromTrade.setup] : [])];
+    const body = [
+      `[[trade:${draftFromTrade.key}]]`,
+      '',
+      '## Thesis & execution',
+      '',
+      '',
+      '## What I learned',
+      draftFromTrade.lesson ? `> ${draftFromTrade.lesson}` : '> ',
+    ].join('\n');
+    setDraftEntry({
+      id: newJournalId('je'),
+      account,
+      title: `${draftFromTrade.name} ${draftFromTrade.side} (${when})`,
+      subtitle: `${dS(draftFromTrade.pnl, true)}${draftFromTrade.setup ? ` · ${draftFromTrade.setup}` : ''}`,
+      body,
+      coverPath: null,
+      tags,
+      status: 'draft',
+      createdAt: now,
+      updatedAt: now,
+      commentCount: 0,
+    });
+    setActiveId(null);
+    setMode('edit');
+    onConsumedDraftTrade?.();
+  }, [draftFromTrade, account, dS, onConsumedDraftTrade]);
+
+  const startNewEntry = (template?: { title?: string; subtitle?: string; body?: string; tags?: string[] }) => {
+    const now = new Date().toISOString();
+    setDraftEntry({
+      id: newJournalId('je'),
+      account,
+      title: template?.title ?? '',
+      subtitle: template?.subtitle ?? '',
+      body: template?.body ?? '',
+      coverPath: null,
+      tags: template?.tags ?? [],
+      status: 'draft',
+      createdAt: now,
+      updatedAt: now,
+      commentCount: 0,
+    });
+    setActiveId(null);
+    setMode('edit');
+  };
+
+  const handleSaved = (saved: JournalEntry) => {
+    setEntries(prev => {
+      const idx = prev.findIndex(x => x.id === saved.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...saved, commentCount: prev[idx].commentCount ?? saved.commentCount ?? 0 };
+        return next;
       }
-    }
-    set.add(monthOf(new Date()));
-    return [...set].sort().reverse();
-  }, [items, notes, account]);
+      return [saved, ...prev];
+    });
+    setActiveId(saved.id);
+    setDraftEntry(saved);
+  };
 
-  const [month, setMonth] = useState(months[0]);
-  const [tag, setTag] = useState('');
-  const [scope, setScope] = useState<'all' | 'reviewed'>('all');
+  const handleDelete = async (id: string) => {
+    await deleteJournalEntry(id);
+    setEntries(prev => prev.filter(x => x.id !== id));
+    setActiveId(null);
+    setDraftEntry(null);
+    setMode('feed');
+  };
 
-  const closedInMonth = items.filter(t => t.closed && monthOf(t.closed) === month);
-  const openInMonth = items.filter(t => !t.closed && monthOf(t.opened) === month);
-  const st = reviewStats(closedInMonth);
-  const reviewedCount = closedInMonth.filter(reviewed).length;
-  const waiting = closedInMonth.filter(needsReview).length;
-  const topMistake = [...st.byMistake].sort((a, b) => b.trades - a.trades || a.pnl - b.pnl)[0];
+  const handleCommentCountChange = (entryId: string, count: number) => {
+    setEntries(prev => prev.map(x => (x.id === entryId ? { ...x, commentCount: count } : x)));
+  };
 
-  const freeEntries = useMemo(() => parseFreeEntries(notes, account, month), [notes, account, month]);
-  const allMonthTrades = useMemo(() => {
-    if (scope === 'reviewed') return closedInMonth.filter(reviewed);
-    return [...closedInMonth, ...openInMonth];
-  }, [scope, closedInMonth, openInMonth]);
-
-  const tags = useMemo(
-    () =>
-      [
-        ...new Set([
-          ...allMonthTrades.flatMap(t => [...(t.setup ? [t.setup] : []), ...t.mistakes]),
-          ...freeEntries.map(f => f.mood).filter((x): x is string => !!x),
-        ]),
-      ].sort(),
-    [allMonthTrades, freeEntries],
+  const activeEntry = useMemo(
+    () => (activeId ? entries.find(x => x.id === activeId) ?? draftEntry : draftEntry),
+    [activeId, entries, draftEntry],
   );
 
-  // Unified chronological timeline: trades + free entries.
-  const timeline = useMemo(() => {
-    const rows: TimelineItem[] = [];
-    for (const t of allMonthTrades) {
-      if (tag && t.setup !== tag && !t.mistakes.includes(tag)) continue;
-      rows.push({
-        kind: 'trade',
-        date: t.closed ?? t.opened,
-        trade: t,
-        isOpen: !t.closed,
-        isReviewed: reviewed(t),
-      });
-    }
-    for (const entry of freeEntries) {
-      if (tag && entry.mood !== tag) continue;
-      rows.push({
-        kind: 'free',
-        date: new Date(entry.d + 'T12:00:00'),
-        entry,
-      });
-    }
-    return rows.sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [allMonthTrades, freeEntries, tag]);
+  // Current month's trade recap for a gentle editorial starter.
+  const curMonth = monthOf(new Date());
+  const curMonthName = new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const monthTrades = useMemo(() => items.filter(t => t.closed && monthOf(t.closed) === curMonth), [items, curMonth]);
+  const monthStats = useMemo(() => reviewStats(monthTrades), [monthTrades]);
+  const waitingReview = useMemo(() => monthTrades.filter(needsReview).length, [monthTrades]);
 
-  // By week, newest first.
-  const weeks: { start: Date; list: TimelineItem[] }[] = [];
-  for (const item of timeline) {
-    const w = weekOf(item.date);
-    const last = weeks[weeks.length - 1];
-    if (last && last.start.getTime() === w.getTime()) last.list.push(item);
-    else weeks.push({ start: w, list: [item] });
+  const startMonthlyReview = () => {
+    const topTrades = [...monthTrades].sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl)).slice(0, 3);
+    const embeds = topTrades.map(t => `[[trade:${t.key}]]`).join('\n\n');
+    const summaryLine = monthStats.count
+      ? `${monthStats.count} closed trades · ${Math.round(monthStats.winRate ?? 0)}% wins · ${dS(monthStats.pnl, true)}`
+      : `${SOURCE_NAME[account]} reflection`;
+    startNewEntry({
+      title: `${curMonthName} — Trading Journal`,
+      subtitle: summaryLine,
+      tags: ['Monthly review'],
+      body: [
+        '## What worked this month',
+        '',
+        '- ',
+        '',
+        '## What to refine next month',
+        '',
+        '- ',
+        ...(embeds ? ['', '## Key trades', '', embeds] : []),
+        '',
+        '> Main rule to carry forward: ',
+      ].join('\n'),
+    });
+  };
+
+  // All tags across entries (sorted by frequency).
+  const allTags = useMemo(() => {
+    const freq = new Map<string, number>();
+    for (const e of entries) for (const t of e.tags) freq.set(t, (freq.get(t) ?? 0) + 1);
+    return [...freq.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([t]) => t)
+      .slice(0, 10);
+  }, [entries]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return entries.filter(e => {
+      if (statusFilter !== 'all' && e.status !== statusFilter) return false;
+      if (tagFilter && !e.tags.includes(tagFilter)) return false;
+      if (q) {
+        const hay = `${e.title} ${e.subtitle} ${e.body} ${e.tags.join(' ')}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [entries, statusFilter, tagFilter, query]);
+
+  const draftCount = useMemo(() => entries.filter(e => e.status === 'draft').length, [entries]);
+
+  // ---- Reader View ----
+  if (mode === 'read' && activeEntry) {
+    return (
+      <JournalReader
+        entry={activeEntry}
+        tradesById={tradesById}
+        dS={dS}
+        onBack={() => setMode('feed')}
+        onEdit={() => {
+          setDraftEntry(activeEntry);
+          setMode('edit');
+        }}
+        onDelete={() => handleDelete(activeEntry.id)}
+        onCommentCountChange={handleCommentCountChange}
+      />
+    );
   }
 
-  // Monthly note: loaded once, saved a moment after you stop typing.
-  const [note, setNote] = useState('');
-  const [noteState, setNoteState] = useState<'' | 'saving' | 'saved' | 'error'>('');
-  const [drafting, setDrafting] = useState(false);
-  const [draftErr, setDraftErr] = useState('');
-  const key = `${account}|${month}`;
-  useEffect(() => {
-    setNote(notes?.[key] ?? '');
-    setNoteState('');
-  }, [notes, key]);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
-  const editNote = (v: string) => {
-    setNote(v);
-    setNoteState('saving');
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      setNotes(n => ({ ...(n ?? {}), [key]: v }));
-      setJournalMonth(key, v)
-        .then(() => setNoteState('saved'))
-        .catch(() => setNoteState('error'));
-    }, 800);
-  };
-  const appendMonthStarter = (s0: string) => {
-    haptic('tick', settings.quietMode);
-    const cur = note.trimEnd();
-    editNote(cur ? `${cur}\n\n${s0}` : s0);
-    noteBox.current?.focus();
-  };
-  const noteBox = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    const el = noteBox.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = Math.max(84, el.scrollHeight + 2) + 'px';
-  }, [note]);
+  // ---- Editor View ----
+  if (mode === 'edit' && draftEntry) {
+    return (
+      <JournalEditor
+        initial={draftEntry}
+        trades={items}
+        tradesById={tradesById}
+        dS={dS}
+        onSaved={handleSaved}
+        onClose={latest => {
+          const exists = entries.some(x => x.id === latest.id);
+          if (exists) {
+            setActiveId(latest.id);
+            setMode('read');
+          } else {
+            setMode('feed');
+          }
+        }}
+      />
+    );
+  }
 
-  // Free-form quick reflection composer.
-  const todayStr = toISO(new Date());
-  const defaultFreeDate = todayStr.startsWith(month) ? todayStr : `${month}-01`;
-  const [writingFree, setWritingFree] = useState(false);
-  const [freeDate, setFreeDate] = useState(defaultFreeDate);
-  const [freeMood, setFreeMood] = useState('');
-  const [freeText, setFreeText] = useState('');
-  const [savingFree, setSavingFree] = useState(false);
-  useEffect(() => {
-    setFreeDate(todayStr.startsWith(month) ? todayStr : `${month}-01`);
-  }, [month, todayStr]);
-
-  const saveFree = async () => {
-    const trimmed = freeText.trim();
-    if (!trimmed) return;
-    setSavingFree(true);
-    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-    const entryMonth = freeDate.slice(0, 7) || month;
-    const entryKey = `free|${account}|${entryMonth}|${id}`;
-    const payload = JSON.stringify({ d: freeDate, ...(freeMood ? { mood: freeMood } : {}), text: trimmed });
-    try {
-      await setJournalMonth(entryKey, payload);
-      setNotes(n => ({ ...(n ?? {}), [entryKey]: payload }));
-      haptic('success', settings.quietMode);
-      setFreeText('');
-      setFreeMood('');
-      setWritingFree(false);
-    } finally {
-      setSavingFree(false);
-    }
-  };
-
-  const deleteFree = async (entryKey: string) => {
-    haptic('tick', settings.quietMode);
-    setNotes(n => {
-      const next = { ...(n ?? {}) };
-      delete next[entryKey];
-      return next;
-    });
-    await setJournalMonth(entryKey, '');
-  };
-
-  /** The month as plain text: numbers, note, then every trade & reflection. */
-  const asText = () =>
-    [
-      `${SOURCE_NAME[account]} journal, ${monthName(month)}`,
-      `${st.count} closed trades, ${st.winRate == null ? '—' : Math.round(st.winRate) + '% wins'}, ${dS(st.pnl, true)}${st.followedPct != null ? `, plan followed ${Math.round(st.followedPct)}%` : ''}`,
-      ...(topMistake ? [`Most repeated mistake: ${topMistake.key} (${topMistake.trades}×, ${dS(topMistake.pnl, true)})`] : []),
-      ...(note.trim() ? ['', note.trim()] : []),
-      '',
-      ...timeline.map(item => {
-        if (item.kind === 'free') {
-          const e = item.entry;
-          return `${dayName(item.date)} [Note${e.mood ? ` · ${e.mood}` : ''}]: ${e.text}`;
-        }
-        const t = item.trade;
-        if (item.isOpen) {
-          return `${dayName(item.date)}, ${t.name} ${t.side} (Open)${t.manual?.th ? `\n  Thesis: "${t.manual.th}"` : ''}`;
-        }
-        return (
-          `${dayName(item.date)}, ${t.name} ${t.side}, ${dS(t.pnl, true)}` +
-          [t.followed && `plan: ${t.followed}`, t.setup, ...t.mistakes].filter(Boolean).map(x => `, ${x}`).join('') +
-          (t.lesson ? `\n  "${t.lesson}"` : '')
-        );
-      }),
-    ].join('\n');
-
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(asText());
-      haptic('tap', settings.quietMode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch {
-      window.prompt('Copy your journal:', asText());
-    }
-  };
-  const draft = async () => {
-    setDrafting(true);
-    setDraftErr('');
-    try {
-      const r = await draftJournalMonth(asText());
-      if (!r.text) setDraftErr(r.error === 'no_key' ? 'Maxie needs its Gemini API key first (GEMINI_API_KEY).' : "Maxie couldn't write a draft. Try again.");
-      else {
-        haptic('success', settings.quietMode);
-        editNote(note.trim() ? `${note.trim()}\n\n${r.text}` : r.text);
-      }
-    } catch (e) {
-      setDraftErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setDrafting(false);
-    }
-  };
-
-  const promptIdx = (Number(month.slice(5)) + new Date().getDate()) % MAXIE_PROMPTS.length;
-  const maxiePrompt = MAXIE_PROMPTS[promptIdx];
+  // ---- Publication Feed View ----
+  const isMissingTable = err.toLowerCase().includes('journal_entries') && (err.toLowerCase().includes('does not exist') || err.toLowerCase().includes('could not find'));
 
   return (
-    <div className={s.stack}>
-      <div className={s.invJournalBar}>
-        <div className={s.invFilters} style={{ flex: 1, minWidth: 0 }}>
-          <Select ariaLabel="Month" value={month} onChange={m => (setMonth(m), setTag(''))} options={months.map(m => ({ value: m, label: monthName(m) }))} />
-          <Select ariaLabel="Tag" value={tag} onChange={setTag} options={[{ value: '', label: 'All tags' }, ...tags.map(x => ({ value: x, label: x }))]} />
-          <div className={s.segment} role="group" aria-label="Entries shown">
-            <button type="button" aria-pressed={scope === 'all'} onClick={() => setScope('all')}>
-              All activity
-            </button>
-            <button type="button" aria-pressed={scope === 'reviewed'} onClick={() => setScope('reviewed')}>
-              Reviewed
-            </button>
-          </div>
+    <div className={s.subWrap}>
+      {/* Substack Publication Header */}
+      <header className={s.subPubHead}>
+        <div className={s.subPubInfo}>
+          <h2 className={s.subPubTitle}>Journal</h2>
+          <p className={s.subPubDesc}>
+            Essays, trade reflections, charts, and hindsight notes — private to you.
+          </p>
         </div>
-        <button type="button" className={s.btnOutlineSm} style={{ minHeight: 40 }} onClick={copy} disabled={!timeline.length && !note.trim()}>
-          <Icon d={IC.copy} size={15} />
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-      </div>
+        <div className={s.subPubActions}>
+          <button type="button" className={s.btnPrimarySm} onClick={() => startNewEntry()}>
+            <Icon d={IC.plus} size={14} /> New entry
+          </button>
+        </div>
+      </header>
 
-      {/* Warm monthly reflection card */}
-      <Card className={s.journalPaper} style={{ gap: 14 }}>
-        <div className={s.cardHead}>
-          <h2 className={s.h2}>{monthName(month)}</h2>
-          <span className={s.caption}>{SOURCE_NAME[account]}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 15 }}>
-            {st.count ? (
-              <>
-                {st.count} closed, {Math.round(st.winRate ?? 0)}% wins,{' '}
-                <strong style={{ color: plInk(st.pnl), fontWeight: 600 }}>{dS(st.pnl, true)}</strong>
-                {st.followedPct != null && `, plan followed ${Math.round(st.followedPct)}%`}
-              </>
-            ) : openInMonth.length > 0 ? (
-              <span style={{ color: C.textSoft }}>{openInMonth.length} open {openInMonth.length === 1 ? 'position' : 'positions'} this month</span>
-            ) : (
-              <span style={{ color: C.textMuted }}>A fresh page for {monthName(month)}.</span>
+      {/* Compact Monthly Trade Recap Strip */}
+      {monthStats.count > 0 && (
+        <div className={s.subRecapBar}>
+          <span>
+            <strong>{curMonthName}:</strong> {monthStats.count} closed {monthStats.count === 1 ? 'trade' : 'trades'},{' '}
+            {Math.round(monthStats.winRate ?? 0)}% wins,{' '}
+            <strong style={{ color: plInk(monthStats.pnl) }}>{dS(monthStats.pnl, true)}</strong>
+          </span>
+          <span className={s.subRecapActions}>
+            {waitingReview > 0 && onReview && (
+              <button type="button" className={s.textBtnSm} onClick={onReview}>
+                Review {waitingReview} waiting
+              </button>
             )}
+            <button type="button" className={s.btnOutlineSm} onClick={startMonthlyReview}>
+              <Icon d={IC.edit} size={13} /> Write monthly review
+            </button>
           </span>
-          {(closedInMonth.length > 0 || freeEntries.length > 0) && (
-            <span className={s.journalProgressPill}>
-              {closedInMonth.length > 0 ? `${reviewedCount}/${closedInMonth.length} reviewed` : null}
-              {closedInMonth.length > 0 && freeEntries.length > 0 ? ' · ' : null}
-              {freeEntries.length > 0 ? `${freeEntries.length} ${freeEntries.length === 1 ? 'note' : 'notes'}` : null}
-            </span>
-          )}
         </div>
-        {topMistake && (
-          <span style={{ fontSize: 14, color: C.textSoft }}>
-            Most repeated mistake: <strong style={{ color: C.redInk, fontWeight: 600 }}>{topMistake.key}</strong> ({topMistake.trades}×, {dS(topMistake.pnl, true)})
-          </span>
-        )}
-        <div className={s.journalPromptBar}>
-          <Logo size={22} mood="curious" />
-          <span>{maxiePrompt}</span>
+      )}
+
+      {/* Search & Filter Bar */}
+      {entries.length > 0 && (
+        <div className={s.subFilterRow}>
+          <div className={s.sxMiniSeg} role="group" aria-label="Entry status">
+            <button type="button" aria-pressed={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>
+              All ({entries.length})
+            </button>
+            <button type="button" aria-pressed={statusFilter === 'published'} onClick={() => setStatusFilter('published')}>
+              Published
+            </button>
+            {draftCount > 0 && (
+              <button type="button" aria-pressed={statusFilter === 'draft'} onClick={() => setStatusFilter('draft')}>
+                Drafts ({draftCount})
+              </button>
+            )}
+          </div>
+          <label className={s.subSearch}>
+            <Icon d={IC.search} size={14} color={C.textMuted} />
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search entries…"
+              aria-label="Search journal entries"
+            />
+          </label>
         </div>
-        <label className={s.field} style={{ gap: 6 }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ marginRight: 'auto' }}>Monthly reflection</span>
-            <span style={{ fontSize: 12, fontWeight: 400, color: noteState === 'error' ? C.redInk : noteState === 'saved' ? C.good : C.textMuted }}>
-              {noteState === 'saving' ? 'Saving…' : noteState === 'saved' ? 'Saved' : noteState === 'error' ? 'Not saved' : ''}
-            </span>
-          </span>
-          <textarea
-            ref={noteBox}
-            className={`${s.input} ${s.journalTextarea}`}
-            value={note}
-            onChange={e => editNote(e.target.value)}
-            placeholder="Jot down what worked, what felt off, or one rule to keep next month…"
-            style={{ resize: 'none', minHeight: 84 }}
-            disabled={notes == null}
-          />
-        </label>
-        <div className={s.invStarterRow} aria-label="Reflection starters">
-          {MONTH_STARTERS.map(st0 => (
-            <button key={st0} type="button" className={s.invStarterChip} onClick={() => appendMonthStarter(st0)}>
-              + {st0.replace(':\n', '')}
+      )}
+
+      {allTags.length > 0 && (
+        <div className={s.subTagFilterRow}>
+          <button
+            type="button"
+            className={s.subTagChip}
+            data-on={!tagFilter || undefined}
+            onClick={() => setTagFilter('')}
+          >
+            All topics
+          </button>
+          {allTags.map(t => (
+            <button
+              key={t}
+              type="button"
+              className={s.subTagChip}
+              data-on={tagFilter === t || undefined}
+              onClick={() => setTagFilter(tagFilter === t ? '' : t)}
+            >
+              {t}
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            className={s.btnOutlineSm}
-            onClick={() => {
-              haptic('tap', settings.quietMode);
-              setWritingFree(v => !v);
-            }}
-          >
-            <Icon d={writingFree ? IC.close : IC.plus} size={14} />
-            {writingFree ? 'Close note' : 'Write a free note'}
-          </button>
-          <button
-            type="button"
-            className={s.btnOutlineSm}
-            onClick={draft}
-            disabled={drafting || (!timeline.length && !note.trim())}
-            title={!timeline.length ? 'Add a trade or note first so Maxie has context' : undefined}
-          >
-            <Icon d={IC.sparkle} size={14} />
-            {drafting ? 'Drafting…' : 'Draft with Maxie'}
-          </button>
-          {draftErr && <span style={{ fontSize: 13, color: C.redInk }}>{draftErr}</span>}
-          {waiting > 0 && onReview && (
-            <button type="button" className={s.textBtnSm} style={{ marginLeft: 'auto' }} onClick={onReview}>
-              {waiting} trade{waiting === 1 ? '' : 's'} still to review →
-            </button>
-          )}
-        </div>
-      </Card>
-
-      {/* Free-form journal entry composer */}
-      {writingFree && (
-        <Card className={s.journalFreeCard} style={{ gap: 12 }}>
-          <div className={s.cardHead}>
-            <span style={{ fontSize: 15, fontWeight: 600 }}>New reflection</span>
-            <input type="date" className={s.input} value={freeDate} onChange={e => setFreeDate(e.target.value)} aria-label="Reflection date" style={{ width: 'auto', minHeight: 36, padding: '4px 10px', fontSize: 13 }} />
-          </div>
-          <div className={s.invStarterRow} role="group" aria-label="Mindset">
-            {MOODS.map(m => (
-              <button
-                key={m}
-                type="button"
-                className={s.journalMoodChip}
-                aria-pressed={freeMood === m}
-                onClick={() => setFreeMood(freeMood === m ? '' : m)}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-          <textarea
-            className={`${s.input} ${s.journalTextarea}`}
-            rows={3}
-            value={freeText}
-            onChange={e => setFreeText(e.target.value)}
-            placeholder="A market observation, a trade you skipped, or how you're feeling today…"
-            autoFocus
-          />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {FREE_STARTERS.map(st0 => (
-              <button
-                key={st0}
-                type="button"
-                className={s.invStarterChip}
-                onClick={() => setFreeText(prev => (prev.trim() ? `${prev.trimEnd()}\n${st0}` : st0))}
-              >
-                + {st0.replace(': ', '')}
-              </button>
-            ))}
-            <button
-              type="button"
-              className={s.btnPrimarySm}
-              style={{ marginLeft: 'auto' }}
-              disabled={savingFree || !freeText.trim()}
-              onClick={() => void saveFree()}
-            >
-              {savingFree ? 'Saving…' : 'Save note'}
-            </button>
-          </div>
-        </Card>
       )}
 
-      {weeks.length === 0 ? (
-        <Card>
-          <div className={s.mxEmptyInline} style={{ padding: 0, flexWrap: 'wrap', gap: 12 }}>
-            <Logo size={30} mood="curious" interactive cheer="Every great investor keeps notes." />
-            <span style={{ flex: '1 1 200px' }}>
-              {tag
-                ? `No entries tagged ${tag} in ${monthName(month)}.`
-                : scope === 'reviewed' && (closedInMonth.length > 0 || openInMonth.length > 0)
-                  ? `No reviewed trades yet — switch to "All activity" to see your ${closedInMonth.length + openInMonth.length} trades.`
-                  : `Nothing logged in ${monthName(month)} yet. Write a quick note or log a position to start your story.`}
-            </span>
-            <span style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
-              {!writingFree && (
-                <button type="button" className={s.btnOutlineSm} onClick={() => setWritingFree(true)}>
-                  Write a note
-                </button>
-              )}
-              {onNewEntry && (
-                <button type="button" className={s.btnPrimarySm} onClick={onNewEntry}>
-                  + New entry
-                </button>
-              )}
-            </span>
-          </div>
-        </Card>
+      {err && (
+        <div className={s.subErrBanner} role="alert">
+          {isMissingTable ? (
+            <>
+              Run <code>supabase/journal.sql</code> once in your Supabase SQL Editor to create the{' '}
+              <code>journal_entries</code>, <code>journal_comments</code> tables and <code>journal-images</code> bucket.
+            </>
+          ) : (
+            err
+          )}
+        </div>
+      )}
+
+      {/* Feed List */}
+      {loading ? (
+        <p className={s.caption} style={{ padding: '24px 0', textAlign: 'center' }}>
+          Loading your journal…
+        </p>
+      ) : filtered.length === 0 ? (
+        <div className={s.subEmpty}>
+          <Logo size={42} mood="happy" />
+          <h3 className={s.subEmptyTitle}>
+            {entries.length === 0 ? 'Your quiet space to think clearly' : 'No matching entries'}
+          </h3>
+          <p className={s.subEmptyDesc}>
+            {entries.length === 0
+              ? 'Write thesis notes, paste chart screenshots, embed trades, and leave dated reflections for your future self.'
+              : 'Try clearing your search or tag filter.'}
+          </p>
+          {entries.length === 0 && (
+            <div className={s.subEmptyActions}>
+              <button type="button" className={s.btnPrimarySm} onClick={() => startNewEntry()}>
+                <Icon d={IC.plus} size={14} /> Write first entry
+              </button>
+              <button type="button" className={s.btnOutlineSm} onClick={startMonthlyReview}>
+                <Icon d={IC.sparkle} size={14} /> Start {curMonthName} review
+              </button>
+            </div>
+          )}
+        </div>
       ) : (
-        weeks.map(w => (
-          <section key={w.start.getTime()} className={s.feedWeek}>
-            <h3 className={s.feedWeekHead}>Week of {dayName(w.start)}</h3>
-            {w.list.map(item => {
-              if (item.kind === 'free') {
-                const e = item.entry;
-                return (
-                  <article key={e.key} className={`${s.feedEntry} ${s.feedEntryFree}`}>
-                    <div className={s.feedTop}>
-                      <span className={s.feedDate}>{dayName(item.date)}</span>
-                      <span className={s.tradeChip} style={{ background: 'var(--accent-tint)', color: 'var(--accent-800)' }}>
-                        Note
-                      </span>
-                      {e.mood && <span className={s.tradeChip}>{e.mood}</span>}
-                      <button
-                        type="button"
-                        className={s.iconBtnSm}
-                        style={{ marginLeft: 'auto' }}
-                        aria-label="Delete note"
-                        title="Delete note"
-                        onClick={() => void deleteFree(e.key)}
-                      >
-                        <Icon d={IC.close} size={14} />
-                      </button>
-                    </div>
-                    <p className={s.feedLesson}>{e.text}</p>
-                  </article>
-                );
-              }
-              const t = item.trade;
-              return (
-                <article
-                  key={t.key}
-                  className={s.feedEntry}
-                  style={onOpenTrade ? { cursor: 'pointer' } : undefined}
-                  onClick={() => onOpenTrade?.(t.key)}
-                >
-                  <div className={s.feedTop}>
-                    <span className={s.feedDate}>{dayName(item.date)}</span>
-                    <span style={{ fontWeight: 600 }}>{t.name}</span>
-                    <span style={{ color: C.textMuted }}>{t.side}</span>
-                    {item.isOpen ? (
-                      <span className={s.tradeChip} style={{ marginLeft: 'auto', background: 'var(--good-soft)', color: 'var(--good)' }}>
-                        Open
-                      </span>
-                    ) : (
-                      <span style={{ marginLeft: 'auto', fontWeight: 600, color: plInk(t.pnl), whiteSpace: 'nowrap' }}>{dS(t.pnl, true)}</span>
-                    )}
-                  </div>
-                  <div className={s.tradeTags} style={{ marginTop: 0 }}>
-                    {t.followed && (
-                      <span className={s.tradeChip} style={{ background: FP_COLORS[t.followed][0], color: FP_COLORS[t.followed][1] }}>
-                        Plan: {t.followed}
-                      </span>
-                    )}
-                    {t.setup && <span className={s.tradeChip}>{t.setup}</span>}
-                    {t.mistakes.map(m => (
-                      <span key={m} className={s.tradeChip} style={{ background: C.redTint, color: C.redInk }}>
-                        {m}
+        <div className={s.subFeedList}>
+          {filtered.map(entry => {
+            const lead = leadImageOf(entry);
+            const excerpt = entry.subtitle || excerptOf(entry.body, 155);
+            const mins = readingTimeMinutes(entry.body);
+            return (
+              <article
+                key={entry.id}
+                className={s.subFeedCard}
+                onClick={() => {
+                  setActiveId(entry.id);
+                  setMode('read');
+                }}
+              >
+                <div className={s.subFeedMain}>
+                  <div className={s.subFeedTopMeta}>
+                    {entry.status === 'draft' && <span className={s.subDraftBadge}>Draft</span>}
+                    <span>{fmtDate(entry.createdAt)}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{mins} min read</span>
+                    {entry.tags.slice(0, 3).map(t => (
+                      <span key={t} className={s.subTag}>
+                        {t}
                       </span>
                     ))}
-                    {!item.isOpen && !item.isReviewed && (
-                      <span className={s.tradeChip} style={{ background: 'var(--amber-tint)', color: 'var(--amber-ink)' }}>
-                        Needs review →
-                      </span>
-                    )}
                   </div>
-                  {item.isOpen && t.manual?.th && <p className={s.feedLesson}>Thesis: “{t.manual.th}”</p>}
-                  {!item.isOpen && t.lesson && <p className={s.feedLesson}>“{t.lesson}”</p>}
-                </article>
-              );
-            })}
-          </section>
-        ))
+                  <h3 className={s.subFeedTitle}>{entry.title || 'Untitled entry'}</h3>
+                  {excerpt && <p className={s.subFeedExcerpt}>{excerpt}</p>}
+                  <div className={s.subFeedFoot}>
+                    <span className={s.subFeedStat}>
+                      <Icon d={IC.message} size={13} color={C.textMuted} />
+                      {entry.commentCount ?? 0} {(entry.commentCount ?? 0) === 1 ? 'reflection' : 'reflections'}
+                    </span>
+                    <button
+                      type="button"
+                      className={s.textBtnSm}
+                      onClick={e => {
+                        e.stopPropagation();
+                        setActiveId(entry.id);
+                        setDraftEntry(entry);
+                        setMode('edit');
+                      }}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+                {lead && (
+                  <div className={s.subFeedThumb}>
+                    <JournalImage src={lead.src} storagePath={lead.storagePath} alt="" className={s.subFeedThumbImg} />
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
       )}
     </div>
   );
