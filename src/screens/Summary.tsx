@@ -291,7 +291,7 @@ function MaxieGreeting({
             ? `Masih ada ${short(left)} ruang lega.`
             : `${short(left)} of breathing room.`;
 
-  const hasActions = todaySpend === 0 || !!quickAsk || keptYesterday;
+  const hasActions = todaySpend === 0 || !!quickAsk || keptYesterday || b.txs.length > 0;
 
   return (
     <section className={s.vigCard} data-wide data-scene={sceneInfo.scene} aria-label={`Maxie: ${sceneInfo.label}`}>
@@ -313,6 +313,12 @@ function MaxieGreeting({
         <p className={s.mxGreetingText}>{line}</p>
         {hasActions && (
           <div className={s.vigMetaRow}>
+            {b.txs.length > 0 && (
+              <button type="button" className={s.vigStoryBtn} onClick={onOpenStory}>
+                <Icon d={IC.sparkle} size={13} />
+                Cycle story
+              </button>
+            )}
             {todaySpend === 0 && (
               <button
                 type="button"
@@ -328,8 +334,8 @@ function MaxieGreeting({
                     ? 'Hari nol pengeluaran aktif'
                     : 'Zero-spend day active'
                   : id
-                    ? 'Target hari nol pengeluaran'
-                    : 'Aim for a zero-spend day'}
+                    ? 'Target nol pengeluaran'
+                    : 'Zero-spend day'}
               </button>
             )}
             {keptYesterday && (
@@ -346,12 +352,6 @@ function MaxieGreeting({
           </div>
         )}
       </div>
-      {b.txs.length > 0 && (
-        <button type="button" className={s.btnOutlineSm} onClick={onOpenStory}>
-          <Icon d={IC.sparkle} size={13} />
-          Cycle story
-        </button>
-      )}
     </section>
   );
 }

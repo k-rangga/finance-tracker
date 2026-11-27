@@ -470,10 +470,15 @@ export function Chat({ cycle, budget, allTxs, fixedBills, ask, onClose }: Props)
     <div
       className={s.chatOverlay}
       data-kb={vp.keyboardOpen ? '1' : undefined}
-      style={vp.height != null ? { top: vp.top, height: vp.height, bottom: 'auto' } : undefined}
       onMouseDown={e => e.target === e.currentTarget && onClose()}
     >
-      <section className={`${s.chatPanel} fade-in`} role="dialog" aria-modal="true" aria-label="Ask Maxie">
+      <section
+        className={`${s.chatPanel} fade-in`}
+        style={vp.keyboardOpen ? { paddingTop: vp.top, paddingBottom: vp.kbHeight } : undefined}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Ask Maxie"
+      >
         <header className={s.chatHead}>
           <span className={s.chatMark} style={{ overflow: 'hidden', padding: 0 }}>
             <Logo size={32} mood={busy ? 'curious' : 'happy'} interactive />

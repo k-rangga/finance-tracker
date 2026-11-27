@@ -1,20 +1,22 @@
 import { useEffect, useState } from 'react';
 
 export type ViewportBox = {
-  /** Live visual viewport height in px (tracks virtual keyboard on iOS/Android), or null when not active. */
+  /** Live visual viewport height in px when keyboard is open, or null otherwise. */
   height: number | null;
   /** Live visual viewport top offset in px (prevents iOS Safari scroll drift when keyboard opens). */
   top: number;
+  /** Pixels covered by the mobile virtual keyboard at the bottom of the layout viewport. */
+  kbHeight: number;
   /** True when a mobile virtual keyboard appears to be open. */
   keyboardOpen: boolean;
 };
 
 /**
- * Tracks `window.visualViewport` so fixed full-screen overlays (Chat, Journal composer) hug the top of the
- * mobile virtual keyboard smoothly while keeping their background intact.
+ * Tracks `window.visualViewport` so fixed full-screen overlays (Chat, Journal composer) keep a solid full-screen
+ * background behind translucent iOS/Android keyboards while lifting only the bottom composer bar above the keypad.
  */
 export function useVisualViewport(enabled = true): ViewportBox {
-  const [box, setBox] = useState<ViewportBox>({ height: null, top: 0, keyboardOpen: false });
+  const [box, setBox] = useState<ViewportBox>({ height: null, top: 0, kbHeight: 0, keyboardOpen: false });
 
   useEffect(() => {
     if (!enabled || typeof window === 'undefined' || !window.visualViewport) return;
@@ -24,11 +26,12 @@ export function useVisualViewport(enabled = true): ViewportBox {
     const update = () => {
       if (vv.height > baseH) baseH = vv.height;
       const kbOpen = baseH - vv.height > 110;
+      const nextTop = kbOpen ? Math.max(0, Math.round(vv.offsetTop)) : 0;
+      const nextKb = kbOpen ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
+      const nextH = kbOpen ? Math.round(vv.height) : null;
       setBox(prev => {
-        const nextH = kbOpen ? Math.round(vv.height) : null;
-        const nextTop = kbOpen ? Math.round(vv.offsetTop) : 0;
-        if (prev.height === nextH && prev.top === nextTop && prev.keyboardOpen === kbOpen) return prev;
-        return { height: nextH, top: nextTop, keyboardOpen: kbOpen };
+        if (prev.height === nextH && prev.top === nextTop && prev.kbHeight === nextKb && prev.keyboardOpen === kbOpen) return prev;
+        return { height: nextH, top: nextTop, kbHeight: nextKb, keyboardOpen: kbOpen };
       });
     };
 

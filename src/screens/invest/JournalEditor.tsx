@@ -429,7 +429,7 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
     <div
       className={s.subFullScreen}
       data-kb={vp.keyboardOpen ? '1' : undefined}
-      style={vp.height != null ? { top: vp.top, height: vp.height, bottom: 'auto' } : undefined}
+      style={vp.keyboardOpen ? { paddingTop: `calc(${vp.top}px + env(safe-area-inset-top, 0px))`, paddingBottom: vp.kbHeight } : undefined}
       role="dialog"
       aria-modal="true"
       aria-label="Journal editor"

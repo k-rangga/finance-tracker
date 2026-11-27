@@ -10534,3 +10534,59 @@ button.sxTile:active:not(:disabled),
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--clay) 35%, transparent); }
   50% { box-shadow: 0 0 0 6px transparent; }
 }
+/* Keep Ask Maxie background 100% opaque on mobile (never bleed Summary behind translucent iOS keyboard) */
+@media (max-width: 759px) {
+  .chatOverlay {
+    background: var(--bg);
+  }
+}
+/* ---- Structured, inline MaxieGreeting top card (bigger editorial vignette on mobile + unified action pills) ---- */
+.vigStoryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--clay) 30%, var(--border));
+  background: color-mix(in srgb, var(--clay) 8%, var(--surface));
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+.vigStoryBtn:hover {
+  background: color-mix(in srgb, var(--clay) 14%, var(--surface));
+  border-color: color-mix(in srgb, var(--clay) 48%, var(--border));
+}
+.vigMetaRow {
+  gap: 8px;
+  margin-top: 6px;
+}
+.vigMetaRow .mxPledgeBtn {
+  min-height: 30px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+}
+@media (max-width: 640px) {
+  .vigCard {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 16px;
+  }
+  .vigArtBtn {
+    width: 100%;
+    border-radius: 14px;
+  }
+  .vigBody {
+    flex: none;
+    gap: 6px;
+  }
+  .vigMetaRow {
+    margin-top: 6px;
+    gap: 8px;
+  }
+}
