@@ -36,6 +36,7 @@ export type JournalBlock =
   | { type: 'h1' | 'h2' | 'h3'; text: string }
   | { type: 'quote'; text: string }
   | { type: 'list'; items: string[] }
+  | { type: 'ol'; items: string[] }
   | { type: 'hr' }
   | { type: 'image'; caption: string; src: string; storagePath?: string }
   | { type: 'trade'; tradeId: string }
@@ -121,6 +122,17 @@ export function parseJournalBlocks(body: string): JournalBlock[] {
       continue;
     }
 
+    // Numbered list (consecutive lines starting with "1. ", "2. ", ...)
+    if (/^\d+\.\s+/.test(trimmed)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^\d+\.\s+/, ''));
+        i++;
+      }
+      blocks.push({ type: 'ol', items });
+      continue;
+    }
+
     // Paragraph (absorb consecutive plain lines until blank line or block starter)
     const pLines: string[] = [];
     while (i < lines.length) {
@@ -132,7 +144,8 @@ export function parseJournalBlocks(body: string): JournalBlock[] {
         /^\[\[trade:[^\]]+\]\]$/.test(t) ||
         /^!\[[^\]]*\]\([^)]+\)$/.test(t) ||
         t.startsWith('>') ||
-        /^[-*]\s+/.test(t)
+        /^[-*]\s+/.test(t) ||
+        /^\d+\.\s+/.test(t)
       ) {
         break;
       }
@@ -143,6 +156,139 @@ export function parseJournalBlocks(body: string): JournalBlock[] {
   }
 
   return blocks;
+}
+
+const escHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+function inlineMdToHtml(text: string): string {
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`]+`|~~[^~]+~~)/g);
+  return parts
+    .map(p => {
+      if (p.startsWith('**') && p.endsWith('**') && p.length > 4) return `<strong>${escHtml(p.slice(2, -2))}</strong>`;
+      if (p.startsWith('*') && p.endsWith('*') && p.length > 2) return `<em>${escHtml(p.slice(1, -1))}</em>`;
+      if (p.startsWith('`') && p.endsWith('`') && p.length > 2) return `<code>${escHtml(p.slice(1, -1))}</code>`;
+      if (p.startsWith('~~') && p.endsWith('~~') && p.length > 4) return `<s>${escHtml(p.slice(2, -2))}</s>`;
+      return escHtml(p);
+    })
+    .join('');
+}
+
+/** Convert stored Markdown body into clean TipTap HTML so the WYSIWYG editor renders rich nodes immediately. */
+export function bodyToEditorHtml(body: string): string {
+  const blocks = parseJournalBlocks(body);
+  if (!blocks.length) return '';
+  return blocks
+    .map(b => {
+      if (b.type === 'h1') return `<h1>${inlineMdToHtml(b.text)}</h1>`;
+      if (b.type === 'h2') return `<h2>${inlineMdToHtml(b.text)}</h2>`;
+      if (b.type === 'h3') return `<h3>${inlineMdToHtml(b.text)}</h3>`;
+      if (b.type === 'hr') return '<hr>';
+      if (b.type === 'quote') return `<blockquote><p>${b.text.split('\n').map(inlineMdToHtml).join('<br>')}</p></blockquote>`;
+      if (b.type === 'list') return `<ul>${b.items.map(it => `<li><p>${inlineMdToHtml(it)}</p></li>`).join('')}</ul>`;
+      if (b.type === 'ol') return `<ol>${b.items.map(it => `<li><p>${inlineMdToHtml(it)}</p></li>`).join('')}</ol>`;
+      if (b.type === 'trade') return `<div data-journal-trade="${escHtml(b.tradeId)}"></div>`;
+      if (b.type === 'image') return `<div data-journal-image="${escHtml(b.src)}" data-caption="${escHtml(b.caption)}"></div>`;
+      return `<p>${b.text.split('\n').map(inlineMdToHtml).join('<br>')}</p>`;
+    })
+    .join('');
+}
+
+type TipTapNode = {
+  type?: string;
+  text?: string;
+  attrs?: Record<string, unknown>;
+  marks?: { type: string }[];
+  content?: TipTapNode[];
+};
+
+function inlineNodesToMd(nodes?: TipTapNode[]): string {
+  if (!nodes?.length) return '';
+  return nodes
+    .map(n => {
+      if (n.type === 'hardBreak') return '\n';
+      let out = n.text ?? '';
+      if (!out) return '';
+      for (const m of n.marks ?? []) {
+        if (m.type === 'bold') out = `**${out}**`;
+        else if (m.type === 'italic') out = `*${out}*`;
+        else if (m.type === 'code') out = `\`${out}\``;
+        else if (m.type === 'strike') out = `~~${out}~~`;
+      }
+      return out;
+    })
+    .join('');
+}
+
+/** Serialize a TipTap document JSON back into clean portable Markdown (with `[[trade:key]]` and `![caption](src)`). */
+export function tiptapDocToMarkdown(doc: TipTapNode): string {
+  const out: string[] = [];
+  for (const node of doc.content ?? []) {
+    if (node.type === 'heading') {
+      const level = Math.min(3, Math.max(1, Number(node.attrs?.level) || 2));
+      const text = inlineNodesToMd(node.content).trim();
+      if (text) out.push(`${'#'.repeat(level)} ${text}`);
+    } else if (node.type === 'paragraph') {
+      const text = inlineNodesToMd(node.content).trim();
+      if (text) out.push(text);
+    } else if (node.type === 'blockquote') {
+      const inner = (node.content ?? [])
+        .map(c => inlineNodesToMd(c.content))
+        .join('\n')
+        .split('\n')
+        .map(l => `> ${l}`)
+        .join('\n');
+      if (inner.trim()) out.push(inner);
+    } else if (node.type === 'bulletList') {
+      const items = (node.content ?? [])
+        .map(li => (li.content ?? []).map(c => inlineNodesToMd(c.content)).join(' ').trim())
+        .filter(Boolean)
+        .map(t => `- ${t}`);
+      if (items.length) out.push(items.join('\n'));
+    } else if (node.type === 'orderedList') {
+      const items = (node.content ?? [])
+        .map(li => (li.content ?? []).map(c => inlineNodesToMd(c.content)).join(' ').trim())
+        .filter(Boolean)
+        .map((t, idx) => `${idx + 1}. ${t}`);
+      if (items.length) out.push(items.join('\n'));
+    } else if (node.type === 'horizontalRule') {
+      out.push('---');
+    } else if (node.type === 'journalTrade') {
+      const id = String(node.attrs?.tradeId ?? '').trim();
+      if (id) out.push(`[[trade:${id}]]`);
+    } else if (node.type === 'journalImage') {
+      const src = String(node.attrs?.src ?? '').trim();
+      const cap = String(node.attrs?.caption ?? '').replace(/[[\]]/g, '').trim();
+      if (src) out.push(`![${cap}](${src})`);
+    }
+  }
+  return out.join('\n\n');
+}
+
+/** Search free high-res stock photos via Wikimedia Commons (no API key required) for Substack-style cover photo picking. */
+export async function searchStockPhotos(query: string): Promise<{ url: string; thumb: string; title: string }[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const api =
+    `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=12` +
+    `&gsrsearch=${encodeURIComponent(q + ' filetype:bitmap')}&prop=imageinfo&iiprop=url|mime&iiurlwidth=640&format=json&origin=*`;
+  const res = await fetch(api);
+  if (!res.ok) throw new Error('Could not search photos right now.');
+  const data = (await res.json()) as {
+    query?: { pages?: Record<string, { title?: string; imageinfo?: { url?: string; thumburl?: string; mime?: string }[] }> };
+  };
+  const pages = Object.values(data.query?.pages ?? {});
+  const out: { url: string; thumb: string; title: string }[] = [];
+  for (const p of pages) {
+    const info = p.imageinfo?.[0];
+    if (!info?.url || !info.mime?.startsWith('image/') || info.mime === 'image/svg+xml') continue;
+    out.push({
+      url: info.thumburl || info.url,
+      thumb: info.thumburl || info.url,
+      title: (p.title ?? '').replace(/^File:/, '').replace(/\.[^.]+$/, ''),
+    });
+  }
+  return out;
 }
 
 /** Estimated reading time in minutes (minimum 1 min when non-empty). */
@@ -163,7 +309,7 @@ export function excerptOf(body: string, maxLen = 150): string {
   const textParts: string[] = [];
   for (const b of blocks) {
     if (b.type === 'p' || b.type === 'quote') textParts.push(b.text);
-    else if (b.type === 'list') textParts.push(b.items.join(' · '));
+    else if (b.type === 'list' || b.type === 'ol') textParts.push(b.items.join(' · '));
   }
   const clean = textParts
     .join(' ')

@@ -23,6 +23,10 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.2",
+    "@tiptap/extension-placeholder": "^3.35.0",
+    "@tiptap/pm": "^3.35.0",
+    "@tiptap/react": "^3.35.0",
+    "@tiptap/starter-kit": "^3.35.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

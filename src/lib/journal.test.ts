@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { excerptOf, JOURNAL_IMG_PREFIX, leadImageOf, parseJournalBlocks, readingTimeMinutes } from './journal';
+import { bodyToEditorHtml, excerptOf, JOURNAL_IMG_PREFIX, leadImageOf, parseJournalBlocks, readingTimeMinutes, tiptapDocToMarkdown } from './journal';
 
 function test(name: string, fn: () => void) {
   fn();
@@ -61,4 +61,41 @@ test('leadImageOf prefers coverPath and falls back to first inline image', () =>
     storagePath: 'u/inline.jpg',
   });
   assert.equal(leadImageOf({ coverPath: null, body: 'Just text' }), null);
+});
+
+test('ordered lists and TipTap HTML/JSON round-trip cleanly', () => {
+  const md = `## Plan\n\n1. Wait for retest\n2. Size **calmly**\n\n[[trade:p:123]]`;
+  const blocks = parseJournalBlocks(md);
+  assert.deepEqual(blocks.map(b => b.type), ['h2', 'ol', 'trade']);
+  const html = bodyToEditorHtml(md);
+  assert.ok(html.includes('<h2>Plan</h2>'));
+  assert.ok(html.includes('<ol><li><p>Wait for retest</p></li><li><p>Size <strong>calmly</strong></p></li></ol>'));
+  assert.ok(html.includes('data-journal-trade="p:123"'));
+
+  const back = tiptapDocToMarkdown({
+    type: 'doc',
+    content: [
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Plan' }] },
+      {
+        type: 'orderedList',
+        content: [
+          { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Wait for retest' }] }] },
+          {
+            type: 'listItem',
+            content: [
+              {
+                type: 'paragraph',
+                content: [
+                  { type: 'text', text: 'Size ' },
+                  { type: 'text', text: 'calmly', marks: [{ type: 'bold' }] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      { type: 'journalTrade', attrs: { tradeId: 'p:123' } },
+    ],
+  });
+  assert.equal(back, md);
 });

@@ -1,16 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor } from '@tiptap/react';
+import { Node, mergeAttributes } from '@tiptap/core';
+import StarterKit from '@tiptap/starter-kit';
+import Placeholder from '@tiptap/extension-placeholder';
 import s from '../../styles/ui.module.css';
 import { IC, Icon } from '../../components/Icon';
 import {
+  bodyToEditorHtml,
   JOURNAL_IMG_PREFIX,
   saveJournalEntry,
+  searchStockPhotos,
+  tiptapDocToMarkdown,
   uploadJournalImage,
   type JournalEntry,
   type JournalStatus,
 } from '../../lib/journal';
 import { draftJournalMonth } from '../../lib/perps';
 import { plInk } from '../../lib/tokens';
-import { JournalArticleBody, JournalImage } from './JournalArticle';
+import { EmbeddedTradeCard, JournalArticleBody, JournalImage } from './JournalArticle';
 import type { AnyTrade } from './trades';
 
 type Props = {
@@ -22,11 +29,14 @@ type Props = {
   onClose: (latest: JournalEntry) => void;
 };
 
+const STOCK_PRESETS = ['Minimal desk', 'Coffee', 'Architecture', 'Mountains', 'Ocean', 'Books'];
+
 /**
- * Substack-style distraction-free Journal Editor:
- * - Borderless serif title + subtitle, tag chips, optional cover image
- * - Minimal formatting toolbar + paste/drop image upload to Supabase Storage + live trade embed picker
- * - Autosave with Write / Preview toggle and Maxie AI drafting helper
+ * Substack-style full-screen WYSIWYG Journal Editor (ProseMirror / TipTap):
+ * - Live rich text (bold, italic, headings, clean bullets & numbering, quotes, dividers) — zero markdown/HTML codes
+ * - Live embedded Trade Cards with generated SVG charts directly inside the writing canvas
+ * - Live inline images (paste, drop, or pick) + Cover image uploader & stock photo search
+ * - Seamless borderless canvas; centered top toolbar on web, bottom-docked toolbar on mobile
  */
 export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClose }: Props) {
   const [title, setTitle] = useState(initial.title);
@@ -45,12 +55,208 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
   const [tradeQuery, setTradeQuery] = useState('');
   const [drafting, setDrafting] = useState(false);
 
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  // Substack-style Cover Image Picker (Upload or Search stock photos)
+  const [coverPickerOpen, setCoverPickerOpen] = useState(false);
+  const [stockQuery, setStockQuery] = useState('');
+  const [stockResults, setStockResults] = useState<{ url: string; thumb: string; title: string }[]>([]);
+  const [stockLoading, setStockLoading] = useState(false);
+
   const coverFileRef = useRef<HTMLInputElement>(null);
   const inlineFileRef = useRef<HTMLInputElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   const latestRef = useRef<JournalEntry>(initial);
   const dirtyRef = useRef(false);
+  const tradesMapRef = useRef(tradesById);
+  const dSRef = useRef(dS);
+  tradesMapRef.current = tradesById;
+  dSRef.current = dS;
+
+  const markDirty = () => {
+    dirtyRef.current = true;
+  };
+
+  // Custom TipTap atom node for live Embedded Trade Cards (with generated SVG chart).
+  const JournalTradeNode = useMemo(
+    () =>
+      Node.create({
+        name: 'journalTrade',
+        group: 'block',
+        atom: true,
+        selectable: true,
+        draggable: true,
+        addAttributes() {
+          return { tradeId: { default: '' } };
+        },
+        parseHTML() {
+          return [
+            {
+              tag: 'div[data-journal-trade]',
+              getAttrs: el => ({ tradeId: (el as HTMLElement).getAttribute('data-journal-trade') || '' }),
+            },
+          ];
+        },
+        renderHTML({ HTMLAttributes }) {
+          return ['div', mergeAttributes(HTMLAttributes, { 'data-journal-trade': HTMLAttributes.tradeId })];
+        },
+        addNodeView() {
+          return ReactNodeViewRenderer(({ node, deleteNode }) => {
+            const tradeId = String(node.attrs.tradeId || '');
+            return (
+              <NodeViewWrapper className={s.subNodeBlock}>
+                <EmbeddedTradeCard
+                  trade={tradesMapRef.current.get(tradeId)}
+                  dS={dSRef.current}
+                  onRemove={() => deleteNode()}
+                />
+              </NodeViewWrapper>
+            );
+          });
+        },
+      }),
+    [],
+  );
+
+  // Custom TipTap atom node for live Inline Images with editable caption & remove button.
+  const JournalImageNode = useMemo(
+    () =>
+      Node.create({
+        name: 'journalImage',
+        group: 'block',
+        atom: true,
+        selectable: true,
+        draggable: true,
+        addAttributes() {
+          return {
+            src: { default: '' },
+            caption: { default: '' },
+          };
+        },
+        parseHTML() {
+          return [
+            {
+              tag: 'div[data-journal-image]',
+              getAttrs: el => ({
+                src: (el as HTMLElement).getAttribute('data-journal-image') || '',
+                caption: (el as HTMLElement).getAttribute('data-caption') || '',
+              }),
+            },
+          ];
+        },
+        renderHTML({ HTMLAttributes }) {
+          return [
+            'div',
+            mergeAttributes(HTMLAttributes, {
+              'data-journal-image': HTMLAttributes.src,
+              'data-caption': HTMLAttributes.caption,
+            }),
+          ];
+        },
+        addNodeView() {
+          return ReactNodeViewRenderer(({ node, updateAttributes, deleteNode }) => {
+            const src = String(node.attrs.src || '');
+            const caption = String(node.attrs.caption || '');
+            const storagePath = src.startsWith(JOURNAL_IMG_PREFIX) ? src.slice(JOURNAL_IMG_PREFIX.length) : undefined;
+            return (
+              <NodeViewWrapper className={s.subNodeBlock}>
+                <figure className={s.subEditorFigure} contentEditable={false}>
+                  <div className={s.subEditorFigureImgWrap}>
+                    <JournalImage src={src} storagePath={storagePath} alt={caption || 'Journal image'} className={s.subFigureImg} />
+                    <button
+                      type="button"
+                      className={s.subNodeRemoveBtn}
+                      aria-label="Remove image"
+                      title="Remove image"
+                      onClick={() => deleteNode()}
+                    >
+                      <Icon d={IC.close} size={14} />
+                    </button>
+                  </div>
+                  <input
+                    className={s.subCaptionInput}
+                    value={caption}
+                    onChange={e => updateAttributes({ caption: e.target.value })}
+                    placeholder="Add a caption (optional)…"
+                    aria-label="Image caption"
+                  />
+                </figure>
+              </NodeViewWrapper>
+            );
+          });
+        },
+      }),
+    [],
+  );
+
+  const handleUploadInlineRef = useRef<(file: File) => Promise<void>>(async () => {});
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: { levels: [2, 3] },
+      }),
+      Placeholder.configure({
+        placeholder: 'Start writing…',
+      }),
+      JournalTradeNode,
+      JournalImageNode,
+    ],
+    content: bodyToEditorHtml(initial.body),
+    editorProps: {
+      attributes: {
+        class: s.subProse,
+      },
+      handlePaste(_view, event) {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        for (const item of items) {
+          if (item.type.startsWith('image/')) {
+            const file = item.getAsFile();
+            if (file) {
+              event.preventDefault();
+              void handleUploadInlineRef.current(file);
+              return true;
+            }
+          }
+        }
+        return false;
+      },
+      handleDrop(_view, event) {
+        const file = event.dataTransfer?.files?.[0];
+        if (file && file.type.startsWith('image/')) {
+          event.preventDefault();
+          void handleUploadInlineRef.current(file);
+          return true;
+        }
+        return false;
+      },
+    },
+    onUpdate({ editor: ed }) {
+      markDirty();
+      setBody(tiptapDocToMarkdown(ed.getJSON()));
+    },
+  });
+
+  handleUploadInlineRef.current = async (file: File) => {
+    setUploading(true);
+    setErr('');
+    try {
+      const { path } = await uploadJournalImage(file);
+      const label = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+      const caption = label && label.toLowerCase() !== 'image' ? label : '';
+      editor
+        ?.chain()
+        .focus()
+        .insertContent([
+          { type: 'journalImage', attrs: { src: `${JOURNAL_IMG_PREFIX}${path}`, caption } },
+          { type: 'paragraph' },
+        ])
+        .run();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const buildEntry = (overrideStatus?: JournalStatus): JournalEntry => ({
     ...latestRef.current,
@@ -79,11 +285,10 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
     }
   };
 
-  // Debounced autosave whenever content changes (only if the user has typed something).
+  // Debounced autosave whenever content changes.
   useEffect(() => {
     const hasContent = !!(title.trim() || subtitle.trim() || body.trim() || coverPath);
-    if (!hasContent) return;
-    if (!dirtyRef.current) return;
+    if (!hasContent || !dirtyRef.current) return;
     clearTimeout(saveTimer.current);
     setSaveState('saving');
     saveTimer.current = setTimeout(() => {
@@ -92,72 +297,14 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
     return () => clearTimeout(saveTimer.current);
   }, [title, subtitle, body, coverPath, tags, status]);
 
-  // Auto-grow textarea height smoothly while writing.
+  // Lock background page scroll while the full-screen composer is open.
   useEffect(() => {
-    const el = bodyRef.current;
-    if (!el || mode !== 'write') return;
-    el.style.height = 'auto';
-    el.style.height = Math.max(320, el.scrollHeight + 16) + 'px';
-  }, [body, mode]);
-
-  const markDirty = () => {
-    dirtyRef.current = true;
-  };
-
-  const insertAtCursor = (snippet: string, wrapBefore?: string, wrapAfter?: string) => {
-    const el = bodyRef.current;
-    markDirty();
-    if (!el) {
-      setBody(prev => (prev ? `${prev}\n\n${snippet}` : snippet));
-      return;
-    }
-    const start = el.selectionStart ?? body.length;
-    const end = el.selectionEnd ?? body.length;
-    const selected = body.slice(start, end);
-    const inserted = wrapBefore != null ? `${wrapBefore}${selected || snippet}${wrapAfter ?? wrapBefore}` : snippet;
-    const next = body.slice(0, start) + inserted + body.slice(end);
-    setBody(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      const pos = start + inserted.length;
-      el.setSelectionRange(pos, pos);
-    });
-  };
-
-  const insertBlockLine = (prefix: string) => {
-    const el = bodyRef.current;
-    markDirty();
-    if (!el) {
-      setBody(prev => (prev ? `${prev}\n${prefix}` : prefix));
-      return;
-    }
-    const start = el.selectionStart ?? body.length;
-    const before = body.slice(0, start);
-    const needsNl = before.length > 0 && !before.endsWith('\n') ? '\n\n' : '';
-    const inserted = `${needsNl}${prefix}`;
-    const next = before + inserted + body.slice(start);
-    setBody(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      const pos = start + inserted.length;
-      el.setSelectionRange(pos, pos);
-    });
-  };
-
-  const handleUploadInline = async (file: File) => {
-    setUploading(true);
-    setErr('');
-    try {
-      const { path } = await uploadJournalImage(file);
-      const label = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
-      const caption = label && label.toLowerCase() !== 'image' ? label : '';
-      insertBlockLine(`![${caption}](${JOURNAL_IMG_PREFIX}${path})\n`);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setUploading(false);
-    }
-  };
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   const handleUploadCover = async (file: File) => {
     setUploading(true);
@@ -166,6 +313,7 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
       const { path } = await uploadJournalImage(file);
       markDirty();
       setCoverPath(path);
+      setCoverPickerOpen(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -173,26 +321,21 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
     }
   };
 
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) {
-          e.preventDefault();
-          void handleUploadInline(file);
-          return;
-        }
-      }
+  const runStockSearch = async (q: string) => {
+    setStockQuery(q);
+    if (!q.trim()) {
+      setStockResults([]);
+      return;
     }
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLTextAreaElement>) => {
-    const file = e.dataTransfer?.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-      e.preventDefault();
-      void handleUploadInline(file);
+    setStockLoading(true);
+    setErr('');
+    try {
+      const res = await searchStockPhotos(q);
+      setStockResults(res);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStockLoading(false);
     }
   };
 
@@ -241,8 +384,10 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
       if (!r.text) {
         setErr(r.error === 'no_key' ? 'Maxie needs GEMINI_API_KEY configured first.' : "Maxie couldn't draft right now. Try again.");
       } else {
+        const nextMd = body.trim() ? `${body.trim()}\n\n${r.text}` : r.text;
         markDirty();
-        setBody(prev => (prev.trim() ? `${prev.trim()}\n\n${r.text}` : r.text!));
+        setBody(nextMd);
+        editor?.commands.setContent(bodyToEditorHtml(nextMd));
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -254,15 +399,6 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
   const filteredTrades = trades
     .filter(t => !tradeQuery.trim() || `${t.name} ${t.side} ${t.setup ?? ''}`.toLowerCase().includes(tradeQuery.toLowerCase()))
     .slice(0, 8);
-
-  // Lock background page scroll while the full-screen composer is open.
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
 
   const coverStorage =
     coverPath && !coverPath.startsWith('data:') && !coverPath.startsWith('http') ? coverPath : undefined;
@@ -322,7 +458,7 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
       </header>
 
       {/* Substack formatting toolbar: centered top bar on web, docked bottom bar on mobile */}
-      {mode === 'write' && (
+      {mode === 'write' && editor && (
         <div className={s.subFsDock} role="toolbar" aria-label="Formatting">
           <input
             ref={inlineFileRef}
@@ -331,24 +467,54 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
             hidden
             onChange={e => {
               const f = e.target.files?.[0];
-              if (f) void handleUploadInline(f);
+              if (f) void handleUploadInlineRef.current(f);
               e.target.value = '';
             }}
           />
-          <button type="button" className={s.subDockBtn} title="Heading" onClick={() => insertBlockLine('## ')}>
+          <button
+            type="button"
+            className={s.subDockBtn}
+            data-on={editor.isActive('heading', { level: 2 }) || undefined}
+            title="Heading"
+            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+          >
             H2
           </button>
-          <button type="button" className={s.subDockBtn} title="Subheading" onClick={() => insertBlockLine('### ')}>
+          <button
+            type="button"
+            className={s.subDockBtn}
+            data-on={editor.isActive('heading', { level: 3 }) || undefined}
+            title="Subheading"
+            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+          >
             H3
           </button>
           <span className={s.subToolSep} aria-hidden="true" />
-          <button type="button" className={s.subDockBtn} title="Bold" onClick={() => insertAtCursor('bold', '**')}>
+          <button
+            type="button"
+            className={s.subDockBtn}
+            data-on={editor.isActive('bold') || undefined}
+            title="Bold (Cmd/Ctrl+B)"
+            onClick={() => editor.chain().focus().toggleBold().run()}
+          >
             <strong>B</strong>
           </button>
-          <button type="button" className={s.subDockBtn} title="Italic" onClick={() => insertAtCursor('italic', '*')}>
+          <button
+            type="button"
+            className={s.subDockBtn}
+            data-on={editor.isActive('italic') || undefined}
+            title="Italic (Cmd/Ctrl+I)"
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+          >
             <em>I</em>
           </button>
-          <button type="button" className={s.subDockBtn} title="Inline code" onClick={() => insertAtCursor('code', '`')}>
+          <button
+            type="button"
+            className={s.subDockBtn}
+            data-on={editor.isActive('code') || undefined}
+            title="Inline code"
+            onClick={() => editor.chain().focus().toggleCode().run()}
+          >
             <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12.5 }}>{'<>'}</span>
           </button>
           <span className={s.subToolSep} aria-hidden="true" />
@@ -361,13 +527,39 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
           >
             <Icon d={IC.image} size={17} />
           </button>
-          <button type="button" className={s.subDockBtn} title="Bullet list" onClick={() => insertBlockLine('- ')}>
+          <button
+            type="button"
+            className={s.subDockBtn}
+            data-on={editor.isActive('bulletList') || undefined}
+            title="Bullet list"
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+          >
             <Icon d={IC.list} size={17} />
           </button>
-          <button type="button" className={s.subDockBtn} title="Quote" onClick={() => insertBlockLine('> ')}>
+          <button
+            type="button"
+            className={s.subDockBtn}
+            data-on={editor.isActive('orderedList') || undefined}
+            title="Numbered list"
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          >
+            <span style={{ fontSize: 12.5, fontWeight: 600 }}>1.</span>
+          </button>
+          <button
+            type="button"
+            className={s.subDockBtn}
+            data-on={editor.isActive('blockquote') || undefined}
+            title="Quote"
+            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+          >
             <Icon d={IC.quote} size={16} />
           </button>
-          <button type="button" className={s.subDockBtn} title="Divider" onClick={() => insertBlockLine('---\n\n')}>
+          <button
+            type="button"
+            className={s.subDockBtn}
+            title="Divider"
+            onClick={() => editor.chain().focus().setHorizontalRule().run()}
+          >
             —
           </button>
           {trades.length > 0 && (
@@ -377,7 +569,7 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
                 type="button"
                 className={s.subDockBtn}
                 data-on={tradePickerOpen || undefined}
-                title="Embed live trade card"
+                title="Embed live trade card with chart"
                 onClick={() => setTradePickerOpen(v => !v)}
               >
                 <Icon d={IC.trend} size={16} />
@@ -433,7 +625,7 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
             </article>
           ) : (
             <div className={s.subFsCanvas}>
-              {/* Cover image strip */}
+              {/* Cover image strip + Stock Photo Search */}
               <input
                 ref={coverFileRef}
                 type="file"
@@ -449,7 +641,7 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
                 <div className={s.subCoverWrap}>
                   <JournalImage src={coverPath} storagePath={coverStorage} alt="Cover" className={s.subCoverImg} />
                   <div className={s.subCoverControls}>
-                    <button type="button" className={s.btnOutlineSm} onClick={() => coverFileRef.current?.click()}>
+                    <button type="button" className={s.btnOutlineSm} onClick={() => setCoverPickerOpen(v => !v)}>
                       Change
                     </button>
                     <button
@@ -466,9 +658,71 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
                 </div>
               ) : (
                 <div className={s.subCoverAddRow}>
-                  <button type="button" className={s.textBtnSm} style={{ paddingLeft: 0 }} onClick={() => coverFileRef.current?.click()} disabled={uploading}>
+                  <button
+                    type="button"
+                    className={s.textBtnSm}
+                    style={{ paddingLeft: 0 }}
+                    onClick={() => setCoverPickerOpen(v => !v)}
+                    disabled={uploading}
+                  >
                     <Icon d={IC.image} size={14} /> Add cover image
                   </button>
+                </div>
+              )}
+
+              {coverPickerOpen && (
+                <div className={s.subCoverPicker}>
+                  <div className={s.subCoverPickerHead}>
+                    <button type="button" className={s.btnOutlineSm} onClick={() => coverFileRef.current?.click()} disabled={uploading}>
+                      <Icon d={IC.image} size={14} /> Upload from device
+                    </button>
+                    <form
+                      className={s.subStockForm}
+                      onSubmit={e => {
+                        e.preventDefault();
+                        void runStockSearch(stockQuery);
+                      }}
+                    >
+                      <Icon d={IC.search} size={14} />
+                      <input
+                        value={stockQuery}
+                        onChange={e => setStockQuery(e.target.value)}
+                        placeholder="Search stock photos…"
+                        aria-label="Search stock photos"
+                      />
+                    </form>
+                    <button type="button" className={s.iconBtnSm} aria-label="Close cover picker" onClick={() => setCoverPickerOpen(false)}>
+                      <Icon d={IC.close} size={15} />
+                    </button>
+                  </div>
+                  <div className={s.subTagFilterRow} style={{ marginTop: 0 }}>
+                    {STOCK_PRESETS.map(p => (
+                      <button key={p} type="button" className={s.subTagChip} onClick={() => void runStockSearch(p)}>
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                  {stockLoading ? (
+                    <span className={s.caption}>Searching photos…</span>
+                  ) : stockResults.length > 0 ? (
+                    <div className={s.subStockGrid}>
+                      {stockResults.map(photo => (
+                        <button
+                          key={photo.url}
+                          type="button"
+                          className={s.subStockItem}
+                          title={photo.title}
+                          onClick={() => {
+                            markDirty();
+                            setCoverPath(photo.url);
+                            setCoverPickerOpen(false);
+                          }}
+                        >
+                          <img src={photo.thumb} alt={photo.title} loading="lazy" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -560,7 +814,14 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
                           type="button"
                           className={s.subTradePickRow}
                           onClick={() => {
-                            insertBlockLine(`[[trade:${t.key}]]\n`);
+                            editor
+                              ?.chain()
+                              .focus()
+                              .insertContent([
+                                { type: 'journalTrade', attrs: { tradeId: t.key } },
+                                { type: 'paragraph' },
+                              ])
+                              .run();
                             setTradePickerOpen(false);
                             setTradeQuery('');
                           }}
@@ -581,20 +842,8 @@ export function JournalEditor({ initial, trades, tradesById, dS, onSaved, onClos
                 </div>
               )}
 
-              {/* Main full-height writing area */}
-              <textarea
-                ref={bodyRef}
-                className={s.subBodyInput}
-                value={body}
-                onChange={e => {
-                  markDirty();
-                  setBody(e.target.value);
-                }}
-                onPaste={handlePaste}
-                onDrop={handleDrop}
-                placeholder="Start writing…"
-                aria-label="Journal entry body"
-              />
+              {/* Seamless borderless WYSIWYG writing canvas */}
+              <EditorContent editor={editor} className={s.subProseWrap} />
             </div>
           )}
         </div>

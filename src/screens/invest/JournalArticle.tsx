@@ -101,28 +101,160 @@ function renderInline(text: string): ReactNode[] {
   });
 }
 
-/** Embedded live trade snapshot card inside a journal article (`[[trade:id]]`). */
-function EmbeddedTradeCard({ trade, dS }: { trade: AnyTrade | undefined; dS: (idr: number, signed?: boolean) => string }) {
+const fmtPx = (v: number) =>
+  v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 2 }) : v >= 1 ? v.toFixed(2) : v.toPrecision(4);
+
+/** Generated SVG execution/level chart for an embedded trade card (works for both Perps and Manual trades). */
+function TradeMiniChart({ trade }: { trade: AnyTrade }) {
+  const W = 420;
+  const H = 88;
+  const padX = 14;
+  const padY = 14;
+  const win = trade.pnl >= 0;
+  const tone = win ? 'var(--good)' : 'var(--red-ink)';
+  const gradId = `tr_${trade.key.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+  if (trade.perp) {
+    const p = trade.perp;
+    const sorted = [...(p.fills ?? [])].sort((a, b) => a.time - b.time);
+    const pts = sorted.length >= 2 ? sorted.map(f => f.px) : [p.entry, p.exit ?? p.entry];
+    const min = Math.min(...pts, p.entry);
+    const max = Math.max(...pts, p.entry);
+    const span = Math.max(max - min, p.entry * 0.005 || 1);
+    const xOf = (i: number) => padX + (pts.length > 1 ? (i / (pts.length - 1)) * (W - padX * 2) : (W - padX * 2) / 2);
+    const yOf = (v: number) => H - padY - ((v - min) / span) * (H - padY * 2);
+    const line = pts.map((v, i) => `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(1)} ${yOf(v).toFixed(1)}`).join(' ');
+    const area = `${line} L${xOf(pts.length - 1).toFixed(1)} ${H - 4} L${xOf(0).toFixed(1)} ${H - 4} Z`;
+    const entryY = yOf(p.entry);
+
+    return (
+      <div className={s.subTradeChartWrap}>
+        <svg viewBox={`0 0 ${W} ${H}`} className={s.subTradeChartSvg} role="img" aria-label={`${trade.name} execution chart`}>
+          <defs>
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={tone} stopOpacity="0.22" />
+              <stop offset="100%" stopColor={tone} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <line x1={padX} x2={W - padX} y1={entryY} y2={entryY} stroke="var(--line-strong)" strokeWidth={1} strokeDasharray="3 4" opacity={0.7} />
+          <path d={area} fill={`url(#${gradId})`} />
+          <path d={line} fill="none" stroke={tone} strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />
+          <circle cx={xOf(0)} cy={yOf(pts[0])} r={3.5} fill="var(--surface)" stroke="var(--ink-muted)" strokeWidth={2} />
+          <circle cx={xOf(pts.length - 1)} cy={yOf(pts[pts.length - 1])} r={4} fill={tone} />
+        </svg>
+        <div className={s.subTradeChartMeta}>
+          <span>Entry ${fmtPx(p.entry)}</span>
+          {p.exit != null && <span>Exit ${fmtPx(p.exit)}</span>}
+          {trade.ret != null && (
+            <strong style={{ color: plInk(trade.ret), marginLeft: 'auto' }}>
+              {trade.ret >= 0 ? '+' : ''}
+              {trade.ret.toFixed(1)}%
+            </strong>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (trade.manual) {
+    const m = trade.manual;
+    const endPx = m.ex?.px ?? m.px;
+    const levels = [m.px, endPx, ...(m.tg ? [m.tg] : []), ...(m.sl ? [m.sl] : [])];
+    const min = Math.min(...levels);
+    const max = Math.max(...levels);
+    const span = Math.max(max - min, m.px * 0.02 || 1);
+    const yOf = (v: number) => H - padY - ((v - min) / span) * (H - padY * 2);
+    const x1 = padX + 18;
+    const x2 = W - padX - 18;
+    const line = `M${x1} ${yOf(m.px).toFixed(1)} L${x2} ${yOf(endPx).toFixed(1)}`;
+    const area = `${line} L${x2} ${H - 4} L${x1} ${H - 4} Z`;
+
+    return (
+      <div className={s.subTradeChartWrap}>
+        <svg viewBox={`0 0 ${W} ${H}`} className={s.subTradeChartSvg} role="img" aria-label={`${trade.name} trade levels chart`}>
+          <defs>
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={tone} stopOpacity="0.2" />
+              <stop offset="100%" stopColor={tone} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {m.tg && (
+            <line x1={padX} x2={W - padX} y1={yOf(m.tg)} y2={yOf(m.tg)} stroke="var(--good)" strokeWidth={1} strokeDasharray="3 4" opacity={0.7} />
+          )}
+          {m.sl && (
+            <line x1={padX} x2={W - padX} y1={yOf(m.sl)} y2={yOf(m.sl)} stroke="var(--red-ink)" strokeWidth={1} strokeDasharray="3 4" opacity={0.65} />
+          )}
+          <path d={area} fill={`url(#${gradId})`} />
+          <path d={line} fill="none" stroke={tone} strokeWidth={2.2} strokeLinecap="round" />
+          <circle cx={x1} cy={yOf(m.px)} r={3.5} fill="var(--surface)" stroke="var(--ink-muted)" strokeWidth={2} />
+          <circle cx={x2} cy={yOf(endPx)} r={4} fill={tone} />
+        </svg>
+        <div className={s.subTradeChartMeta}>
+          <span>Entry {fmtPx(m.px)}</span>
+          {m.ex?.px != null && <span>Exit {fmtPx(m.ex.px)}</span>}
+          {m.tg && <span style={{ color: C.good }}>TP {fmtPx(m.tg)}</span>}
+          {m.sl && <span style={{ color: C.redInk }}>SL {fmtPx(m.sl)}</span>}
+          {trade.ret != null && (
+            <strong style={{ color: plInk(trade.ret), marginLeft: 'auto' }}>
+              {trade.ret >= 0 ? '+' : ''}
+              {trade.ret.toFixed(1)}%
+            </strong>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+/** Embedded live trade snapshot card with generated chart (shared by WYSIWYG Editor and Reader). */
+export function EmbeddedTradeCard({
+  trade,
+  dS,
+  onRemove,
+}: {
+  trade: AnyTrade | undefined;
+  dS: (idr: number, signed?: boolean) => string;
+  onRemove?: () => void;
+}) {
   if (!trade) {
-    return <div className={s.subTradeMissing}>Linked trade no longer found in this account.</div>;
+    return (
+      <div className={s.subTradeMissing}>
+        <span>Linked trade no longer found.</span>
+        {onRemove && (
+          <button type="button" className={s.textBtnSm} onClick={onRemove}>
+            Remove
+          </button>
+        )}
+      </div>
+    );
   }
   const dateStr = trade.closed
     ? trade.closed.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
     : 'Open';
   return (
-    <div className={s.subTradeEmbed}>
+    <div className={s.subTradeEmbed} contentEditable={false}>
       <div className={s.subTradeEmbedTop}>
         <span className={s.subTradeEmbedTitle}>
           <strong>{trade.name}</strong>
           <span className={s.tradeTag}>{trade.side}</span>
           <span className={s.caption}>{dateStr}</span>
         </span>
-        <strong style={{ color: plInk(trade.pnl), fontSize: 15.5, fontVariantNumeric: 'tabular-nums' }}>
-          {dS(trade.pnl, true)}
-        </strong>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <strong style={{ color: plInk(trade.pnl), fontSize: 15.5, fontVariantNumeric: 'tabular-nums' }}>
+            {dS(trade.pnl, true)}
+          </strong>
+          {onRemove && (
+            <button type="button" className={s.iconBtnSm} aria-label="Remove trade card" title="Remove trade card" onClick={onRemove}>
+              <Icon d={IC.close} size={13} />
+            </button>
+          )}
+        </span>
       </div>
+      <TradeMiniChart trade={trade} />
       {(trade.followed || trade.setup || trade.mistakes.length > 0) && (
-        <div className={s.tradeTags} style={{ marginTop: 6 }}>
+        <div className={s.tradeTags} style={{ marginTop: 4 }}>
           {trade.followed && (
             <span className={s.tradeChip} style={{ background: FP_COLORS[trade.followed][0], color: FP_COLORS[trade.followed][1] }}>
               Plan: {trade.followed}
@@ -179,6 +311,14 @@ export function JournalArticleBody({
                 <li key={ii}>{renderInline(it)}</li>
               ))}
             </ul>
+          );
+        if (b.type === 'ol')
+          return (
+            <ol key={idx} className={s.subList}>
+              {b.items.map((it, ii) => (
+                <li key={ii}>{renderInline(it)}</li>
+              ))}
+            </ol>
           );
         if (b.type === 'trade') return <EmbeddedTradeCard key={idx} trade={tradesById.get(b.tradeId)} dS={dS} />;
         if (b.type === 'image')
