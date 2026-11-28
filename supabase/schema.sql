@@ -499,6 +499,19 @@ grant select, insert, update, delete on all tables in schema public to authentic
 revoke all on public.google_tokens from authenticated, anon;
 grant usage, select on all sequences in schema public to service_role, authenticated;
 
+-- Account lifecycle profile: tracks `active` vs soft-deleted `inactive` accounts while retaining anonymized
+-- category & Maxie learnings in `learnings` (zero PII or raw transactions).
+create table if not exists public.user_profiles (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  status text not null default 'active' check (status in ('active', 'inactive')),
+  deactivated_at timestamptz,
+  learnings jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.user_profiles enable row level security;
+drop policy if exists "own profile" on public.user_profiles;
+create policy "own profile" on public.user_profiles for select to authenticated using (user_id = auth.uid());
+
 -- Scheduled sync: Supabase calls the app every hour (Gmail imports every 2 hours in Jakarta time: 00:00–22:00 WIB,
 -- plus resumes any unfinished partial import; Hyperliquid every 6 hours).
 -- Turn on the pg_cron and pg_net extensions (Database → Extensions), put your app URL and CRON_SECRET in the

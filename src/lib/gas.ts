@@ -332,6 +332,8 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       d.gmailPaused = !!q.paused;
       save();
       return { paused: d.gmailPaused };
+    case 'deactivateAccount':
+      return { status: 'inactive' };
     case 'chooseLabel':
       d.label = q.name;
       save();

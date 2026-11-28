@@ -675,6 +675,8 @@ export default function App() {
                   setTab('plan');
                 }}
                 onOpenInvest={() => setTab('invest')}
+                onOpenGmail={() => setGmailOpen(true)}
+                onOpenSettings={() => setSettingsOpen(true)}
                 onDismissBill={dismissBill}
                 onMarkBillPaid={markBillPaid}
                 onShowTransactions={patch => {

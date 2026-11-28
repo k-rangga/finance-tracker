@@ -13,6 +13,7 @@ import type { Cycle } from '../lib/cycle';
 import { billLandingDay, paceInsight, weekendSafeSplit } from '../lib/pace';
 import { addDays, dayLabel, dayMonth, sum, tidyName, toISO } from '../lib/format';
 import { haptic } from '../lib/haptics';
+import { useData } from '../lib/data';
 import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
@@ -39,6 +40,8 @@ type SummaryProps = {
   onOpenCategories: () => void;
   onOpenPlan?: () => void;
   onOpenInvest?: () => void;
+  onOpenGmail?: () => void;
+  onOpenSettings?: () => void;
   /** Skip or remove an upcoming bill for this cycle. */
   onDismissBill: (b: Bill) => void;
   /** 1-tap mark a fixed bill as paid for this cycle. */
@@ -68,6 +71,8 @@ export function Summary({
   onOpenCategories,
   onOpenPlan,
   onOpenInvest,
+  onOpenGmail,
+  onOpenSettings,
   onDismissBill,
   onMarkBillPaid,
   onShowTransactions,
@@ -107,6 +112,12 @@ export function Summary({
           haptic('tap', settings.quietMode);
           setStoryOpen(true);
         }}
+      />
+      <QuickStartChecklist
+        txCount={b.txs.length}
+        onOpenGmail={onOpenGmail}
+        onOpenSettings={onOpenSettings}
+        onAskMaxie={onAskMaxie}
       />
       {cycle.daysLeft <= 4 && <PlanNextNudge cycle={cycle} planned={hasPlan(settings.cyclePlans?.[cycleKey(nextCycleOf(cycle))])} onOpen={onPlanNext} />}
       <NeedsAttention
@@ -1475,6 +1486,83 @@ function PlanNextNudge({ cycle, planned, onOpen }: { cycle: Cycle; planned: bool
         <button type="button" className={s.btnPrimarySm} onClick={onOpen}>
           {planned ? 'Review plan' : 'Plan next cycle'}
         </button>
+      </div>
+    </aside>
+  );
+}
+
+/** Calm, dismissible Quick Start checklist for new users so initial onboarding stays under 20 seconds. */
+function QuickStartChecklist({
+  txCount,
+  onOpenGmail,
+  onOpenSettings,
+  onAskMaxie,
+}: {
+  txCount: number;
+  onOpenGmail?: () => void;
+  onOpenSettings?: () => void;
+  onAskMaxie: (ask?: string) => void;
+}) {
+  const { settings, update } = useSettings();
+  const { gmail } = useData();
+  const isId = settings.maxieLanguage === 'id';
+  const [triedWhatIf, setTriedWhatIf] = useState(false);
+
+  if (settings.quickStartDismissed) return null;
+
+  const hasGmail = !!gmail.label_name || txCount > 0;
+  const hasEmergency = (settings.emergencyFund ?? 0) > 0;
+  const items = [
+    {
+      id: 'gmail',
+      done: hasGmail,
+      label: isId ? 'Hubungkan email struk Gmail' : 'Connect Gmail receipts',
+      onClick: onOpenGmail,
+    },
+    {
+      id: 'emergency',
+      done: hasEmergency,
+      label: isId ? 'Isi saldo dana darurat' : 'Set emergency fund balance',
+      onClick: onOpenSettings,
+    },
+    {
+      id: 'whatif',
+      done: triedWhatIf,
+      label: isId ? 'Coba simulasi What-If dengan Maxie' : 'Try a What-If scenario with Maxie',
+      onClick: () => {
+        setTriedWhatIf(true);
+        onAskMaxie(isId ? 'Bagaimana proyeksi sisaku kalau aku batasi belanja Rp 300rb per hari?' : 'What if I cap my spending at 300k per day?');
+      },
+    },
+  ];
+  const doneCount = items.filter(x => x.done).length;
+  if (doneCount === items.length) return null;
+
+  return (
+    <aside className={s.insightCard} data-wide aria-label="Getting started with Maxie">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <span className={s.insightHead}>
+          <Logo size={24} mood="happy" interactive />
+          {isId ? `Langkah pertama (${doneCount}/${items.length})` : `Quick start (${doneCount}/${items.length})`}
+        </span>
+        <button type="button" className={s.textBtnSm} onClick={() => update({ quickStartDismissed: true })}>
+          {isId ? 'Tutup' : 'Dismiss'}
+        </button>
+      </div>
+      <div className={s.qsList}>
+        {items.map(it => (
+          <button
+            key={it.id}
+            type="button"
+            className={s.qsItem}
+            data-done={it.done || undefined}
+            disabled={it.done || !it.onClick}
+            onClick={() => it.onClick?.()}
+          >
+            <span className={s.qsDot}>{it.done ? <Icon d={IC.check} size={11} strokeWidth={2.6} /> : null}</span>
+            <span>{it.label}</span>
+          </button>
+        ))}
       </div>
     </aside>
   );

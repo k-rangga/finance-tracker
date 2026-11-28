@@ -75,6 +75,8 @@ export type Settings = {
   ownAccountNames?: string;
   /** True once the user has completed or skipped the first-time welcome setup wizard. */
   onboardingDone?: boolean;
+  /** True once the user dismisses the calm Quick Start card on Summary. */
+  quickStartDismissed?: boolean;
   /** Liquid emergency fund balance (display currency), used for Buckminster Fuller survival runway (days/months forward). */
   emergencyFund?: number;
   /** Target emergency fund cushion in months of essential spending (default 6, matching OCBC NISP benchmark). */

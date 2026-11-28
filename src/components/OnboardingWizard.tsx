@@ -3,7 +3,6 @@ import s from '../styles/ui.module.css';
 import { Logo } from './Logo';
 import { IC, Icon } from './Icon';
 import { Select } from './Select';
-import { PIN_LENGTH } from './SignIn';
 import { suggestLabel } from './GmailDialog';
 import { DEFAULT_PAYDAY, type PaydayRule } from '../lib/cycle';
 import { useData } from '../lib/data';
@@ -20,7 +19,7 @@ import {
 } from '../lib/gmail';
 import { DEFAULT_INCOME, useSettings } from '../lib/settings';
 import { fmtShort, type Currency } from '../lib/format';
-import { onVercel, supabase } from '../lib/supabase';
+import { onVercel } from '../lib/supabase';
 import { C } from '../lib/tokens';
 
 export const ONBOARDING_STEP_KEY = 'maxie.onboarding.step';
@@ -40,11 +39,17 @@ const INCOME_PRESETS: Record<Currency, { label: string; value: number }[]> = {
   ],
 };
 
+const VIBE_PRESETS = [
+  { pct: 20, labelEn: 'Balanced · 20%', labelId: 'Santai · 20%' },
+  { pct: 30, labelEn: 'Jakarta Saver · 30%', labelId: 'Hemat · 30%' },
+  { pct: 40, labelEn: 'Ambitious · 40%', labelId: 'Agresif · 40%' },
+];
+
 /**
- * Calm 3-step first-visit onboarding wizard:
- * 1. Personalize (name, bank account names, income, payday, savings target)
- * 2. Connect Gmail (zero-setup Smart Receipt Scan with live preview & auto-continuing batch import)
- * 3. Ready (import summary + optional 6-digit quick sign-in PIN)
+ * Ultra-quick 2-step first-visit onboarding (~20 seconds):
+ * 1. Quick intro: language (EN/ID), name, monthly income, payday, and 1-tap savings vibe.
+ * 2. Bring in receipts (hardened read-only Gmail with proof-before-import preview) OR start clean right away.
+ * Everything else (Emergency Fund, Buffer sorting, quick PIN) lives gently in Summary's Quick Start checklist.
  */
 export function OnboardingWizard({
   initialStep = 1,
@@ -57,16 +62,19 @@ export function OnboardingWizard({
 }) {
   const { settings, update } = useSettings();
   const { gmail, refreshImports } = useData();
-  const [step, setStep] = useState<1 | 2 | 3>(initialStep);
+  const [step, setStep] = useState<1 | 2>(initialStep === 2 ? 2 : 1);
 
-  // Step 1 fields
+  // Step 1 fields (streamlined: no redundant bank-name prompt)
+  const [lang, setLang] = useState<'en' | 'id'>(settings.maxieLanguage ?? 'en');
   const [name, setName] = useState(settings.name);
-  const [ownNames, setOwnNames] = useState(settings.ownAccountNames ?? '');
   const [currency, setCurrency] = useState<Currency>(settings.currency);
   const [income, setIncome] = useState(settings.income || DEFAULT_INCOME[settings.currency]);
   const [incomeTxt, setIncomeTxt] = useState(String(settings.income || DEFAULT_INCOME[settings.currency]));
   const [payday, setPayday] = useState<PaydayRule>({ ...DEFAULT_PAYDAY, ...settings.payday });
-  const [savingsPct, setSavingsPct] = useState(Math.min(70, Math.max(10, settings.savingsPct || 30)));
+  const [savingsPct, setSavingsPct] = useState(() => {
+    const raw = settings.savingsPct || 30;
+    return raw <= 20 ? 20 : raw >= 40 ? 40 : 30;
+  });
   const [stepErr, setStepErr] = useState('');
 
   // Step 2 Gmail state
@@ -81,15 +89,10 @@ export function OnboardingWizard({
   const [importResult, setImportResult] = useState<SyncResult | null>(null);
   const [gmailErr, setGmailErr] = useState('');
 
-  // Step 3 optional PIN
-  const [pin, setPin] = useState('');
-  const [pinSaved, setPinSaved] = useState(false);
-  const [pinBusy, setPinBusy] = useState(false);
-  const [pinErr, setPinErr] = useState('');
-
+  const isId = lang === 'id';
   const target = mode === 'auto' ? AUTO_LABEL : pick;
 
-  // Load Gmail labels & preview once on Step 2 with Google connected.
+  // Load Gmail labels & metadata-only sample preview on Step 2 with Google connected.
   useEffect(() => {
     if (step !== 2 || needsGoogle) return;
     listLabels()
@@ -128,13 +131,25 @@ export function OnboardingWizard({
     }
   };
 
+  const finish = () => {
+    try {
+      sessionStorage.removeItem(ONBOARDING_STEP_KEY);
+    } catch {
+      /* ignore */
+    }
+    update({ onboardingDone: true });
+    onDone();
+  };
+
   const saveStep1 = () => {
     const val = Number(incomeTxt.replace(/[^\d.]/g, ''));
-    if (!(val > 0)) return setStepErr('Enter your monthly take-home income.');
+    if (!(val > 0)) return setStepErr(isId ? 'Isi perkiraan penghasilan bulananmu dulu.' : 'Enter your monthly take-home income.');
     setStepErr('');
+    const trimmedName = name.trim();
     update({
-      name: name.trim(),
-      ownAccountNames: ownNames.trim() || undefined,
+      name: trimmedName,
+      maxieLanguage: lang,
+      ...(trimmedName && !settings.ownAccountNames ? { ownAccountNames: trimmedName } : {}),
       currency,
       income: val,
       payday,
@@ -147,7 +162,7 @@ export function OnboardingWizard({
     setGmailErr('');
     try {
       sessionStorage.setItem(ONBOARDING_STEP_KEY, '2');
-      const { url } = await googleConnectUrl();
+      const { url } = await googleConnectUrl(false);
       location.href = url;
     } catch (e) {
       setGmailErr(e instanceof Error ? e.message : String(e));
@@ -168,36 +183,11 @@ export function OnboardingWizard({
       } catch {
         /* ignore */
       }
-      setStep(3);
     } catch (e) {
       setGmailErr(e instanceof Error ? e.message : String(e));
     } finally {
       setImporting(false);
     }
-  };
-
-  const savePin = async () => {
-    const p = pin.replace(/\D/g, '');
-    if (p.length !== PIN_LENGTH) return setPinErr(`Enter ${PIN_LENGTH} digits.`);
-    setPinBusy(true);
-    setPinErr('');
-    const { error } = await supabase!.auth.updateUser({ password: p });
-    setPinBusy(false);
-    if (error) setPinErr(error.message);
-    else {
-      setPinSaved(true);
-      setPin('');
-    }
-  };
-
-  const finish = () => {
-    try {
-      sessionStorage.removeItem(ONBOARDING_STEP_KEY);
-    } catch {
-      /* ignore */
-    }
-    update({ onboardingDone: true });
-    onDone();
   };
 
   const saveAmt = Math.round((income * savingsPct) / 100);
@@ -206,55 +196,59 @@ export function OnboardingWizard({
   return (
     <div className={s.onbOverlay}>
       <section className={`${s.onbCard} fade-in`} role="dialog" aria-modal="true" aria-label="Welcome to Maxie">
-        {/* Step progress bar */}
+        {/* Compact 2-step header */}
         <div className={s.onbTop}>
-          <div className={s.onbSteps} aria-label={`Step ${step} of 3`}>
-            {[1, 2, 3].map(n => (
+          <div className={s.onbSteps} aria-label={`Step ${step} of 2`}>
+            {[1, 2].map(n => (
               <span key={n} className={s.onbStepBar} data-active={n === step || undefined} data-done={n < step || undefined} />
             ))}
           </div>
-          <button type="button" className={s.textBtnSm} onClick={finish}>
-            Skip setup
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className={s.segment} role="group" aria-label="Language">
+              <button type="button" aria-pressed={lang === 'en'} onClick={() => setLang('en')}>
+                EN
+              </button>
+              <button type="button" aria-pressed={lang === 'id'} onClick={() => setLang('id')}>
+                ID
+              </button>
+            </div>
+            <button type="button" className={s.textBtnSm} onClick={finish}>
+              {isId ? 'Lewati' : 'Skip setup'}
+            </button>
+          </div>
         </div>
 
         {step === 1 && (
           <div className={s.onbBody}>
             <div className={s.onbHero}>
-              <Logo size={54} mood="happy" interactive followCursor cheer="Nice to meet you!" />
+              <Logo size={52} mood="happy" interactive followCursor cheer={isId ? 'Halo!' : 'Nice to meet you!'} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <h1 className={s.onbTitle}>Welcome to Maxie</h1>
-                <p className={s.onbSub}>Take 30 seconds to tune your pay cycle — you can change any of this later in Settings.</p>
+                <h1 className={s.onbTitle}>{isId ? 'Kenalan singkat dengan Maxie' : 'Quick setup with Maxie'}</h1>
+                <p className={s.onbSub}>
+                  {isId
+                    ? 'Cuma 20 detik untuk atur siklus gajian — semuanya bisa diubah kapan saja nanti.'
+                    : 'About 20 seconds to map your pay cycle — you can fine-tune everything anytime.'}
+                </p>
               </div>
             </div>
 
-            <div className={s.onbGrid}>
-              <label className={s.field}>
-                <span>What should Maxie call you?</span>
-                <input
-                  className={s.input}
-                  autoFocus
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="e.g. Rangga"
-                  maxLength={40}
-                />
-              </label>
-              <label className={s.field}>
-                <span>Full name on bank accounts (optional)</span>
-                <input
-                  className={s.input}
-                  value={ownNames}
-                  onChange={e => setOwnNames(e.target.value)}
-                  placeholder="e.g. Kalaka Rangga S"
-                  maxLength={120}
-                />
-              </label>
-            </div>
+            <label className={s.field}>
+              <span>{isId ? 'Maxie panggil kamu siapa?' : 'What should Maxie call you?'}</span>
+              <input
+                className={s.input}
+                autoFocus
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder={isId ? 'contoh: Rangga' : 'e.g. Rangga'}
+                maxLength={40}
+              />
+            </label>
 
             <div className={s.onbBlock}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: C.textSoft }}>Monthly take-home income</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: C.textSoft }}>
+                  {isId ? 'Penghasilan bersih per bulan' : 'Monthly take-home income'}
+                </span>
                 <div className={s.segment} role="group" aria-label="Currency">
                   {(['IDR', 'USD'] as Currency[]).map(c => (
                     <button key={c} type="button" aria-pressed={currency === c} onClick={() => pickCurrency(c)}>
@@ -296,12 +290,12 @@ export function OnboardingWizard({
 
             <div className={s.onbGrid}>
               <div className={s.onbBlock}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: C.textSoft }}>Payday</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: C.textSoft }}>{isId ? 'Tanggal gajian' : 'Payday'}</span>
                 <div className={s.onbChipRow}>
                   {[
-                    { label: '25th', day: 25 },
-                    { label: '1st', day: 1 },
-                    { label: 'Last day', day: 31 },
+                    { label: isId ? 'Tgl 25' : '25th', day: 25 },
+                    { label: isId ? 'Tgl 1' : '1st', day: 1 },
+                    { label: isId ? 'Akhir bln' : 'Last day', day: 31 },
                   ].map(opt => (
                     <button
                       key={opt.label}
@@ -318,21 +312,24 @@ export function OnboardingWizard({
 
               <div className={s.onbBlock}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                  <span style={{ fontWeight: 600, color: C.textSoft }}>Savings goal</span>
+                  <span style={{ fontWeight: 600, color: C.textSoft }}>{isId ? 'Target nabung' : 'Savings goal'}</span>
                   <strong style={{ color: C.accent600 }}>{savingsPct}%</strong>
                 </div>
-                <input
-                  type="range"
-                  min={10}
-                  max={70}
-                  step={5}
-                  value={savingsPct}
-                  onChange={e => setSavingsPct(Number(e.target.value))}
-                  aria-label="Monthly savings target percentage"
-                  style={{ accentColor: 'var(--clay)', width: '100%' }}
-                />
+                <div className={s.onbChipRow}>
+                  {VIBE_PRESETS.map(v => (
+                    <button
+                      key={v.pct}
+                      type="button"
+                      className={s.winBadge}
+                      data-active={savingsPct === v.pct || undefined}
+                      onClick={() => setSavingsPct(v.pct)}
+                    >
+                      {isId ? v.labelId : v.labelEn}
+                    </button>
+                  ))}
+                </div>
                 <span style={{ fontSize: 12, color: C.textMuted }}>
-                  Save {fmtShort(saveAmt, currency)} · Spend {fmtShort(spendAmt, currency)}
+                  {isId ? 'Simpan' : 'Save'} {fmtShort(saveAmt, currency)} · {isId ? 'Belanja' : 'Spend'} {fmtShort(spendAmt, currency)}
                 </span>
               </div>
             </div>
@@ -341,20 +338,49 @@ export function OnboardingWizard({
 
             <div className={s.onbFoot}>
               <button type="button" className={s.btnPrimary} onClick={saveStep1} style={{ marginLeft: 'auto' }}>
-                Continue
+                {isId ? 'Lanjut' : 'Continue'}
               </button>
             </div>
           </div>
         )}
 
-        {step === 2 && (
+        {step === 2 && importResult && (
+          <div className={s.onbBody}>
+            <div className={s.onbHero}>
+              <Logo size={54} mood="happy" interactive followCursor cheer={isId ? 'Berhasil!' : 'All tidy!'} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <h1 className={s.onbTitle}>
+                  {isId ? `Semua siap${name.trim() ? `, ${name.trim()}` : ''}` : `You're all set${name.trim() ? `, ${name.trim()}` : ''}`}
+                </h1>
+                <p className={s.onbSub}>
+                  {importResult.imported > 0
+                    ? isId
+                      ? `Maxie membaca ${importResult.scanned} email dan merapikan ${importResult.imported} transaksi${importResult.duplicates ? ` (${importResult.duplicates} duplikat digabung)` : ''}.`
+                      : `Maxie read ${importResult.scanned} emails and organized ${importResult.imported} ${importResult.imported === 1 ? 'transaction' : 'transactions'}${importResult.duplicates ? ` (${importResult.duplicates} duplicates merged)` : ''}.`
+                    : isId
+                      ? 'Siklus dan target tabunganmu sudah siap digunakan.'
+                      : 'Your pay cycle and savings plan are ready to explore.'}
+                </p>
+              </div>
+            </div>
+            <div className={s.onbFoot}>
+              <button type="button" className={s.btnPrimary} onClick={finish} style={{ marginLeft: 'auto' }}>
+                {isId ? 'Buka Ringkasanku' : 'Open my Summary'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && !importResult && (
           <div className={s.onbBody}>
             <div className={s.onbHero}>
               <Logo size={48} mood="curious" followCursor />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <h1 className={s.onbTitle}>Bring in your receipts</h1>
+                <h1 className={s.onbTitle}>{isId ? 'Impor struk otomatis (opsional)' : 'Bring in your receipts (optional)'}</h1>
                 <p className={s.onbSub}>
-                  Maxie reads bank &amp; app receipt emails (read-only) to build your cycle automatically — no manual typing.
+                  {isId
+                    ? 'Maxie membaca email struk bank & e-wallet (hanya baca) — atau kamu bisa langsung mulai kosong.'
+                    : 'Maxie scans bank & app receipt emails (read-only) — or start with a clean slate and connect later.'}
                 </p>
               </div>
             </div>
@@ -376,7 +402,7 @@ export function OnboardingWizard({
                   </span>
                 </div>
                 <details className={s.gmPrivacyDetails}>
-                  <summary>What Maxie can and cannot see</summary>
+                  <summary>{isId ? 'Apa yang bisa dan tidak bisa dilihat Maxie' : 'What Maxie can and cannot see'}</summary>
                   <div className={s.gmPrivacyBody}>
                     <span>
                       <strong>Scope requested:</strong> <code>gmail.readonly</code> only — no Send, no Delete, no Drive.
@@ -398,13 +424,13 @@ export function OnboardingWizard({
                 {gmailErr && <span className={s.error}>{gmailErr}</span>}
                 <div className={s.onbFoot}>
                   <button type="button" className={s.btnGhost} onClick={() => setStep(1)}>
-                    Back
+                    {isId ? 'Kembali' : 'Back'}
                   </button>
-                  <button type="button" className={s.textBtnSm} onClick={() => setStep(3)} style={{ marginLeft: 'auto' }}>
-                    Skip for now
+                  <button type="button" className={s.btnOutline} onClick={finish} style={{ marginLeft: 'auto' }}>
+                    {isId ? 'Mulai tanpa Gmail' : 'Start clean'}
                   </button>
                   <button type="button" className={s.btnPrimary} onClick={connectGoogle}>
-                    Connect Google
+                    {isId ? 'Hubungkan Gmail' : 'Connect Gmail'}
                   </button>
                 </div>
               </>
@@ -514,70 +540,17 @@ export function OnboardingWizard({
 
                 <div className={s.onbFoot}>
                   <button type="button" className={s.btnGhost} disabled={importing} onClick={() => setStep(1)}>
-                    Back
+                    {isId ? 'Kembali' : 'Back'}
                   </button>
-                  <button type="button" className={s.textBtnSm} disabled={importing} onClick={() => setStep(3)} style={{ marginLeft: 'auto' }}>
-                    Skip for now
+                  <button type="button" className={s.btnOutline} disabled={importing} onClick={finish} style={{ marginLeft: 'auto' }}>
+                    {isId ? 'Mulai tanpa Gmail' : 'Start clean'}
                   </button>
                   <button type="button" className={s.btnPrimary} disabled={!target || importing} onClick={runImport}>
-                    {importing ? 'Importing…' : 'Import my receipts'}
+                    {importing ? (isId ? 'Mengimpor…' : 'Importing…') : isId ? 'Impor struk saya' : 'Import my receipts'}
                   </button>
                 </div>
               </>
             )}
-          </div>
-        )}
-
-        {step === 3 && (
-          <div className={s.onbBody}>
-            <div className={s.onbHero}>
-              <Logo size={56} mood="happy" interactive followCursor cheer="All set!" />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <h1 className={s.onbTitle}>You&apos;re all set{name.trim() ? `, ${name.trim()}` : ''}</h1>
-                <p className={s.onbSub}>
-                  {importResult && importResult.imported > 0
-                    ? `Maxie read ${importResult.scanned} emails and imported ${importResult.imported} ${importResult.imported === 1 ? 'transaction' : 'transactions'}${importResult.duplicates ? ` (${importResult.duplicates} duplicates merged cleanly)` : ''}.`
-                    : 'Your pay cycle and savings goal are ready. You can connect or sync Gmail anytime from the top bar.'}
-                </p>
-              </div>
-            </div>
-
-            {onVercel && supabase && (
-              <div className={s.gmTipBox}>
-                <span style={{ fontWeight: 600, color: C.text }}>Optional: set a quick 6-digit sign-in PIN</span>
-                <span>Skip waiting for email links next time — enter your 6-digit PIN and sign in instantly.</span>
-                {pinSaved ? (
-                  <span style={{ color: C.good, fontWeight: 600, fontSize: 13 }}>PIN saved — you can sign in with Email + PIN next time.</span>
-                ) : (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                    <input
-                      className={s.input}
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={PIN_LENGTH}
-                      placeholder="6-digit PIN"
-                      value={pin}
-                      onChange={e => {
-                        setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH));
-                        setPinErr('');
-                      }}
-                      style={{ maxWidth: 160, letterSpacing: 4, textAlign: 'center' }}
-                      aria-label="Optional 6-digit PIN"
-                    />
-                    <button type="button" className={s.btnOutlineSm} disabled={pinBusy || pin.length !== PIN_LENGTH} onClick={savePin}>
-                      {pinBusy ? 'Saving…' : 'Save PIN'}
-                    </button>
-                  </div>
-                )}
-                {pinErr && <span className={s.error}>{pinErr}</span>}
-              </div>
-            )}
-
-            <div className={s.onbFoot}>
-              <button type="button" className={s.btnPrimary} onClick={finish} style={{ marginLeft: 'auto' }}>
-                Open my Summary
-              </button>
-            </div>
           </div>
         )}
       </section>

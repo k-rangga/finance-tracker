@@ -9,6 +9,7 @@ import { DEFAULT_INCOME, useSettings, type Settings } from '../lib/settings';
 import type { Currency } from '../lib/format';
 import { applyTheme, getTheme, type Theme } from '../lib/theme';
 import { useData } from '../lib/data';
+import { run } from '../lib/gas';
 import { googleConnectUrl } from '../lib/gmail';
 import { onVercel } from '../lib/supabase';
 import { PIN_LENGTH, setPin, signOut } from './SignIn';
@@ -55,6 +56,29 @@ export function SettingsDialog({
   /** Credit cards seen in your transactions, for their statement and due days. */
   const { txRows, gmail } = useData();
   const [driveBusy, setDriveBusy] = useState(false);
+  const [delOpen, setDelOpen] = useState(false);
+  const [delTxt, setDelTxt] = useState('');
+  const [delBusy, setDelBusy] = useState(false);
+  const [delErr, setDelErr] = useState('');
+
+  const deactivate = async () => {
+    setDelBusy(true);
+    setDelErr('');
+    try {
+      await run('deactivateAccount');
+      try {
+        Object.keys(localStorage)
+          .filter(k => k.startsWith('maxie.'))
+          .forEach(k => localStorage.removeItem(k));
+      } catch {
+        /* ignore */
+      }
+      await signOut();
+    } catch (e) {
+      setDelErr(e instanceof Error ? e.message : String(e));
+      setDelBusy(false);
+    }
+  };
   const cardNames = [...new Set([...txRows.map(r => r.account ?? ''), ...Object.keys(settings.cards ?? {})])].filter(a => a.startsWith('CC ')).sort();
   const setCard = (name: string, key: 'statement' | 'due', text: string) => {
     const v = Math.max(0, Math.min(31, Math.round(Number(text.replace(/\D/g, '')) || 0)));
@@ -378,6 +402,62 @@ export function SettingsDialog({
             <span className={s.setHint} style={pinMsg ? { color: pinMsg.ok ? 'var(--good)' : 'var(--red-ink)' } : undefined}>
               {pinMsg?.text ?? 'Lets you sign in with your email and a PIN instead of waiting for a link. Setting it again changes it.'}
             </span>
+          </div>
+        )}
+        {onVercel && (
+          <div style={{ marginTop: 6, paddingTop: 12, borderTop: '1px solid var(--divider)' }}>
+            {!delOpen ? (
+              <button
+                type="button"
+                className={s.textBtnSm}
+                style={{ color: 'var(--red-ink)', padding: 0 }}
+                onClick={() => setDelOpen(true)}
+              >
+                Delete account…
+              </button>
+            ) : (
+              <div className={s.gmTipBox} style={{ borderColor: 'color-mix(in srgb, var(--danger) 35%, var(--border))' }}>
+                <strong style={{ color: 'var(--red-ink)' }}>Deactivate account</strong>
+                <span>
+                  Your account will be set to inactive, Google access will be revoked, and you will be signed out. Anonymized
+                  merchant rules &amp; Maxie feedback learnings are retained to keep improving.
+                </span>
+                <label className={s.field} style={{ marginTop: 4 }}>
+                  <span>Type DELETE to confirm</span>
+                  <input
+                    className={s.input}
+                    value={delTxt}
+                    onChange={e => setDelTxt(e.target.value)}
+                    placeholder="DELETE"
+                    autoComplete="off"
+                  />
+                </label>
+                {delErr && <span className={s.error}>{delErr}</span>}
+                <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className={s.btnPrimarySm}
+                    style={{ background: 'var(--danger)' }}
+                    disabled={delBusy || delTxt.trim().toUpperCase() !== 'DELETE'}
+                    onClick={() => void deactivate()}
+                  >
+                    {delBusy ? 'Deactivating…' : 'Deactivate & sign out'}
+                  </button>
+                  <button
+                    type="button"
+                    className={s.btnGhost}
+                    disabled={delBusy}
+                    onClick={() => {
+                      setDelOpen(false);
+                      setDelTxt('');
+                      setDelErr('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Section>

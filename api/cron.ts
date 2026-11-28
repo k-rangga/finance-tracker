@@ -12,12 +12,24 @@ const RUN_MS = 270_000;
 async function handle(req: Request) {
   if ((req.headers.get('authorization') || '') !== 'Bearer ' + env('CRON_SECRET')) return json({ ok: false }, 401);
   const started = Date.now();
-  // Everyone who has used the app (settings saved) or connected Google.
-  const [props, tokens] = await Promise.all([
+  // Everyone who has used the app (settings saved) or connected Google, skipping inactive accounts.
+  const [props, tokens, statuses] = await Promise.all([
     admin('props?key=eq.settings&select=user_id') as Promise<{ user_id: string }[]>,
     admin('google_tokens?select=user_id') as Promise<{ user_id: string }[]>,
+    admin('props?key=eq.account_status&select=user_id,value') as Promise<{ user_id: string; value: string | null }[]>,
   ]);
-  const ids = [...new Set([...props, ...tokens].map(r => r.user_id))];
+  const inactiveIds = new Set(
+    statuses
+      .filter(r => {
+        try {
+          return JSON.parse(r.value || '{}').status === 'inactive';
+        } catch {
+          return false;
+        }
+      })
+      .map(r => r.user_id),
+  );
+  const ids = [...new Set([...props, ...tokens].map(r => r.user_id))].filter(id => !inactiveIds.has(id));
   const done: Record<string, string> = {};
   for (const id of ids) {
     if (Date.now() - started > RUN_MS - PER_USER_MS) {

@@ -11788,3 +11788,46 @@ button.sumPulsePill:hover {
   border-radius: 4px;
   background: var(--surface-200);
 }
+.qsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.qsItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.qsItem:hover:not(:disabled) {
+  border-color: var(--clay);
+}
+.qsItem[data-done='true'] {
+  opacity: 0.68;
+  cursor: default;
+  text-decoration: line-through;
+}
+.qsDot {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.qsItem[data-done='true'] .qsDot {
+  background: var(--good);
+  border-color: var(--good);
+  color: #fff;
+}

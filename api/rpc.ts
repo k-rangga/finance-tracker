@@ -3,6 +3,7 @@
  * actions as Apps Script's `api(action, payload)`. Replies { ok: true, result } or { ok: false, error }.
  */
 import { userFromRequest } from '../server/auth.js';
+import { deactivateUser } from '../server/account.js';
 import { json, originOf } from '../server/env.js';
 import { authUrl, disconnect } from '../server/google.js';
 import { quotes } from '../server/quotes.js';
@@ -22,6 +23,10 @@ export async function POST(req: Request) {
     if (action === 'googleDisconnect') {
       await disconnect(user.id);
       return json({ ok: true, result: true });
+    }
+    if (action === 'deactivateAccount') {
+      const reason = typeof payload?.reason === 'string' ? payload.reason : undefined;
+      return json({ ok: true, result: await deactivateUser(user.id, reason) });
     }
 
     return json({ ok: true, result: await runForUser(user, action, payload) });
