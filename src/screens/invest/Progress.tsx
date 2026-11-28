@@ -44,7 +44,7 @@ export function Progress({ today, snaps }: { today: Date; snaps: Snap[] }) {
   const ymax = step * 4;
   const t0 = ser[0].dt.getTime();
   const t1 = ser[ser.length - 1].dt.getTime();
-  const X = (d: Date) => ((d.getTime() - t0) / (t1 - t0)) * 1000;
+  const X = (d: Date) => (t1 > t0 ? ((d.getTime() - t0) / (t1 - t0)) * 1000 : 500);
   const Y = (v: number) => 300 - (v / ymax) * 300;
   const f1 = (n: number) => n.toFixed(1);
 

@@ -34,6 +34,8 @@ export function Summary({
   footnote,
   switcher,
   pulse,
+  activeFilter,
+  onSelectPulse,
   pepTalks,
   onAskMaxie,
 }: {
@@ -45,6 +47,8 @@ export function Summary({
   footnote: string;
   switcher: ReactNode;
   pulse?: { cruising: number; watch: number; quests: number; zeroClub: number };
+  activeFilter?: 'all' | 'watch' | 'smooth' | 'untouched' | 'challenges';
+  onSelectPulse?: (target: 'smooth' | 'watch' | 'untouched' | 'challenges') => void;
   pepTalks?: string[];
   onAskMaxie?: () => void;
 }) {
@@ -109,27 +113,34 @@ export function Summary({
         )}
       </div>
       {pulse && (pulse.cruising > 0 || pulse.watch > 0 || pulse.zeroClub > 0 || pulse.quests > 0) && (
-        <div className={s.sumPulseRow} aria-label="Category rhythm overview">
-          {pulse.cruising > 0 && (
-            <span className={s.sumPulsePill} data-tone="good">
-              {pulse.cruising} cruising
-            </span>
-          )}
-          {pulse.zeroClub > 0 && (
-            <span className={s.sumPulsePill} data-tone="calm">
-              {pulse.zeroClub} untouched
-            </span>
-          )}
-          {pulse.watch > 0 && (
-            <span className={s.sumPulsePill} data-tone="warn">
-              {pulse.watch} on watch
-            </span>
-          )}
-          {pulse.quests > 0 && (
-            <span className={s.sumPulsePill} data-tone="quest">
-              {pulse.quests} {pulse.quests === 1 ? 'quest' : 'quests'} live
-            </span>
-          )}
+        <div className={s.sumPulseRow} data-own-gestures aria-label="Category rhythm overview">
+          {(
+            [
+              pulse.cruising > 0 ? { key: 'smooth' as const, tone: 'good', label: `${pulse.cruising} cruising` } : null,
+              pulse.zeroClub > 0 ? { key: 'untouched' as const, tone: 'calm', label: `${pulse.zeroClub} untouched` } : null,
+              pulse.watch > 0 ? { key: 'watch' as const, tone: 'warn', label: `${pulse.watch} on watch` } : null,
+              pulse.quests > 0 ? { key: 'challenges' as const, tone: 'quest', label: `${pulse.quests} ${pulse.quests === 1 ? 'quest' : 'quests'} live` } : null,
+            ].filter((x): x is { key: 'smooth' | 'untouched' | 'watch' | 'challenges'; tone: string; label: string } => !!x)
+          ).map(pill => {
+            const on = activeFilter === pill.key;
+            return onSelectPulse ? (
+              <button
+                key={pill.key}
+                type="button"
+                className={s.sumPulsePill}
+                data-tone={pill.tone}
+                data-active={on || undefined}
+                aria-pressed={on}
+                onClick={() => onSelectPulse(pill.key)}
+              >
+                {pill.label}
+              </button>
+            ) : (
+              <span key={pill.key} className={s.sumPulsePill} data-tone={pill.tone}>
+                {pill.label}
+              </span>
+            );
+          })}
         </div>
       )}
       <div className={s.sumFootRow}>

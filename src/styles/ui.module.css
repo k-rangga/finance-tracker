@@ -10970,10 +10970,23 @@ button.sxTile:active:not(:disabled),
   align-items: center;
   padding: 3px 9px;
   border-radius: 999px;
+  border: 1px solid transparent;
+  font: inherit;
   font-size: 12px;
   font-weight: 600;
   background: var(--surface-100);
   color: var(--text-soft);
+  transition: transform 0.14s ease, border-color 0.14s ease;
+}
+button.sumPulsePill {
+  cursor: pointer;
+}
+button.sumPulsePill:hover {
+  transform: translateY(-1px);
+  border-color: currentColor;
+}
+.sumPulsePill[data-active] {
+  border-color: currentColor;
 }
 .sumPulsePill[data-tone='good'] {
   background: var(--good-soft);

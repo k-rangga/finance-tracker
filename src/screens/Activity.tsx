@@ -633,8 +633,8 @@ export function Activity({
                   <span>
                     {!cat && !needle && range === 'today' ? 'Quiet day so far — nothing spent today.' : !cat && !needle ? 'Nothing here for these dates.' : 'No transactions match these filters.'}
                   </span>
-                  {(cat || needle || lo !== 0 || hi !== cycle.dayIdx) && (
-                    <button type="button" className={s.btnOutline} onClick={() => setFilter({ range: 'cycle', cat: '', q: '', sort: 'newest' })}>
+                  {(cat || needle || filter.hideTransfers || lo !== 0 || hi !== cycle.dayIdx) && (
+                    <button type="button" className={s.btnOutline} onClick={() => setFilter({ range: 'cycle', cat: '', q: '', hideTransfers: false, from: undefined, to: undefined, sort: 'newest' })}>
                       Show the whole cycle
                     </button>
                   )}

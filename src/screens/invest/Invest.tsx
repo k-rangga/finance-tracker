@@ -268,7 +268,7 @@ export function Invest({ cycle, wealth, budget, impulse }: { cycle: Cycle; wealt
           </div>
 
           {/* One filter bar: open or closed, when, which name, and what still needs a review. */}
-          <div className={s.invFilters}>
+          <div className={s.invFilters} data-own-gestures>
             {view === 'trades' && (
               <Select
                 ariaLabel="Open or closed"
@@ -298,6 +298,19 @@ export function Invest({ cycle, wealth, budget, impulse }: { cycle: Cycle; wealt
                   <Icon d={IC.search} size={15} color={C.textMuted} />
                   <input value={q} onChange={e => setQ(e.target.value)} placeholder={perps ? 'Search BTC, HYPE…' : 'Search BBCA, NVDA…'} aria-label="Search trades" />
                 </label>
+                {(status !== 'all' || period !== 'all' || needle) && (
+                  <button
+                    type="button"
+                    className={s.textBtnSm}
+                    onClick={() => {
+                      setStatus('all');
+                      setPeriod('all');
+                      setQ('');
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                )}
                 {toReview.length > 0 && (
                   <button type="button" className={s.opt} onClick={() => setReviewing(toReview)}>
                     <span className={s.badgeDot} style={{ background: C.amber, display: 'inline-block', marginRight: 7, verticalAlign: 'middle' }} aria-hidden="true" />

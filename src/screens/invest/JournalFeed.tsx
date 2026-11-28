@@ -301,10 +301,13 @@ export function JournalFeed({ account, items, dS, wealth, budget, impulse, onRev
       .slice(0, 10);
   }, [entries]);
 
+  const draftCount = useMemo(() => entries.filter(e => e.status === 'draft').length, [entries]);
+  const effectiveStatus = statusFilter === 'draft' && draftCount === 0 ? 'all' : statusFilter;
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return entries.filter(e => {
-      if (statusFilter !== 'all' && e.status !== statusFilter) return false;
+      if (effectiveStatus !== 'all' && e.status !== effectiveStatus) return false;
       if (tagFilter && !e.tags.includes(tagFilter)) return false;
       if (q) {
         const hay = `${e.title} ${e.subtitle} ${e.body} ${e.tags.join(' ')}`.toLowerCase();
@@ -312,9 +315,7 @@ export function JournalFeed({ account, items, dS, wealth, budget, impulse, onRev
       }
       return true;
     });
-  }, [entries, statusFilter, tagFilter, query]);
-
-  const draftCount = useMemo(() => entries.filter(e => e.status === 'draft').length, [entries]);
+  }, [entries, effectiveStatus, tagFilter, query]);
 
   // ---- Reader View ----
   if (mode === 'read' && activeEntry) {
@@ -418,14 +419,14 @@ export function JournalFeed({ account, items, dS, wealth, budget, impulse, onRev
       {entries.length > 0 && (
         <div className={s.subFilterRow}>
           <div className={s.sxMiniSeg} role="group" aria-label="Entry status">
-            <button type="button" aria-pressed={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>
+            <button type="button" aria-pressed={effectiveStatus === 'all'} onClick={() => setStatusFilter('all')}>
               All ({entries.length})
             </button>
-            <button type="button" aria-pressed={statusFilter === 'published'} onClick={() => setStatusFilter('published')}>
+            <button type="button" aria-pressed={effectiveStatus === 'published'} onClick={() => setStatusFilter('published')}>
               Published
             </button>
             {draftCount > 0 && (
-              <button type="button" aria-pressed={statusFilter === 'draft'} onClick={() => setStatusFilter('draft')}>
+              <button type="button" aria-pressed={effectiveStatus === 'draft'} onClick={() => setStatusFilter('draft')}>
                 Drafts ({draftCount})
               </button>
             )}
@@ -495,13 +496,27 @@ export function JournalFeed({ account, items, dS, wealth, budget, impulse, onRev
               ? 'Write thesis notes, paste chart screenshots, embed trades, and leave dated reflections for your future self.'
               : 'Try clearing your search or tag filter.'}
           </p>
-          {entries.length === 0 && (
+          {entries.length === 0 ? (
             <div className={s.subEmptyActions}>
               <button type="button" className={s.btnPrimarySm} onClick={() => startNewEntry()}>
                 <Icon d={IC.plus} size={14} /> Write first entry
               </button>
               <button type="button" className={s.btnOutlineSm} onClick={startMonthlyReview}>
                 <Icon d={IC.sparkle} size={14} /> Start {curMonthName} review
+              </button>
+            </div>
+          ) : (
+            <div className={s.subEmptyActions}>
+              <button
+                type="button"
+                className={s.btnOutlineSm}
+                onClick={() => {
+                  setStatusFilter('all');
+                  setTagFilter('');
+                  setQuery('');
+                }}
+              >
+                Clear filters
               </button>
             </div>
           )}

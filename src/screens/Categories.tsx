@@ -3,6 +3,7 @@ import s from '../styles/ui.module.css';
 import { FoundInstallments } from '../components/Plans';
 import { BillItem, BudgetCard, InstallmentsGroup, useInstallmentTotals } from './categoryCards';
 import { Badge, Toast } from '../components/ui';
+import { Select } from '../components/Select';
 import { Celebrate } from '../components/Delight';
 import { Logo } from '../components/Logo';
 import { IC, Icon } from '../components/Icon';
@@ -35,7 +36,7 @@ import {
 import { FixedBillsList } from './FixedBills';
 
 type Mode = 'cycle' | 'week';
-type CatFilter = 'all' | 'watch' | 'smooth' | 'challenges';
+type CatFilter = 'all' | 'watch' | 'smooth' | 'untouched' | 'challenges';
 type CatSort = 'attention' | 'spent' | 'room';
 
 type Props = {
@@ -106,9 +107,9 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
 
   const view = makeView(mode, wi, settings.warnAt, budget.txs);
   const sorter = (a: Row, b: Row) => {
-    if (sort === 'spent') return b.cur - a.cur || a.c.name.localeCompare(b.c.name);
+    if (sort === 'spent') return b.cur - a.cur || b.used - a.used || a.c.name.localeCompare(b.c.name);
     if (sort === 'room') return b.lim - b.cur - (a.lim - a.cur) || a.c.name.localeCompare(b.c.name);
-    return a.st.rank - b.st.rank || b.used - a.used;
+    return a.st.rank - b.st.rank || b.used - a.used || b.cur - a.cur || a.c.name.localeCompare(b.c.name);
   };
   const variable = budget.cats.filter(c => c.type === 'variable').map(view).sort(sorter);
   const usedAll = variable.filter(r => r.cur > 0 || r.st.key !== 'ok');
@@ -209,15 +210,22 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
       .map(x => ({ name: x.c.name, room: Math.max(0, x.lim - x.cur), over: Math.max(0, x.cur - x.lim) }))
       .sort((a, b) => b.over - a.over || a.room - b.room);
 
-  const watchCount = variable.filter(r => r.st.key !== 'ok').length;
+  const watchRows = variable.filter(r => r.st.key !== 'ok');
+  const smoothRows = variable.filter(r => r.st.key === 'ok' && r.cur > 0);
+  const questRows = mode === 'cycle' ? variable.filter(r => !!challengeOf(r)) : [];
+  const watchCount = watchRows.length;
+  const effectiveFilter: CatFilter =
+    (filter === 'challenges' && questRows.length === 0) || (filter === 'untouched' && unused.length === 0) ? 'all' : filter;
   const filteredUsed =
-    filter === 'watch'
-      ? variable.filter(r => r.st.key !== 'ok')
-      : filter === 'smooth'
-        ? variable.filter(r => r.st.key === 'ok' && r.cur > 0)
-        : filter === 'challenges'
-          ? variable.filter(r => !!challengeOf(r))
-          : usedAll;
+    effectiveFilter === 'watch'
+      ? watchRows
+      : effectiveFilter === 'smooth'
+        ? smoothRows
+        : effectiveFilter === 'untouched'
+          ? unused
+          : effectiveFilter === 'challenges'
+            ? questRows
+            : usedAll;
 
   // Fixed bills you ticked off by hand this cycle.
   const cycleKey = toISO(cycle.start);
@@ -232,6 +240,12 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
   const isPaid = (r: Row) => r.cur > 0 || marked.has(r.c.name);
 
   const toggle = (name: string) => setOpen(open === name ? null : name);
+  const pickCategory = (name: string) => {
+    setFilter('all');
+    if (unused.some(r => r.c.name === name)) setShowUnused(true);
+    setOpen(name);
+    requestAnimationFrame(() => document.getElementById('cat-' + name)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+  };
 
   /** An everyday category as a card (Maxie's budget detail design). */
   const card = (r: Row) => {
@@ -320,6 +334,8 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
               period={mode === 'cycle' ? 'this cycle' : `in week ${wi + 1}`}
               footnote={footnote}
               pulse={{ cruising: cruisingCount, watch: watchCount, quests: questCount, zeroClub: zeroClubCount }}
+              activeFilter={effectiveFilter}
+              onSelectPulse={target => setFilter(prev => (prev === target ? 'all' : target))}
               pepTalks={pepTalks}
               onAskMaxie={
                 onAskMaxie
@@ -364,21 +380,22 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
             }
           />
           {variable.length > 0 && (
-            <div className={s.catToolbar}>
+            <div className={s.catToolbar} data-own-gestures>
               <div className={s.catFilterPills} role="tablist" aria-label="Filter categories">
                 {(
                   [
-                    { key: 'all', label: 'All' },
+                    { key: 'all', label: 'All', count: usedAll.length },
                     { key: 'watch', label: 'Watch', count: watchCount },
-                    { key: 'smooth', label: 'Smooth' },
-                    ...(activeChallenges.length > 0 ? [{ key: 'challenges' as const, label: 'Challenges', count: activeChallenges.length }] : []),
+                    { key: 'smooth', label: 'Smooth', count: smoothRows.length },
+                    ...(unused.length > 0 ? [{ key: 'untouched' as const, label: 'Untouched', count: unused.length }] : []),
+                    ...(questRows.length > 0 ? [{ key: 'challenges' as const, label: 'Quests', count: questRows.length }] : []),
                   ] as { key: CatFilter; label: string; count?: number }[]
                 ).map(item => (
                   <button
                     key={item.key}
                     type="button"
                     role="tab"
-                    aria-selected={filter === item.key}
+                    aria-selected={effectiveFilter === item.key}
                     className={s.catFilterPill}
                     onClick={() => setFilter(item.key)}
                   >
@@ -387,34 +404,48 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
                   </button>
                 ))}
               </div>
-              <select className={s.catSortSelect} value={sort} onChange={e => setSort(e.target.value as CatSort)} aria-label="Sort categories">
-                <option value="attention">Sort: Attention</option>
-                <option value="spent">Sort: Most spent</option>
-                <option value="room">Sort: Most room</option>
-              </select>
+              <Select<CatSort>
+                ariaLabel="Sort categories"
+                align="right"
+                value={sort}
+                onChange={setSort}
+                options={[
+                  { value: 'attention', label: 'Sort: Attention' },
+                  { value: 'spent', label: 'Sort: Most spent' },
+                  { value: 'room', label: 'Sort: Most room' },
+                ]}
+                style={{ minHeight: 32, height: 32, padding: '0 12px', fontSize: 12.5, borderRadius: 999 }}
+              />
             </div>
           )}
           <div className={s.mxCards}>
             {filteredUsed.length === 0 && (
               <div className={s.mxCard} style={{ padding: '16px 20px' }}>
-                <div className={s.mxEmptyInline} style={{ padding: 0 }}>
+                <div className={s.mxEmptyInline} style={{ padding: 0, flexWrap: 'wrap' }}>
                   <Logo size={28} mood="happy" interactive cheer="Looking good!" />
-                  <span>
-                    {filter === 'watch'
+                  <span style={{ marginRight: 'auto' }}>
+                    {effectiveFilter === 'watch'
                       ? 'Nothing on the watch list — every category is comfortably within its limit!'
-                      : filter === 'smooth'
+                      : effectiveFilter === 'smooth'
                         ? 'No spending logged yet to track here — clean slate.'
-                        : filter === 'challenges'
-                          ? 'No active challenges yet — open any category to start a 7-day no-spend week.'
-                          : `Nothing spent yet ${mode === 'cycle' ? 'this cycle' : 'this week'} — clean slate!`}
+                        : effectiveFilter === 'untouched'
+                          ? 'Every category has seen a transaction this cycle.'
+                          : effectiveFilter === 'challenges'
+                            ? 'No active quests yet — open any category to start a 3-day or 7-day quest.'
+                            : `Nothing spent yet ${mode === 'cycle' ? 'this cycle' : 'this week'} — clean slate!`}
                   </span>
+                  {effectiveFilter !== 'all' && (
+                    <button type="button" className={s.btnOutlineSm} onClick={() => setFilter('all')}>
+                      Show all
+                    </button>
+                  )}
                 </div>
               </div>
             )}
             {filteredUsed.map(card)}
-            {filter === 'all' && showUnused && unused.map(card)}
+            {effectiveFilter === 'all' && showUnused && unused.map(card)}
           </div>
-          {filter === 'all' && unused.length > 0 && (
+          {effectiveFilter === 'all' && unused.length > 0 && (
             <div className={s.zeroClubCard}>
               <div className={s.zeroClubHead}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: C.good }}>
@@ -557,11 +588,7 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
                 rows={[...variable, ...fixed]}
                 challenges={activeChallenges}
                 catStreaks={catStreaks}
-                onPick={name => {
-                  setFilter('all');
-                  setOpen(name);
-                  requestAnimationFrame(() => document.getElementById('cat-' + name)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
-                }}
+                onPick={pickCategory}
               />
             </div>
           )}
@@ -573,11 +600,7 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
           rows={[...variable, ...fixed]}
           challenges={activeChallenges}
           catStreaks={catStreaks}
-          onPick={name => {
-            setFilter('all');
-            setOpen(name);
-            requestAnimationFrame(() => document.getElementById('cat-' + name)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
-          }}
+          onPick={pickCategory}
         />
       )}
       {toast && (
