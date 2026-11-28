@@ -24,6 +24,7 @@ const GEMINI_SYSTEM = [
   'Example of the right calm, warm tone: "Looking steady, Rangga. Pecel Lele Oma and Saladstop is a nice combo — you\'ve spent **Rp 210.100** out of **Rp 2.000.000** so far, leaving **Rp 1.789.900** of comfortable breathing room for the rest of the cycle."',
   'Language: ALWAYS reply in English by default — even though transactions, merchants, city, or currency (IDR) are in Indonesia, and even when the user\'s message is short or ambiguous. Switch to casual, friendly Bahasa Indonesia (using "kamu" for the person and "aku" for yourself, never stiff or formal) ONLY when the user\'s latest message is clearly written in Indonesian.',
   'Answer from the data below (this pay cycle, amounts in its currency — keep full Rupiah amounts like Rp 210.100, do not abbreviate to k/M). Be concrete: name merchants, categories and amounts. Use pre-computed "topMerchants", "saved", "cards", and "categories" totals directly instead of recounting rows by hand.',
+  'Time & date awareness: ALWAYS read "now" ("formatted", "weekday", "isWeekend", "dayType", "localTime", "timeOfDay", "timeZone") and "todaySafeSpend" / "spentToday" / "todayRemaining" before answering anything about today, tonight, this weekend, or today\'s safe budget. Never guess weekday vs weekend from an ISO date string. Use projectionInsight.weekendSafe on weekends and projectionInsight.weekdaySafe on weekdays.',
   'Keep replies short: at most about 120 words, short paragraphs or "- " / "1. " lists, **bold** for key numbers.',
   'You give budgeting, cash-flow literacy, and behavioral saving help (not specific stock picks, tax filings, or legal advice).',
   'When "wealth" is present, weave in the user\'s survival runway (months/days forward vs 6-month target), asset-vs-liability balance, passive cash flow freedom %, impulse leaks ("impulseLeaks"), or cooling-off wishlist when relevant.',
@@ -42,7 +43,7 @@ const GEMINI_SYSTEM = [
   '- {"type":"move_limit","from":string,"to":string,"amount":number,"why":string}  move this much of one variable category\'s monthly limit to another variable category (the total budget stays the same).',
   '- {"type":"challenge","category":string,"why":string}  start a fun 7-day no-spend challenge for a variable category.',
   '- {"type":"wishlist","name":string,"amount":number,"coolDays":number,"why":string}  pause a wanted purchase in the Cooling-Off / Assets-Buy-Luxuries vault (coolDays default 3 or 14) instead of impulse buying.',
-  '- {"type":"pay_yourself_first","savingsPct":number,"investPct":number,"why":string}  adjust Pay-Yourself-First savings% or investing% of income.',
+  '- {"type":"pay_yourself_first","savingsPct":number,"investPct":number,"why":string}  adjust Pay-Yourself-First savings% or investing% of income. Both fields are optional: ONLY include the percentage you are changing from "savingsTargetPct" / "investTargetPct", and never emit this action if neither changes.',
   'Use only category names from "categoryNames", sub-categories from that category\'s "subs", and transaction ids from "transactions". "why" is one short sentence.',
 ].join('\n');
 
@@ -63,17 +64,17 @@ function thinkingLevelFor_(model, mode) {
   return 'low';
 }
 
-/** p: { messages: [{ role: 'user'|'model', text }], context: object, deep?: boolean } → { reply, actions, followUps, model } or { error, detail }. */
+/** p: { messages: [{ role: 'user'|'model', text }], context: object, deep?: boolean, summary?: string } → { reply, actions, followUps, model, promptTokens } or { error, detail }. */
 function askGemini_(p) {
   const props = PropertiesService.getScriptProperties();
   const key = props.getProperty('GEMINI_API_KEY');
   if (!key) return { error: 'no_key' };
   const primary = props.getProperty('GEMINI_MODEL') || GEMINI_DEFAULT_MODEL;
   let model = primary;
-  // The last 8 turns are plenty for a budgeting chat and keep each request small and fast.
-  const messages = (p.messages || []).slice(-8);
+  const messages = (p.messages || []).slice(-16);
+  const summaryBlock = p.summary ? '\n\nEarlier conversation memory (compacted):\n' + String(p.summary).trim().slice(0, 1500) : '';
   const body = {
-    systemInstruction: { parts: [{ text: GEMINI_SYSTEM + '\n\nData (JSON):\n' + JSON.stringify(p.context || {}) }] },
+    systemInstruction: { parts: [{ text: GEMINI_SYSTEM + summaryBlock + '\n\nData (JSON):\n' + JSON.stringify(p.context || {}) }] },
     contents: messages.map(m => ({ role: m.role === 'model' ? 'model' : 'user', parts: [{ text: String(m.text || '').slice(0, 1500) }] })),
     // Minimal thinking on Flash-Lite = near-instant replies (~1-3s) strictly on the Free Tier.
     generationConfig: { responseMimeType: 'application/json', temperature: 0.55, maxOutputTokens: 700, thinkingConfig: { thinkingLevel: thinkingLevelFor_(primary, 'quick') } },
@@ -121,6 +122,7 @@ function askGemini_(p) {
     const why = (data && data.promptFeedback && data.promptFeedback.blockReason) || (cand && cand.finishReason) || 'empty';
     return { error: 'blocked', detail: String(why) };
   }
+  const promptTokens = data && data.usageMetadata && data.usageMetadata.promptTokenCount ? Number(data.usageMetadata.promptTokenCount) : undefined;
   try {
     // Some models wrap JSON in a code fence (or, with search on, in a sentence) even when asked not to.
     const out = JSON.parse(jsonPart_(text));
@@ -132,12 +134,65 @@ function askGemini_(p) {
       followUps: parsed.followUps,
       mood: mood,
       model: model,
+      promptTokens: promptTokens,
     };
   } catch (e) {
     // Not the JSON we asked for: show it as a plain answer, still lifting trailing question bullets into chips.
     const parsed = extractFollowUps_(text, []);
-    return { reply: parsed.reply, actions: [], followUps: parsed.followUps, model: model };
+    return { reply: parsed.reply, actions: [], followUps: parsed.followUps, model: model, promptTokens: promptTokens };
   }
+}
+
+/**
+ * Fold older chat turns + any prior compacted summary into a concise working memory so long Ask Maxie chats stay
+ * crisp and well inside the prompt budget. Returns { summary, model } or { error, detail }.
+ */
+function compactChat_(p) {
+  const props = PropertiesService.getScriptProperties();
+  const key = props.getProperty('GEMINI_API_KEY');
+  if (!key) return { error: 'no_key' };
+  const model = props.getProperty('GEMINI_MODEL') || GEMINI_DEFAULT_MODEL;
+  const prev = String(p.previousSummary || '').trim().slice(0, 1500);
+  const turns = (p.messages || [])
+    .map(m => (m.role === 'model' ? 'Maxie: ' : 'User: ') + String(m.text || '').replace(/\s+/g, ' ').trim().slice(0, 600))
+    .join('\n');
+  const langRule =
+    p.language === 'Indonesian'
+      ? 'Write the summary bullets in concise Bahasa Indonesia.'
+      : 'Write the summary bullets in concise English.';
+  const body = {
+    systemInstruction: {
+      parts: [
+        {
+          text: [
+            'You are summarizing older turns from a personal finance chat between a user and Maxie.',
+            'Produce 4-8 tight plain-text "- " bullets (at most 150 words total, no intro, no JSON, no emojis).',
+            'Preserve: user corrections (dates, categories, habits), specific Rupiah amounts discussed, goals/wishlist items, preferences, and decisions already made.',
+            langRule,
+          ].join('\n'),
+        },
+      ],
+    },
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text: (prev ? 'Existing memory:\n' + prev + '\n\nNewer turns to fold in:\n' : 'Turns to summarize:\n') + turns }],
+      },
+    ],
+    generationConfig: { temperature: 0.2, maxOutputTokens: 450, thinkingConfig: { thinkingLevel: thinkingLevelFor_(model, 'quick') } },
+  };
+  let res = geminiFetch_(model, key, body);
+  let data = geminiJson_(res);
+  if (res.getResponseCode() === 400 && /thinking/i.test(JSON.stringify(data || ''))) {
+    delete body.generationConfig.thinkingConfig;
+    res = geminiFetch_(model, key, body);
+    data = geminiJson_(res);
+  }
+  if (res.getResponseCode() === 429) return { error: 'quota', detail: String((data && data.error && data.error.message) || '').slice(0, 300) };
+  if (res.getResponseCode() !== 200) return { error: 'api', detail: String((data && data.error && data.error.message) || 'HTTP ' + res.getResponseCode()).slice(0, 300) };
+  const cand = data && data.candidates && data.candidates[0];
+  const text = cand && cand.content && cand.content.parts ? cand.content.parts.map(x => x.text || '').join('').trim() : '';
+  return text ? { summary: text.slice(0, 1400), model: model } : { error: 'blocked' };
 }
 
 /** Pull any trailing bulleted follow-up questions out of `reply` into `followUps` so they always render as chips. */

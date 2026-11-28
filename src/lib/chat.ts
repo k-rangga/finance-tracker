@@ -3,7 +3,7 @@ import type { Budget } from './budget';
 import type { Cycle } from './cycle';
 import type { Settings } from './settings';
 import { tidyName, toISO } from './format';
-import { CATEGORIES, OTHER_CATEGORIES, SAVINGS_TARGET_PCT } from '../data/categories';
+import { CATEGORIES, OTHER_CATEGORIES } from '../data/categories';
 import { merchantKey } from '../data/transactions';
 import type { FixedBillStatus } from './fixedBills';
 import { paceInsight, weekendSafeSplit } from './pace';
@@ -18,11 +18,27 @@ export type ChatAction =
   | { type: 'wishlist'; name: string; amount: number; coolDays?: number; why?: string }
   | { type: 'pay_yourself_first'; savingsPct?: number; investPct?: number; why?: string };
 
+/** Serializable undo payload so applied suggestion cards stay applied and undoable across page refreshes. */
+export type AppliedActionUndo =
+  | { type: 'rule'; key: string; prev?: [string, string]; prevSub: string | null }
+  | { type: 'recategorize'; items: Array<{ id: string; rawCat: string; planOf: string | null; prevCat: string; prevSub: string | null }> }
+  | { type: 'move_limit'; from: string; fromPct: number; to: string; toPct: number }
+  | { type: 'challenge'; category: string; prev?: { category: string; start: string; days?: number; kind?: 'nospend' | 'beat_last'; target?: number } | null }
+  | { type: 'wishlist'; id: string }
+  | { type: 'pay_yourself_first'; prevSave: number; prevInv: number };
+
+export type AppliedActionState = {
+  appliedAt: string;
+  preview?: string;
+  undo?: AppliedActionUndo;
+};
+
 /** A reply also carries the model that wrote it, suggested next questions, husky mood, and your thumbs up or down once rated. */
 export type ChatMessage = {
   role: 'user' | 'model';
   text: string;
   actions?: ChatAction[];
+  appliedActions?: Record<number, AppliedActionState>;
   followUps?: string[];
   mood?: 'happy' | 'curious' | 'steady';
   model?: string;
@@ -30,7 +46,7 @@ export type ChatMessage = {
 };
 
 export type ChatAnswer =
-  | { reply: string; actions: ChatAction[]; followUps?: string[]; mood?: 'happy' | 'curious' | 'steady'; model?: string }
+  | { reply: string; actions: ChatAction[]; followUps?: string[]; mood?: 'happy' | 'curious' | 'steady'; model?: string; promptTokens?: number }
   | { error: 'no_key' | 'api' | 'blocked' | 'quota'; detail?: string };
 
 /**
@@ -70,9 +86,73 @@ export function extractFollowUps(rawReply: string, existing?: string[]): { reply
   return { reply, followUps: merged };
 }
 
+/** Conversation context budget and auto-compaction thresholds. */
+export const CHAT_CONTEXT_BUDGET_TOKENS = 12_000;
+export const AUTO_COMPACT_THRESHOLD_PCT = 60;
+export const COMPACT_KEEP_RECENT = 4;
+export const COMPACT_MIN_ACTIVE = 6;
+export const SYSTEM_PROMPT_EST_TOKENS = 1_150;
+
+export const estimateTokens = (text: string): number => Math.ceil((text?.length ?? 0) / 4);
+
+export function estimateChatContextUsage({
+  context,
+  summary,
+  activeMessages,
+  reportedPromptTokens,
+}: {
+  context: object;
+  summary: string;
+  activeMessages: ChatMessage[];
+  reportedPromptTokens?: number | null;
+}): { tokens: number; budget: number; pct: number; canCompact: boolean } {
+  const tokens =
+    reportedPromptTokens != null && reportedPromptTokens > 0
+      ? Math.round(reportedPromptTokens)
+      : SYSTEM_PROMPT_EST_TOKENS +
+        estimateTokens(JSON.stringify(context)) +
+        estimateTokens(summary) +
+        activeMessages.reduce((acc, m) => acc + estimateTokens(m.text) + 12, 0);
+  const pct = Math.min(100, Math.round((tokens / CHAT_CONTEXT_BUDGET_TOKENS) * 100));
+  return {
+    tokens,
+    budget: CHAT_CONTEXT_BUDGET_TOKENS,
+    pct,
+    canCompact: activeMessages.length >= COMPACT_MIN_ACTIVE,
+  };
+}
+
+export function buildLocalCompactedSummary(previousSummary: string, dropped: ChatMessage[]): string {
+  const prevLines = previousSummary
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean);
+  const nextLines = dropped
+    .filter(m => m.text.trim())
+    .map(m => {
+      const clean = m.text.replace(/\s+/g, ' ').trim();
+      return `- ${m.role === 'user' ? 'User' : 'Maxie'}: ${clean.slice(0, 110)}${clean.length > 110 ? '…' : ''}`;
+    });
+  const combined = [...prevLines, ...nextLines];
+  while (combined.join('\n').length > 1100 && combined.length > 2) combined.shift();
+  return combined.join('\n').slice(0, 1100);
+}
+
 /** `deep`: deeper reasoning + local price context (Free Tier: 3.6 Flash → 3.5 Flash-Lite → 3.8 Flash). */
-export const askGemini = (messages: ChatMessage[], context: object, deep = false) =>
-  run<ChatAnswer>('askGemini', { messages: messages.map(m => ({ role: m.role, text: m.text })), context, ...(deep ? { deep: true } : {}) });
+export const askGemini = (messages: ChatMessage[], context: object, deep = false, summary?: string) =>
+  run<ChatAnswer>('askGemini', {
+    messages: messages.map(m => ({ role: m.role, text: m.text })),
+    context,
+    ...(deep ? { deep: true } : {}),
+    ...(summary ? { summary } : {}),
+  });
+
+export const compactChat = (messages: ChatMessage[], previousSummary: string, language: string) =>
+  run<{ summary: string; model?: string } | { error: string; detail?: string }>('compactChat', {
+    messages: messages.map(m => ({ role: m.role, text: m.text })),
+    previousSummary,
+    language,
+  });
 
 /** Friendly short name for a Gemini model id, shown quietly on Maxie's replies. */
 export function modelLabel(id?: string): string {
@@ -89,6 +169,10 @@ export function modelLabel(id?: string): string {
 /** Compact transaction slice: all Buffer items (so sorting works) plus newest 45 others, keeping prompts fast. */
 const MAX_BUFFER_TXS = 30;
 const MAX_OTHER_TXS = 45;
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
+const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 
 /**
  * What Gemini sees with each question: this cycle's numbers, savings & card bills, pre-aggregated top merchants,
@@ -107,6 +191,7 @@ export function chatContext({
   fortDip,
   lifestyleCreep,
   pyfStreak,
+  now,
 }: {
   cycle: Cycle;
   budget: Budget;
@@ -119,9 +204,27 @@ export function chatContext({
   fortDip?: FortAssetsAlert | null;
   lifestyleCreep?: LifestyleCreepSignal | null;
   pyfStreak?: number;
+  now?: Date;
 }) {
   const r = Math.round;
   const name = settings.name.trim();
+  const clock = now ?? new Date();
+  const dow = cycle.today.getDay();
+  const weekday = WEEKDAYS[dow];
+  const isWeekend = dow === 0 || dow === 6;
+  const dayType = isWeekend ? 'weekend' : 'weekday';
+  const hr = clock.getHours();
+  const localTime = `${String(hr).padStart(2, '0')}:${String(clock.getMinutes()).padStart(2, '0')}`;
+  const timeOfDay =
+    hr < 5 ? 'late night' : hr < 11 ? 'morning' : hr < 14 ? 'midday' : hr < 18 ? 'afternoon' : hr < 21 ? 'evening' : 'night';
+  let timeZone = 'Asia/Jakarta';
+  try {
+    timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Jakarta';
+  } catch {
+    // Keep default timezone fallback
+  }
+  const todayISO = toISO(cycle.today);
+  const formattedNow = `${weekday}, ${cycle.today.getDate()} ${MONTHS_SHORT[cycle.today.getMonth()]} ${cycle.today.getFullYear()}, ${localTime} (${dayType})`;
 
   // Pre-aggregate spending by merchant across the whole cycle so Maxie never has to sum raw rows mentally.
   const merch = new Map<string, { merchant: string; category: string; count: number; total: number }>();
@@ -178,17 +281,48 @@ export function chatContext({
     cats: b.cats,
   });
   const left = b.budget - b.spent - b.fixedDue;
-  const wkSplit = weekendSafeSplit(left, cycle.daysLeft + 1, cycle.today.getDay(), b.proj.weekendRatio);
+  const wkSplit = weekendSafeSplit(left, cycle.daysLeft + 1, dow, b.proj.weekendRatio);
+  const spentToday = r(
+    b.txs
+      .filter(t => !t.isIncome && !t.isTransfer && t.net > 0 && toISO(t.date) === todayISO)
+      .reduce((acc, t) => acc + t.net, 0),
+  );
+  const todaySafeSpend = wkSplit ? r(isWeekend ? wkSplit.weekendSafe : wkSplit.weekdaySafe) : r(b.safeDay);
+  const todayRemaining = r(Math.max(0, todaySafeSpend - spentToday));
 
   return {
-    today: toISO(cycle.today),
-    cycle: { start: toISO(cycle.start), end: toISO(cycle.dateOf(cycle.cycleDays - 1)), day: cycle.dayN, days: cycle.cycleDays, daysLeft: cycle.daysLeft, daysToPayday: cycle.daysLeft + 1 },
+    today: todayISO,
+    now: {
+      date: todayISO,
+      weekday,
+      isWeekend,
+      dayType,
+      localTime,
+      timeOfDay,
+      timeZone,
+      formatted: formattedNow,
+    },
+    todaySafeSpend,
+    spentToday,
+    todayRemaining,
+    cycle: {
+      start: toISO(cycle.start),
+      end: toISO(cycle.dateOf(cycle.cycleDays - 1)),
+      nextPayday: toISO(cycle.next),
+      nextPaydayWeekday: WEEKDAYS[cycle.next.getDay()],
+      weekOfCycle: cycle.weekIdx + 1,
+      day: cycle.dayN,
+      days: cycle.cycleDays,
+      daysLeft: cycle.daysLeft,
+      daysToPayday: cycle.daysLeft + 1,
+    },
     currency: settings.currency,
     ...(name ? { name } : {}),
     ...(settings.city ? { city: settings.city } : {}),
     language: settings.maxieLanguage === 'id' ? 'Indonesian' : 'English',
     income: r(settings.income),
-    savingsTargetPct: SAVINGS_TARGET_PCT,
+    savingsTargetPct: settings.savingsPct,
+    investTargetPct: settings.investPct,
     savingsTarget: r(b.savingsTarget),
     saved: r(b.saved),
     savedPct: Math.round(b.savedPct),
@@ -225,6 +359,7 @@ export function chatContext({
     transactions: recentTxs.map(t => ({
       id: t.id,
       date: toISO(t.date).slice(5),
+      weekday: WEEKDAYS_SHORT[t.date.getDay()],
       merchant: tidyName(t.title),
       category: t.cat,
       ...(t.sub ? { sub: t.sub } : {}),

@@ -141,6 +141,7 @@ const ACTIONS = {
   },
 
   askGemini: p => askGemini_(p),
+  compactChat: p => compactChat_(p),
   attachReceipt: p => attachReceipt_(p),
   getReceipt: p => getReceipt_(p),
   getPerps: () => perpState_(),

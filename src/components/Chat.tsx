@@ -2,7 +2,23 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { IC, Icon } from './Icon';
 import { Logo, type MaxieMood } from './Logo';
-import { askGemini, chatContext, extractFollowUps, modelLabel, type ChatAction, type ChatMessage } from '../lib/chat';
+import {
+  AUTO_COMPACT_THRESHOLD_PCT,
+  COMPACT_KEEP_RECENT,
+  COMPACT_MIN_ACTIVE,
+  askGemini,
+  buildLocalCompactedSummary,
+  chatContext,
+  compactChat,
+  estimateChatContextUsage,
+  estimateTokens,
+  extractFollowUps,
+  modelLabel,
+  type AppliedActionState,
+  type AppliedActionUndo,
+  type ChatAction,
+  type ChatMessage,
+} from '../lib/chat';
 import type { Budget, TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import type { FixedBillStatus } from '../lib/fixedBills';
@@ -61,7 +77,13 @@ export function ThinkingArcs() {
   );
 }
 
-type StoredChat = { messages: ChatMessage[]; deep?: boolean };
+type StoredChat = {
+  messages: ChatMessage[];
+  deep?: boolean;
+  summary?: string;
+  compactedCount?: number;
+  compactedAt?: string;
+};
 
 function readSession(key: string): StoredChat {
   try {
@@ -75,7 +97,14 @@ function readSession(key: string): StoredChat {
           return { ...m, text: clean.reply, followUps: clean.followUps };
         })
       : [];
-    return { messages: msgs, deep: !!parsed.deep };
+    const compactedCount = Math.max(0, Math.min(msgs.length, Number(parsed.compactedCount) || 0));
+    return {
+      messages: msgs,
+      deep: !!parsed.deep,
+      summary: typeof parsed.summary === 'string' ? parsed.summary : '',
+      compactedCount,
+      compactedAt: typeof parsed.compactedAt === 'string' ? parsed.compactedAt : undefined,
+    };
   } catch {
     return { messages: [] };
   }
@@ -83,8 +112,16 @@ function readSession(key: string): StoredChat {
 
 function writeSession(key: string, data: StoredChat) {
   try {
-    // Keep the last 40 messages per cycle so storage stays light and snappy.
-    const trimmed: StoredChat = { ...data, messages: data.messages.slice(-40) };
+    // Keep the last 40 messages per cycle and shift compactedCount cleanly when trimming from the front.
+    const total = data.messages.length;
+    const droppedFromHead = Math.max(0, total - 40);
+    const trimmedMsgs = data.messages.slice(-40);
+    const compactedCount = Math.max(0, Math.min(trimmedMsgs.length, (data.compactedCount ?? 0) - droppedFromHead));
+    const trimmed: StoredChat = {
+      ...data,
+      messages: trimmedMsgs,
+      compactedCount,
+    };
     localStorage.setItem(key, JSON.stringify(trimmed));
   } catch {
     // Ignore storage quota / private mode failures.
@@ -295,6 +332,10 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
   const initial = useMemo(() => readSession(sessionKey), [sessionKey]);
   const [messages, setMessages] = useState<ChatMessage[]>(() => initial.messages);
   const [deep, setDeep] = useState<boolean>(() => !!initial.deep);
+  const [summary, setSummary] = useState<string>(() => initial.summary ?? '');
+  const [compactedCount, setCompactedCount] = useState<number>(() => initial.compactedCount ?? 0);
+  const [compacting, setCompacting] = useState(false);
+  const [tokenSample, setTokenSample] = useState<{ activeCount: number; compactedCount: number; tokens: number } | null>(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<{ kind: 'no_key' | 'api' | 'blocked' | 'quota' | 'network' | 'slow'; detail?: string } | null>(null);
@@ -312,6 +353,38 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
   const input = useRef<HTMLTextAreaElement>(null);
 
   const isId = settings.maxieLanguage === 'id';
+  const liveContext = useMemo(
+    () =>
+      chatContext({
+        cycle,
+        budget,
+        settings,
+        notes,
+        withNotes,
+        fixedBills,
+        wealth,
+        impulse,
+        fortDip,
+        lifestyleCreep,
+        pyfStreak,
+      }),
+    [cycle, budget, settings, notes, withNotes, fixedBills, wealth, impulse, fortDip, lifestyleCreep, pyfStreak],
+  );
+  const activeMessages = useMemo(() => messages.slice(compactedCount), [messages, compactedCount]);
+  const reportedTokensForActive =
+    tokenSample && tokenSample.activeCount === activeMessages.length && tokenSample.compactedCount === compactedCount
+      ? tokenSample.tokens
+      : null;
+  const ctxUsage = useMemo(
+    () =>
+      estimateChatContextUsage({
+        context: liveContext,
+        summary,
+        activeMessages,
+        reportedPromptTokens: reportedTokensForActive,
+      }),
+    [liveContext, summary, activeMessages, reportedTokensForActive],
+  );
   const starters = useMemo(() => buildStarters(cycle, budget, short, isId, wealth), [cycle, budget, short, isId, wealth]);
   const openingPulse = useMemo(() => buildOpeningPulse(cycle, budget, short, isId), [cycle, budget, short, isId]);
   const left = budget.budget - budget.spent - budget.fixedDue;
@@ -385,8 +458,43 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
   };
 
   useEffect(() => {
-    writeSession(sessionKey, { messages, deep });
-  }, [sessionKey, messages, deep]);
+    writeSession(sessionKey, { messages, deep, summary, compactedCount });
+  }, [sessionKey, messages, deep, summary, compactedCount]);
+
+  const compactNow = async (
+    msgs: ChatMessage[],
+    curCompacted: number,
+    curSummary: string,
+  ): Promise<{ summary: string; compactedCount: number }> => {
+    const activeCount = msgs.length - curCompacted;
+    if (activeCount < COMPACT_MIN_ACTIVE) return { summary: curSummary, compactedCount: curCompacted };
+    const nextCompacted = msgs.length - COMPACT_KEEP_RECENT;
+    const toFold = msgs.slice(curCompacted, nextCompacted);
+    if (!toFold.length) return { summary: curSummary, compactedCount: curCompacted };
+
+    setCompacting(true);
+    let nextSummary = '';
+    try {
+      const res = await Promise.race([
+        compactChat(toFold, curSummary, isId ? 'Indonesian' : 'English'),
+        new Promise<'slow'>(r => setTimeout(() => r('slow'), 12_000)),
+      ]);
+      if (res !== 'slow' && !('error' in res) && res.summary?.trim()) {
+        nextSummary = res.summary.trim();
+      }
+    } catch {
+      // Fallback handled cleanly below so compaction never blocks the chat.
+    } finally {
+      setCompacting(false);
+    }
+    if (!nextSummary) {
+      nextSummary = buildLocalCompactedSummary(curSummary, toFold);
+    }
+    setSummary(nextSummary);
+    setCompactedCount(nextCompacted);
+    setTokenSample(null);
+    return { summary: nextSummary, compactedCount: nextCompacted };
+  };
 
   const request = async (convo: ChatMessage[], useDeep = deep) => {
     setProblem(null);
@@ -395,16 +503,72 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
     const id = ++asking.current;
     const timeout = new Promise<'slow'>(r => setTimeout(() => r('slow'), TIMEOUT_MS));
     try {
-      const a = await Promise.race([
-        askGemini(convo, chatContext({ cycle, budget, settings, notes, withNotes, fixedBills, wealth, impulse, fortDip, lifestyleCreep, pyfStreak }), useDeep),
-        timeout,
-      ]);
+      const freshCtx = chatContext({
+        cycle,
+        budget,
+        settings,
+        notes,
+        withNotes,
+        fixedBills,
+        wealth,
+        impulse,
+        fortDip,
+        lifestyleCreep,
+        pyfStreak,
+        now: new Date(),
+      });
+      let usedCompacted = compactedCount;
+      let usedSummary = summary;
+      const activeBeforeSend = convo.slice(usedCompacted);
+      const preUsage = estimateChatContextUsage({
+        context: freshCtx,
+        summary: usedSummary,
+        activeMessages: activeBeforeSend,
+      });
+      if (preUsage.pct >= AUTO_COMPACT_THRESHOLD_PCT && preUsage.canCompact) {
+        const compacted = await compactNow(convo, usedCompacted, usedSummary);
+        if (id !== asking.current) return;
+        usedCompacted = compacted.compactedCount;
+        usedSummary = compacted.summary;
+      }
+
+      const payloadMessages = convo.slice(usedCompacted);
+      const a = await Promise.race([askGemini(payloadMessages, freshCtx, useDeep, usedSummary), timeout]);
       if (id !== asking.current) return;
       if (a === 'slow') setProblem({ kind: 'slow' });
       else if ('error' in a) setProblem({ kind: a.error, detail: a.detail });
       else {
         const clean = extractFollowUps(a.reply, a.followUps);
-        setMessages([...convo, { role: 'model', text: clean.reply, actions: a.actions, followUps: clean.followUps, mood: a.mood, model: a.model }]);
+        const replyMsg: ChatMessage = {
+          role: 'model',
+          text: clean.reply,
+          actions: a.actions,
+          followUps: clean.followUps,
+          mood: a.mood,
+          model: a.model,
+        };
+        const nextMsgs = [...convo, replyMsg];
+        setMessages(nextMsgs);
+
+        const activeAfterReply = nextMsgs.slice(usedCompacted);
+        const totalTokensAfterReply =
+          a.promptTokens != null && a.promptTokens > 0 ? a.promptTokens + estimateTokens(clean.reply) + 12 : undefined;
+        if (totalTokensAfterReply != null) {
+          setTokenSample({
+            activeCount: activeAfterReply.length,
+            compactedCount: usedCompacted,
+            tokens: totalTokensAfterReply,
+          });
+        }
+        const postUsage = estimateChatContextUsage({
+          context: freshCtx,
+          summary: usedSummary,
+          activeMessages: activeAfterReply,
+          reportedPromptTokens: totalTokensAfterReply,
+        });
+        if (postUsage.pct >= AUTO_COMPACT_THRESHOLD_PCT && postUsage.canCompact) {
+          void compactNow(nextMsgs, usedCompacted, usedSummary);
+        }
       }
     } catch (e) {
       if (id === asking.current) setProblem({ kind: 'network', detail: e instanceof Error ? e.message : String(e) });
@@ -536,9 +700,12 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
               onClick={() => {
                 asking.current++;
                 setMessages([]);
+                setSummary('');
+                setCompactedCount(0);
+                setTokenSample(null);
                 setProblem(null);
                 setBusy(false);
-                writeSession(sessionKey, { messages: [], deep });
+                writeSession(sessionKey, { messages: [], deep, summary: '', compactedCount: 0 });
               }}
             >
               New
@@ -593,24 +760,42 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
           })()}
 
           {messages.map((m, i) => {
+            const compactedDivider =
+              i === compactedCount && compactedCount > 0 ? (
+                <div className={s.chatCompactDivider} title={summary || undefined}>
+                  <span>{isId ? 'Percakapan sebelumnya diringkas ke memori' : 'Earlier messages compacted into memory'}</span>
+                </div>
+              ) : null;
             if (m.role === 'user')
               return (
-                <div key={i} className={s.chatMine}>
-                  {m.text}
+                <div key={i} style={{ display: 'contents' }}>
+                  {compactedDivider}
+                  <div className={s.chatMine}>{m.text}</div>
                 </div>
               );
             const clean = extractFollowUps(m.text, m.followUps);
             const mood = m.mood ?? inferMood(clean.reply);
             const prevUserQ = [...messages.slice(0, i)].reverse().find(x => x.role === 'user')?.text ?? '';
             return (
-              <div key={i} className={s.chatTheirsRow}>
-                <Logo size={26} mood={mood} interactive cheer="Happy to help!" />
-                <div className={s.chatTheirsCol}>
-                  <div className={s.chatTheirs}>
-                    <Rich text={clean.reply} />
-                    <ReplyWidget question={prevUserQ} cycle={cycle} budget={budget} wealth={wealth} short={short} isId={isId} />
-                    {m.actions && m.actions.length > 0 && <ActionGroup actions={m.actions} allTxs={allTxs} />}
-                    <span className={s.chatRate}>
+              <div key={i} style={{ display: 'contents' }}>
+                {compactedDivider}
+                <div className={s.chatTheirsRow}>
+                  <Logo size={26} mood={mood} interactive cheer="Happy to help!" />
+                  <div className={s.chatTheirsCol}>
+                    <div className={s.chatTheirs}>
+                      <Rich text={clean.reply} />
+                      <ReplyWidget question={prevUserQ} cycle={cycle} budget={budget} wealth={wealth} short={short} isId={isId} />
+                      {m.actions && m.actions.length > 0 && (
+                        <ActionGroup
+                          actions={m.actions}
+                          applied={m.appliedActions}
+                          onAppliedChange={nextApplied =>
+                            setMessages(prev => prev.map((msg, idx) => (idx === i ? { ...msg, appliedActions: nextApplied } : msg)))
+                          }
+                          allTxs={allTxs}
+                        />
+                      )}
+                      <span className={s.chatRate}>
                       {(['up', 'down'] as const).map(r => (
                         <button
                           key={r}
@@ -650,17 +835,18 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
                         <span className={s.chatModelTag}>{modelLabel(m.model)}</span>
                       ) : null}
                     </span>
-                  </div>
-                  {i === lastModelIdx && !busy && clean.followUps.length > 0 && (
-                    <div className={s.chatFollowUps} aria-label="Suggested follow-ups">
-                      {clean.followUps.map(q => (
-                        <button key={q} type="button" className={s.chatFollowUp} onClick={() => send(q)}>
-                          <span>{q}</span>
-                          <Icon d={IC.arrowUpRight} size={12} />
-                        </button>
-                      ))}
                     </div>
-                  )}
+                    {i === lastModelIdx && !busy && clean.followUps.length > 0 && (
+                      <div className={s.chatFollowUps} aria-label="Suggested follow-ups">
+                        {clean.followUps.map(q => (
+                          <button key={q} type="button" className={s.chatFollowUp} onClick={() => send(q)}>
+                            <span>{q}</span>
+                            <Icon d={IC.arrowUpRight} size={12} />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -744,6 +930,20 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
               <Icon d={withNotes ? IC.check : IC.plus} size={12} />
               Notes
             </button>
+            <button
+              type="button"
+              className={s.chatCtxChip}
+              data-tone={ctxUsage.pct >= 50 ? 'warn' : undefined}
+              disabled={!ctxUsage.canCompact || busy || compacting}
+              onClick={() => void compactNow(messages, compactedCount, summary)}
+              title={
+                ctxUsage.canCompact
+                  ? `Context ${ctxUsage.pct}% — auto-compacts at ${AUTO_COMPACT_THRESHOLD_PCT}%. Tap to compact now.`
+                  : `Context ${ctxUsage.pct}% — auto-compacts at ${AUTO_COMPACT_THRESHOLD_PCT}% once conversation grows.`
+              }
+            >
+              {compacting ? 'Compacting…' : `${ctxUsage.pct}% ctx`}
+            </button>
             <span className={s.chatDisclosure} style={{ marginLeft: 'auto' }}>Gemini</span>
           </div>
         </form>
@@ -774,13 +974,13 @@ function ReplyWidget({
     return (
       <div className={s.chatWidget}>
         <span className={s.chatWidgetEyebrow}>{isId ? 'Runway & Kebebasan Aset' : 'Survival Runway & Asset Freedom'}</span>
+        <div className={`${s.chatWidgetTop} ${s.chatWidgetSplit}`}>
+          <span className={s.caption}>{isId ? 'Runway darurat' : 'Emergency runway'}</span>
+          <strong className={s.chatWidgetHeroVal} style={{ color: wealth.runwayMonths >= wealth.emergencyTargetMonths ? C.good : undefined }}>
+            {wealth.runwayMonths > 0 ? `${wealth.runwayMonths.toFixed(1)} mo` : 'Not set'}
+          </strong>
+        </div>
         <div className={s.chatWidgetStats}>
-          <span>
-            <span className={s.caption}>{isId ? 'Runway darurat' : 'Emergency runway'}</span>
-            <strong style={{ color: wealth.runwayMonths >= wealth.emergencyTargetMonths ? C.good : undefined }}>
-              {wealth.runwayMonths > 0 ? `${wealth.runwayMonths.toFixed(1)} mo` : 'Not set'}
-            </strong>
-          </span>
           <span>
             <span className={s.caption}>{isId ? 'Aset produktif' : 'Assets'}</span>
             <strong>{short(wealth.assetsTotal)}</strong>
@@ -1003,7 +1203,7 @@ type PreparedAction = {
   title: ReactNode;
   preview?: string;
   why?: string;
-  apply: () => () => void;
+  apply: () => AppliedActionState;
 };
 
 /** Resolve an AI-proposed action against real data, returning null if it doesn't match cleanly. */
@@ -1013,7 +1213,39 @@ function usePrepareAction(allTxs: TxView[]) {
   const setLimits = useSetLimits();
   const subOf = (cat: string, sub?: string | null) => (sub ? settings.subcategories[cat]?.find(x => x.toLowerCase() === sub.trim().toLowerCase()) : undefined);
 
-  return (a: ChatAction): PreparedAction | null => {
+  const undoApplied = (u?: AppliedActionUndo) => {
+    if (!u) return;
+    if (u.type === 'rule') {
+      if (u.prev) setRules({ [u.prev[0]]: u.prev[1] }, { [u.prev[0]]: u.prevSub });
+      else setRules({ [u.key]: null });
+      return;
+    }
+    if (u.type === 'recategorize') {
+      u.items.forEach(x => {
+        setOverride(x.id, x.rawCat, x.prevCat);
+        setSub(x.planOf ?? x.id, x.prevSub);
+      });
+      return;
+    }
+    if (u.type === 'move_limit') {
+      setLimits({ [u.to]: u.toPct, [u.from]: u.fromPct });
+      return;
+    }
+    if (u.type === 'challenge') {
+      const rest = (settings.challenges ?? []).filter(c => c.category !== u.category);
+      update({ challenges: u.prev ? [...rest, u.prev] : rest });
+      return;
+    }
+    if (u.type === 'wishlist') {
+      update({ wishlist: (settings.wishlist ?? []).filter(w => w.id !== u.id) });
+      return;
+    }
+    if (u.type === 'pay_yourself_first') {
+      update({ savingsPct: u.prevSave, investPct: u.prevInv });
+    }
+  };
+
+  const prepare = (a: ChatAction, applied?: AppliedActionState): PreparedAction | null => {
     if (a.type === 'rule') {
       const cat = known(a.category);
       const key = merchantKey(a.merchant ?? '');
@@ -1025,42 +1257,53 @@ function usePrepareAction(allTxs: TxView[]) {
             Always put <strong>{a.merchant}</strong> in <strong>{categoryLabel(cat)}{sub ? ' › ' + sub : ''}</strong>
           </>
         ),
+        preview: applied?.preview,
         why: a.why,
         apply: () => {
           const prev = Object.entries(rules).find(([m]) => merchantKey(m) === key);
           const prevSub = Object.entries(ruleSubs).find(([m]) => merchantKey(m) === key)?.[1] ?? null;
           setRules({ [key]: cat }, { [key]: sub ?? null });
-          return () => (prev ? setRules({ [prev[0]]: prev[1] }, { [prev[0]]: prevSub }) : setRules({ [key]: null }));
+          return {
+            appliedAt: new Date().toISOString(),
+            undo: { type: 'rule', key, ...(prev ? { prev: [prev[0], prev[1]] as [string, string] } : {}), prevSub },
+          };
         },
       };
     }
     if (a.type === 'recategorize') {
       const cat = known(a.category);
       const txs = (a.txIds ?? []).map(id => allTxs.find(t => t.id === id)).filter((t): t is TxView => !!t && !t.isCcPayment);
-      if (!cat || !txs.length) return null;
+      if (!cat || (!txs.length && !applied)) return null;
       const sub = subOf(cat, a.sub);
+      const count = txs.length || a.txIds?.length || 0;
       return {
         title: (
           <>
-            Move {txs.length === 1 ? <strong>{tidyName(txs[0].title)}</strong> : <strong>{txs.length} transactions</strong>} to{' '}
+            Move {txs.length === 1 ? <strong>{tidyName(txs[0].title)}</strong> : <strong>{count} transactions</strong>} to{' '}
             <strong>
               {categoryLabel(cat)}
               {sub ? ' › ' + sub : ''}
             </strong>
           </>
         ),
+        preview: applied?.preview,
         why: a.why,
         apply: () => {
-          const before = txs.map(t => ({ t, cat: t.cat, sub: subs[t.plan?.of ?? t.id] ?? null }));
+          const before = txs.map(t => ({
+            id: t.id,
+            rawCat: t.category,
+            planOf: t.plan?.of ?? null,
+            prevCat: t.cat,
+            prevSub: subs[t.plan?.of ?? t.id] ?? null,
+          }));
           for (const t of txs) {
             setOverride(t.id, t.category, cat);
             setSub(t.plan?.of ?? t.id, sub ?? null);
           }
-          return () =>
-            before.forEach(x => {
-              setOverride(x.t.id, x.t.category, x.cat);
-              setSub(x.t.plan?.of ?? x.t.id, x.sub);
-            });
+          return {
+            appliedAt: new Date().toISOString(),
+            undo: { type: 'recategorize', items: before },
+          };
         },
       };
     }
@@ -1071,39 +1314,53 @@ function usePrepareAction(allTxs: TxView[]) {
       if (!from || !to || from === to || from.type !== 'variable' || to.type !== 'variable' || !(onePct > 0)) return null;
       const fromLimit = ofIncome(from.limitPct);
       const toLimit = ofIncome(to.limitPct);
-      const amount = Math.min(Number(a.amount) || 0, fromLimit);
+      const rawAmount = Number(a.amount) || 0;
+      const amount = applied ? rawAmount : Math.min(rawAmount, fromLimit);
       if (!(amount > 0)) return null;
+      const preview =
+        applied?.preview ??
+        `${from.name}: ${short(fromLimit)} → ${short(Math.max(0, fromLimit - amount))} · ${to.name}: ${short(toLimit)} → ${short(toLimit + amount)}`;
       return {
         title: (
           <>
             Move <strong>{short(amount)}</strong> of limit from <strong>{from.name}</strong> to <strong>{to.name}</strong>
           </>
         ),
-        preview: `${from.name}: ${short(fromLimit)} → ${short(Math.max(0, fromLimit - amount))} · ${to.name}: ${short(toLimit)} → ${short(toLimit + amount)}`,
+        preview,
         why: a.why,
         apply: () => {
           const pct = Math.ceil((amount / onePct) * 100) / 100;
           setLimits({ [to.name]: to.limitPct + pct, [from.name]: Math.max(0, from.limitPct - pct) });
-          return () => setLimits({ [to.name]: to.limitPct, [from.name]: from.limitPct });
+          return {
+            appliedAt: new Date().toISOString(),
+            preview,
+            undo: { type: 'move_limit', from: from.name, fromPct: from.limitPct, to: to.name, toPct: to.limitPct },
+          };
         },
       };
     }
     if (a.type === 'challenge') {
       const cat = categoryByName(known(a.category) ?? '');
       if (!cat || cat.type !== 'variable') return null;
+      const preview = applied?.preview ?? `7 days starting today — spend nothing on ${cat.name} to earn a keepsake.`;
       return {
         title: (
           <>
             Start a 7-day no-spend challenge for <strong>{cat.name}</strong>
           </>
         ),
-        preview: `7 days starting today — spend nothing on ${cat.name} to earn a trophy.`,
+        preview,
         why: a.why,
         apply: () => {
-          const prev = settings.challenges ?? [];
-          const next = [...prev.filter(c => c.category !== cat.name), startChallenge(cat.name, new Date())];
+          const prevList = settings.challenges ?? [];
+          const prevItem = prevList.find(c => c.category === cat.name) ?? null;
+          const next = [...prevList.filter(c => c.category !== cat.name), startChallenge(cat.name, new Date())];
           update({ challenges: next });
-          return () => update({ challenges: prev });
+          return {
+            appliedAt: new Date().toISOString(),
+            preview,
+            undo: { type: 'challenge', category: cat.name, prev: prevItem },
+          };
         },
       };
     }
@@ -1112,13 +1369,14 @@ function usePrepareAction(allTxs: TxView[]) {
       const amount = Math.max(0, Math.round(Number(a.amount) || 0));
       const coolDays = Math.max(1, Math.min(90, Math.round(Number(a.coolDays) || 3)));
       if (!name || !(amount > 0)) return null;
+      const preview = applied?.preview ?? `${coolDays}-day pause before buying — fund from assets or surplus, not impulse.`;
       return {
         title: (
           <>
             Pause <strong>{name}</strong> ({short(amount)}) in Cooling-Off Wishlist
           </>
         ),
-        preview: `${coolDays}-day pause before buying — fund from assets or surplus, not impulse.`,
+        preview,
         why: a.why,
         apply: () => {
           const prev = settings.wishlist ?? [];
@@ -1128,61 +1386,85 @@ function usePrepareAction(allTxs: TxView[]) {
             ...prev,
           ];
           update({ wishlist: next });
-          return () => update({ wishlist: prev });
+          return {
+            appliedAt: new Date().toISOString(),
+            preview,
+            undo: { type: 'wishlist', id },
+          };
         },
       };
     }
     if (a.type === 'pay_yourself_first') {
-      const nextSave = a.savingsPct != null ? Math.max(0, Math.min(90, Math.round(Number(a.savingsPct)))) : undefined;
-      const nextInv = a.investPct != null ? Math.max(0, Math.min(90, Math.round(Number(a.investPct)))) : undefined;
-      if (nextSave == null && nextInv == null) return null;
+      const rawSave = a.savingsPct != null && isFinite(Number(a.savingsPct)) ? Math.max(0, Math.min(90, Math.round(Number(a.savingsPct)))) : undefined;
+      const rawInv = a.investPct != null && isFinite(Number(a.investPct)) ? Math.max(0, Math.min(90, Math.round(Number(a.investPct)))) : undefined;
+      const saveChanged = rawSave != null && rawSave !== settings.savingsPct;
+      const invChanged = rawInv != null && rawInv !== settings.investPct;
+      if (!applied && !saveChanged && !invChanged) return null;
       const parts: string[] = [];
-      if (nextSave != null) parts.push(`Savings ${settings.savingsPct}% → ${nextSave}%`);
-      if (nextInv != null) parts.push(`Invest ${settings.investPct}% → ${nextInv}%`);
+      if (saveChanged) parts.push(`Savings ${settings.savingsPct}% → ${rawSave}%`);
+      if (invChanged) parts.push(`Invest ${settings.investPct}% → ${rawInv}%`);
+      const preview = applied?.preview ?? (parts.join(' · ') || 'Updated Pay-Yourself-First targets');
       return {
         title: <>Update Pay-Yourself-First targets</>,
-        preview: parts.join(' · '),
+        preview,
         why: a.why,
         apply: () => {
           const prevSave = settings.savingsPct;
           const prevInv = settings.investPct;
           update({
-            ...(nextSave != null ? { savingsPct: nextSave } : {}),
-            ...(nextInv != null ? { investPct: nextInv } : {}),
+            ...(saveChanged ? { savingsPct: rawSave } : {}),
+            ...(invChanged ? { investPct: rawInv } : {}),
           });
-          return () => update({ savingsPct: prevSave, investPct: prevInv });
+          return {
+            appliedAt: new Date().toISOString(),
+            preview,
+            undo: { type: 'pay_yourself_first', prevSave, prevInv },
+          };
         },
       };
     }
     return null;
   };
+
+  return { prepare, undoApplied };
 }
 
 /** One or more suggested changes on a reply; adds a one-tap "Apply all" when 2+ valid actions are shown. */
-function ActionGroup({ actions, allTxs }: { actions: ChatAction[]; allTxs: TxView[] }) {
-  const prepare = usePrepareAction(allTxs);
-  const items = actions.map((a, idx) => ({ idx, prepared: prepare(a) })).filter((x): x is { idx: number; prepared: PreparedAction } => !!x.prepared);
-  const [undos, setUndos] = useState<Record<number, () => void>>({});
+function ActionGroup({
+  actions,
+  applied,
+  onAppliedChange,
+  allTxs,
+}: {
+  actions: ChatAction[];
+  applied?: Record<number, AppliedActionState>;
+  onAppliedChange: (next: Record<number, AppliedActionState>) => void;
+  allTxs: TxView[];
+}) {
+  const { prepare, undoApplied } = usePrepareAction(allTxs);
+  const appliedMap = applied ?? {};
+  const items = actions
+    .map((a, idx) => ({ idx, prepared: prepare(a, appliedMap[idx]) }))
+    .filter((x): x is { idx: number; prepared: PreparedAction } => !!x.prepared);
   if (!items.length) return null;
 
-  const remaining = items.filter(x => !undos[x.idx]);
-  const applyOne = (idx: number, fn: () => () => void) => setUndos(u => ({ ...u, [idx]: fn() }));
+  const remaining = items.filter(x => !appliedMap[x.idx]);
+  const applyOne = (idx: number, fn: () => AppliedActionState) => onAppliedChange({ ...appliedMap, [idx]: fn() });
   const undoOne = (idx: number) => {
-    undos[idx]?.();
-    setUndos(u => {
-      const next = { ...u };
-      delete next[idx];
-      return next;
-    });
+    const entry = appliedMap[idx];
+    undoApplied(entry?.undo);
+    const next = { ...appliedMap };
+    delete next[idx];
+    onAppliedChange(next);
   };
   const applyAll = () => {
-    const added: Record<number, () => void> = {};
+    const added: Record<number, AppliedActionState> = {};
     for (const x of remaining) added[x.idx] = x.prepared.apply();
-    setUndos(u => ({ ...u, ...added }));
+    onAppliedChange({ ...appliedMap, ...added });
   };
   const undoAll = () => {
-    for (const x of [...items].reverse()) undos[x.idx]?.();
-    setUndos({});
+    for (const x of [...items].reverse()) undoApplied(appliedMap[x.idx]?.undo);
+    onAppliedChange({});
   };
 
   return (
@@ -1201,20 +1483,36 @@ function ActionGroup({ actions, allTxs }: { actions: ChatAction[]; allTxs: TxVie
           )}
         </div>
       )}
-      {items.map(({ idx, prepared }) => (
-        <ActionCardView
-          key={idx}
-          prepared={prepared}
-          done={!!undos[idx]}
-          onApply={() => applyOne(idx, prepared.apply)}
-          onUndo={() => undoOne(idx)}
-        />
-      ))}
+      {items.map(({ idx, prepared }) => {
+        const entry = appliedMap[idx];
+        return (
+          <ActionCardView
+            key={idx}
+            prepared={prepared}
+            done={!!entry}
+            canUndo={!entry || !!entry.undo}
+            onApply={() => applyOne(idx, prepared.apply)}
+            onUndo={() => undoOne(idx)}
+          />
+        );
+      })}
     </div>
   );
 }
 
-function ActionCardView({ prepared, done, onApply, onUndo }: { prepared: PreparedAction; done: boolean; onApply: () => void; onUndo: () => void }) {
+function ActionCardView({
+  prepared,
+  done,
+  canUndo = true,
+  onApply,
+  onUndo,
+}: {
+  prepared: PreparedAction;
+  done: boolean;
+  canUndo?: boolean;
+  onApply: () => void;
+  onUndo: () => void;
+}) {
   return (
     <div className={s.chatAction}>
       <span style={{ fontSize: 14 }}>{prepared.title}</span>
@@ -1230,9 +1528,11 @@ function ActionCardView({ prepared, done, onApply, onUndo }: { prepared: Prepare
             <span className={s.mxTag} data-tone="success">
               Done — all tidy.
             </span>
-            <button type="button" className={s.textBtnSm} onClick={onUndo}>
-              Undo
-            </button>
+            {canUndo && (
+              <button type="button" className={s.textBtnSm} onClick={onUndo}>
+                Undo
+              </button>
+            )}
           </>
         )}
       </div>
@@ -1242,23 +1542,19 @@ function ActionCardView({ prepared, done, onApply, onUndo }: { prepared: Prepare
 
 /** A single change Gemini suggests (used by ActionPlan): what it does and why, Apply, then Undo. */
 export function ActionCard({ action: a, allTxs }: { action: ChatAction; allTxs: TxView[] }) {
-  const prepare = usePrepareAction(allTxs);
-  const [undo, setUndo] = useState<(() => void) | null>(null);
-  const [done, setDone] = useState(false);
-  const prepared = prepare(a);
+  const { prepare, undoApplied } = usePrepareAction(allTxs);
+  const [applied, setApplied] = useState<AppliedActionState | null>(null);
+  const prepared = prepare(a, applied ?? undefined);
   if (!prepared) return null;
   return (
     <ActionCardView
       prepared={prepared}
-      done={done}
-      onApply={() => {
-        setUndo(() => prepared.apply());
-        setDone(true);
-      }}
+      done={!!applied}
+      canUndo={!applied || !!applied.undo}
+      onApply={() => setApplied(prepared.apply())}
       onUndo={() => {
-        undo?.();
-        setUndo(null);
-        setDone(false);
+        undoApplied(applied?.undo);
+        setApplied(null);
       }}
     />
   );

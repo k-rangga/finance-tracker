@@ -284,6 +284,16 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
         model: 'gemini-3.5-flash-lite',
       };
     }
+    case 'compactChat': {
+      await new Promise(r => setTimeout(r, 250));
+      const msgs = (q.messages as Array<{ role: string; text: string }>) ?? [];
+      const prev = String(q.previousSummary ?? '').trim();
+      const lines = msgs.slice(0, 6).map(m => `- ${m.role === 'user' ? 'User' : 'Maxie'}: ${String(m.text || '').replace(/\s+/g, ' ').slice(0, 100)}`);
+      return {
+        summary: [prev, ...lines].filter(Boolean).join('\n').slice(0, 1100),
+        model: 'gemini-3.5-flash-lite',
+      };
+    }
     case 'quotes': {
       // Stand-in for Google Finance: prices from `quotes` in localStorage; anything missing acts like #N/A.
       const at = new Date().toISOString();
