@@ -2,13 +2,16 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import s from '../styles/ui.module.css';
 import { AuthBackdrop, type TreatDrop } from './AuthBackdrop';
+import { reducedMotion } from './Delight';
 import { Logo } from './Logo';
+import { ATMOSPHERE_PRESETS, resolveAtmosphere, type AtmospherePreset, type ResolvedAtmosphere } from '../lib/atmosphere';
 import { supabase } from '../lib/supabase';
 import { storage } from '../lib/storage';
 
 const METHOD_KEY = 'moneyTracker.signInMethod';
 const LAST_EMAIL_KEY = 'moneyTracker.lastEmail';
 const EMAIL_COOLDOWN_KEY = 'maxie.emailCooldownUntil';
+const FED_ONCE_KEY = 'maxie.fedOnce';
 export const RESET_PIN_KEY = 'maxie.resetPin';
 /** A PIN is 6 digits: Supabase keeps it as the account password. */
 export const PIN_LENGTH = 6;
@@ -96,9 +99,61 @@ export function AuthGate({ children, loading }: { children: ReactNode; loading: 
   return <>{children}</>;
 }
 
+function useHomeAtmosphere() {
+  const [preset, setPreset] = useState<AtmospherePreset>('auto');
+  const [weather, setWeather] = useState<{ weatherCode: number | null; tempC: number | null; isDay: boolean | null }>({
+    weatherCode: null,
+    tempC: null,
+    isDay: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/weather')
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: { ok?: boolean; weatherCode?: number | null; tempC?: number | null; isDay?: boolean | null } | null) => {
+        if (cancelled || !d?.ok) return;
+        setWeather({
+          weatherCode: typeof d.weatherCode === 'number' ? d.weatherCode : null,
+          tempC: typeof d.tempC === 'number' ? d.tempC : null,
+          isDay: typeof d.isDay === 'boolean' ? d.isDay : null,
+        });
+      })
+      .catch(() => {
+        /* fallback gracefully to local clock atmosphere */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const cyclePreset = () => {
+    setPreset(cur => ATMOSPHERE_PRESETS[(ATMOSPHERE_PRESETS.indexOf(cur) + 1) % ATMOSPHERE_PRESETS.length] ?? 'auto');
+  };
+
+  const atmosphere = resolveAtmosphere({
+    date: new Date(),
+    weatherCode: weather.weatherCode,
+    tempC: weather.tempC,
+    isDay: weather.isDay,
+    preset,
+  });
+
+  return { atmosphere, cyclePreset };
+}
+
 /** Stage wrapper: keeps the centered sign-in board fixed while outside clicks drop pet treats for Maxie. */
-function AuthShell({ children }: { children: ReactNode }) {
+function AuthShell({
+  children,
+  atmosphere,
+  onCyclePreset,
+}: {
+  children: ReactNode;
+  atmosphere: ResolvedAtmosphere;
+  onCyclePreset: () => void;
+}) {
   const [treatDrop, setTreatDrop] = useState<TreatDrop | null>(null);
+  const [fedOnce, setFedOnce] = useState(() => storage.getRaw(FED_ONCE_KEY) === '1');
   const seqRef = useRef(0);
 
   return (
@@ -107,22 +162,42 @@ function AuthShell({ children }: { children: ReactNode }) {
       onPointerDown={e => {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         const target = e.target as HTMLElement | null;
-        if (target?.closest('[data-auth-board="true"]')) return;
+        if (target?.closest('[data-auth-board="true"]') || target?.closest('[data-auth-ui="true"]')) return;
+        if (!fedOnce) {
+          storage.setRaw(FED_ONCE_KEY, '1');
+          setFedOnce(true);
+        }
         setTreatDrop({ id: ++seqRef.current, x: e.clientX, y: e.clientY });
       }}
     >
-      <AuthBackdrop treatDrop={treatDrop} />
+      <AuthBackdrop treatDrop={treatDrop} atmosphere={atmosphere} />
       <div className={s.authBoard} data-auth-board="true">
         {children}
       </div>
+      {!fedOnce && !reducedMotion() && (
+        <div className={s.authSnackHint}>Tap outside to toss Maxie a snack</div>
+      )}
+      <button
+        type="button"
+        data-auth-ui="true"
+        className={s.authAtmospherePill}
+        onClick={onCyclePreset}
+        title="Click to preview sky & seasonal moods"
+      >
+        {atmosphere.whisper}
+        {atmosphere.isPreview ? ' (Preview)' : ''}
+      </button>
     </div>
   );
 }
 
 /** Focused Change PIN screen shown right after logging in via a Forgot-PIN / Reset-PIN email link. */
 function ChangePinScreen({ email, onDone }: { email: string; onDone: () => void }) {
+  const { atmosphere, cyclePreset } = useHomeAtmosphere();
   const [pin1, setPin1] = useState('');
   const [pin2, setPin2] = useState('');
+  const [pinFocused, setPinFocused] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -133,14 +208,18 @@ function ChangePinScreen({ email, onDone }: { email: string; onDone: () => void 
     setErr('');
     const problem = await setPin(pin1);
     setBusy(false);
-    if (problem) setErr(problem);
-    else onDone();
+    if (problem) {
+      setErr(problem);
+    } else {
+      setCelebrating(true);
+      onDone();
+    }
   };
 
   return (
-    <AuthShell>
+    <AuthShell atmosphere={atmosphere} onCyclePreset={cyclePreset}>
       <div className={s.authHeader}>
-        <Logo size={56} mood="happy" interactive followCursor cheer="Almost there!" />
+        <Logo size={56} mood="happy" interactive followCursor coverEyes={pinFocused} celebrate={celebrating} cheer="Almost there!" />
         <h1 style={{ margin: 0, fontSize: 24, fontFamily: 'var(--font-serif)', fontWeight: 500 }}>Set a new 6-digit PIN</h1>
         <span style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.5 }}>
           {email ? `Signed in as ${email}. ` : ''}Choose a new PIN so you can sign in instantly next time.
@@ -162,6 +241,8 @@ function ChangePinScreen({ email, onDone }: { email: string; onDone: () => void 
           placeholder="New 6-digit PIN"
           maxLength={PIN_LENGTH}
           value={pin1}
+          onFocus={() => setPinFocused(true)}
+          onBlur={() => setPinFocused(false)}
           onChange={e => {
             setPin1(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH));
             setErr('');
@@ -177,6 +258,8 @@ function ChangePinScreen({ email, onDone }: { email: string; onDone: () => void 
           placeholder="Confirm 6-digit PIN"
           maxLength={PIN_LENGTH}
           value={pin2}
+          onFocus={() => setPinFocused(true)}
+          onBlur={() => setPinFocused(false)}
           onChange={e => {
             setPin2(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH));
             setErr('');
@@ -197,6 +280,7 @@ function ChangePinScreen({ email, onDone }: { email: string; onDone: () => void 
 }
 
 function SignIn() {
+  const { atmosphere, cyclePreset } = useHomeAtmosphere();
   const [flow, setFlow] = useState<AuthFlow>('signin');
   const [signInMethod, setSignInMethodState] = useState<SignInMethod>(() =>
     storage.getRaw(METHOD_KEY) === 'link' ? 'link' : 'pin',
@@ -209,6 +293,8 @@ function SignIn() {
   };
 
   const [pin, setPin] = useState('');
+  const [pinFocused, setPinFocused] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
   const [email, setEmail] = useState(() => storage.getRaw(LAST_EMAIL_KEY) ?? '');
   const [state, setState] = useState<'' | 'sending' | 'sent' | 'duplicate'>('');
   const [otpPurpose, setOtpPurpose] = useState<OtpPurpose>('login');
@@ -419,6 +505,8 @@ function SignIn() {
             : formatAuthError(res.error.message),
         );
       }
+    } else {
+      setCelebrating(true);
     }
   };
 
@@ -446,6 +534,8 @@ function SignIn() {
           ? "That email and PIN didn't quite match. Need a hand? Tap Forgot PIN below."
           : formatAuthError(error.message),
       );
+    } else {
+      setCelebrating(true);
     }
   };
 
@@ -490,13 +580,13 @@ function SignIn() {
       setOtpPurpose('signup');
       setState('sent');
       setResendIn(30);
+    } else {
+      setCelebrating(true);
     }
   };
 
-  const hr = new Date().getHours();
-  const hello = hr < 12 ? 'Good morning! Ready to check in?' : hr < 18 ? 'Good afternoon! Ready to check in?' : 'Good evening! Ready to check in?';
   const hasEmail = /^\S+@\S+\.\S+$/.test(email.trim());
-  const readyToGo = state === 'sent' || hasEmail || pin.length === PIN_LENGTH;
+  const readyToGo = celebrating || state === 'sent' || hasEmail || pin.length === PIN_LENGTH;
 
   const onEmailChange = (v: string) => {
     setEmail(v);
@@ -542,11 +632,19 @@ function SignIn() {
   );
 
   return (
-    <AuthShell>
+    <AuthShell atmosphere={atmosphere} onCyclePreset={cyclePreset}>
       <div className={s.authHeader}>
-        <Logo size={64} mood={readyToGo ? 'happy' : 'calm'} interactive followCursor cheer={flow === 'signup' ? 'Nice to meet you!' : 'Welcome back!'} />
+        <Logo
+          size={64}
+          mood={readyToGo ? 'happy' : 'calm'}
+          interactive
+          followCursor
+          coverEyes={pinFocused}
+          celebrate={celebrating}
+          cheer={flow === 'signup' ? 'Nice to meet you!' : 'Welcome back!'}
+        />
         <h1 style={{ margin: 0, fontSize: 30, fontFamily: 'var(--font-serif)', fontWeight: 500 }}>Maxie</h1>
-        <span style={{ fontSize: 15, fontFamily: 'var(--font-serif)', color: 'var(--ink-muted)' }}>{hello}</span>
+        <span style={{ fontSize: 15, fontFamily: 'var(--font-serif)', color: 'var(--ink-muted)' }}>{atmosphere.greeting}</span>
       </div>
 
         {state === 'sent' ? (
@@ -701,6 +799,8 @@ function SignIn() {
                       setErr('');
                     }}
                     aria-label="Choose 6-digit PIN"
+                    onFocus={() => setPinFocused(true)}
+                    onBlur={() => setPinFocused(false)}
                     style={{ letterSpacing: pin ? 6 : undefined, textAlign: 'center', fontWeight: pin ? 600 : undefined }}
                   />
                   {err && <span className={s.error}>{err}</span>}
@@ -768,6 +868,8 @@ function SignIn() {
                         if (next.length === PIN_LENGTH && hasEmail && !checking) void signInWithPin(next);
                       }}
                       aria-label="PIN"
+                      onFocus={() => setPinFocused(true)}
+                      onBlur={() => setPinFocused(false)}
                       style={{ letterSpacing: pin ? 6 : undefined, textAlign: 'center', fontWeight: pin ? 600 : undefined }}
                     />
                     {err && <span className={s.error}>{err}</span>}

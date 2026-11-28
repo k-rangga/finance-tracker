@@ -12328,6 +12328,243 @@ button.sumPulsePill:hover {
   100% { opacity: 0; transform: scale(1.05); }
 }
 
+/* Atmosphere weather/seasonal glow tinting + subtle backdrop particles */
+.authBackdrop[data-weather='rain'] .authGlowA,
+.authBackdrop[data-weather='storm'] .authGlowA {
+  background: radial-gradient(circle, color-mix(in srgb, var(--sky) 22%, transparent) 0%, transparent 70%);
+}
+.authBackdrop[data-weather='rain'] .authGlowB,
+.authBackdrop[data-weather='storm'] .authGlowB {
+  background: radial-gradient(circle, color-mix(in srgb, var(--mark-eye) 18%, transparent) 0%, transparent 70%);
+}
+.authBackdrop[data-weather='sunset'] .authGlowA {
+  background: radial-gradient(circle, rgba(217, 131, 102, 0.24) 0%, transparent 70%);
+}
+.authBackdrop[data-weather='sunset'] .authGlowB {
+  background: radial-gradient(circle, rgba(232, 194, 122, 0.2) 0%, transparent 70%);
+}
+.authBackdrop[data-weather='night'] .authGlowA {
+  background: radial-gradient(circle, rgba(78, 119, 158, 0.16) 0%, transparent 70%);
+}
+.authBackdrop[data-weather='night'] .authGlowB {
+  background: radial-gradient(circle, rgba(242, 190, 114, 0.14) 0%, transparent 70%);
+}
+.authBackdrop[data-season='christmas'] .authGlowA {
+  background: radial-gradient(circle, rgba(200, 75, 62, 0.17) 0%, transparent 70%);
+}
+.authBackdrop[data-season='christmas'] .authGlowB {
+  background: radial-gradient(circle, rgba(136, 180, 140, 0.16) 0%, transparent 70%);
+}
+.authBackdrop[data-season='newyear'] .authGlowA {
+  background: radial-gradient(circle, rgba(232, 194, 122, 0.2) 0%, transparent 70%);
+}
+
+.authRainDrop {
+  position: absolute;
+  top: -12vh;
+  width: 1.5px;
+  height: 52px;
+  border-radius: 999px;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--sky) 55%, #fff 15%), transparent);
+  opacity: 0.45;
+  animation: authRainFall 0.9s linear infinite;
+}
+.authStormFlash {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--sky) 14%, #fff 8%);
+  opacity: 0;
+  animation: authStormPulse 9s ease-in-out infinite;
+}
+.authSunbeam {
+  position: absolute;
+  top: -20%;
+  right: -10%;
+  width: 65vw;
+  height: 90vh;
+  background: linear-gradient(215deg, rgba(250, 224, 168, 0.16) 0%, rgba(217, 131, 102, 0.06) 45%, transparent 72%);
+  transform: rotate(-8deg);
+}
+.authMote {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(250, 226, 178, 0.48);
+  animation: authMoteFloat 7s ease-in-out infinite alternate;
+}
+.authCloud {
+  position: absolute;
+  color: color-mix(in srgb, var(--ink-muted) 16%, transparent);
+  animation: authCloudDrift 34s linear infinite;
+}
+.authStar {
+  position: absolute;
+  border-radius: 50%;
+  background: #f5dfae;
+  opacity: 0.3;
+  animation: authStarTwinkle 3.8s ease-in-out infinite;
+}
+.authSnow {
+  position: absolute;
+  top: -10vh;
+  border-radius: 50%;
+  background: rgba(246, 240, 230, 0.72);
+  animation: authSnowFall 6.5s linear infinite;
+}
+.authFairyRow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-around;
+  padding: 6px 24px;
+}
+.authFairyBulb {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  opacity: 0.6;
+  box-shadow: 0 0 12px 2px currentColor;
+  animation: authStarTwinkle 2.8s ease-in-out infinite;
+}
+.authFirework {
+  position: absolute;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 2px dashed rgba(232, 194, 122, 0.65);
+  box-shadow: 0 0 24px rgba(217, 131, 102, 0.35);
+  opacity: 0;
+  animation: authFireworkPop 3.6s ease-out infinite;
+}
+.authConfetti {
+  position: absolute;
+  top: -8vh;
+  width: 6px;
+  height: 10px;
+  border-radius: 2px;
+  opacity: 0.68;
+  animation: authSnowFall 4.8s linear infinite;
+}
+.authCornerPropLeft {
+  position: absolute;
+  bottom: 16px;
+  left: 22px;
+  opacity: 0.78;
+}
+.authCornerPropTopRight {
+  position: absolute;
+  top: 20px;
+  right: 26px;
+  opacity: 0.78;
+}
+.treatRipple {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 28px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--sky) 65%, #fff 20%);
+  transform: translate(-50%, -50%) scale(0.4);
+  animation: authRippleOut 0.65s ease-out forwards;
+}
+.petHeart {
+  position: absolute;
+  bottom: 100%;
+  margin-bottom: 4px;
+  pointer-events: none;
+  animation: authHeartRise 0.95s ease-out forwards;
+}
+.authSnackHint {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  pointer-events: none;
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.78;
+  white-space: nowrap;
+}
+.authAtmospherePill {
+  position: fixed;
+  bottom: 16px;
+  left: 18px;
+  z-index: 3;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 72%, var(--surface) 28%);
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.authAtmospherePill:hover {
+  border-color: var(--clay);
+  color: var(--ink);
+}
+
+@keyframes authRainFall {
+  from { transform: translate3d(0, 0, 0) rotate(12deg); }
+  to { transform: translate3d(-44px, 122vh, 0) rotate(12deg); }
+}
+@keyframes authStormPulse {
+  0%, 88%, 100% { opacity: 0; }
+  90% { opacity: 0.32; }
+  92% { opacity: 0.05; }
+  94% { opacity: 0.24; }
+}
+@keyframes authMoteFloat {
+  from { transform: translate3d(-8px, 6px, 0); opacity: 0.22; }
+  to { transform: translate3d(10px, -12px, 0); opacity: 0.62; }
+}
+@keyframes authCloudDrift {
+  0% { transform: translate3d(-24px, 0, 0); }
+  50% { transform: translate3d(28px, 4px, 0); }
+  100% { transform: translate3d(-24px, 0, 0); }
+}
+@keyframes authStarTwinkle {
+  0%, 100% { opacity: 0.22; transform: scale(0.9); }
+  50% { opacity: 0.78; transform: scale(1.15); }
+}
+@keyframes authSnowFall {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(18px, 56vh, 0) rotate(160deg); }
+  100% { transform: translate3d(-12px, 114vh, 0) rotate(320deg); }
+}
+@keyframes authFireworkPop {
+  0% { transform: scale(0.2); opacity: 0; }
+  18% { transform: scale(0.95); opacity: 0.72; }
+  55% { transform: scale(1.35); opacity: 0; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+@keyframes authRippleOut {
+  from { transform: translate(-50%, -50%) scale(0.4); opacity: 0.8; }
+  to { transform: translate(-50%, -50%) scale(2.1); opacity: 0; }
+}
+@keyframes authHeartRise {
+  0% { transform: translate(-50%, 6px) scale(0.6); opacity: 0; }
+  25% { transform: translate(-50%, -8px) scale(1.05); opacity: 0.95; }
+  100% { transform: translate(-50%, -34px) scale(0.85); opacity: 0; }
+}
+
+@media (max-width: 560px) {
+  .authSnackHint,
+  .authCornerPropLeft {
+    display: none;
+  }
+  .authAtmospherePill {
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 10px;
+  }
+}
+
 @media (max-width: 480px) {
   .authStage {
     padding: 24px 16px;
@@ -12363,7 +12600,18 @@ button.sumPulsePill:hover {
   .huskyMiniQuip,
   .huskyFullWrap,
   .huskyFullWiggle,
-  .huskySpeechBubble {
+  .huskySpeechBubble,
+  .authRainDrop,
+  .authStormFlash,
+  .authMote,
+  .authCloud,
+  .authStar,
+  .authSnow,
+  .authFairyBulb,
+  .authFirework,
+  .authConfetti,
+  .treatRipple,
+  .petHeart {
     animation: none !important;
   }
 }

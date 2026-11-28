@@ -50,6 +50,8 @@ export function Logo({
   mood = 'calm',
   interactive = false,
   followCursor = false,
+  coverEyes = false,
+  celebrate = false,
   cheer,
   label,
 }: {
@@ -60,6 +62,10 @@ export function Logo({
   interactive?: boolean;
   /** Gently tilts Maxie's head, perks the nearer ear, and shifts the ice-blue eyes toward the cursor. */
   followCursor?: boolean;
+  /** Covers Maxie's eyes with cute paws (e.g., while typing a secret PIN). */
+  coverEyes?: boolean;
+  /** Triggers a happy celebration hop on sign-in success. */
+  celebrate?: boolean;
   /** Optional custom short line shown when tapped (falls back to cheerful defaults). */
   cheer?: string;
   label?: string;
@@ -144,17 +150,18 @@ export function Logo({
   }, [interactive]);
 
   const small = size <= 24;
-  const activeMood: MaxieMood = perked ? 'happy' : mood;
+  const hiding = coverEyes && !small;
+  const activeMood: MaxieMood = perked || celebrate ? 'happy' : mood;
   const cap = tone === 'clay' ? 'var(--clay)' : 'var(--mark-ink)';
   const face = 'var(--mark-face)';
-  const baseTilt = activeMood === 'curious' ? -5 : activeMood === 'cozy' ? 2.5 : 0;
-  const deg = baseTilt + (followCursor ? gaze.x * 7.5 : 0);
-  const headDx = followCursor ? gaze.x * 1.15 : 0;
-  const headDy = followCursor ? gaze.y * 0.85 : 0;
-  const eyeDx = followCursor ? gaze.x * 1.45 : 0;
-  const eyeDy = followCursor ? gaze.y * 0.95 : 0;
-  const leftEarDeg = (followCursor && gaze.x < -0.15 ? gaze.x * 4.2 : 0) + (idleEar === -1 ? -4.5 : 0);
-  const rightEarDeg = (followCursor && gaze.x > 0.15 ? gaze.x * 4.2 : 0) + (idleEar === 1 ? 4.5 : 0);
+  const baseTilt = hiding ? 0 : activeMood === 'curious' ? -5 : activeMood === 'cozy' ? 2.5 : 0;
+  const deg = baseTilt + (followCursor && !hiding ? gaze.x * 7.5 : 0);
+  const headDx = followCursor && !hiding ? gaze.x * 1.15 : 0;
+  const headDy = followCursor && !hiding ? gaze.y * 0.85 : 0;
+  const eyeDx = followCursor && !hiding ? gaze.x * 1.45 : 0;
+  const eyeDy = followCursor && !hiding ? gaze.y * 0.95 : 0;
+  const leftEarDeg = (followCursor && !hiding && gaze.x < -0.15 ? gaze.x * 4.2 : 0) + (idleEar === -1 ? -4.5 : 0);
+  const rightEarDeg = (followCursor && !hiding && gaze.x > 0.15 ? gaze.x * 4.2 : 0) + (idleEar === 1 ? 4.5 : 0);
   const headTransform =
     deg !== 0 || headDx !== 0 || headDy !== 0
       ? `translate(${headDx.toFixed(2)} ${headDy.toFixed(2)}) rotate(${deg.toFixed(2)} 32 34)`
@@ -169,7 +176,7 @@ export function Logo({
       width={size}
       height={size}
       viewBox="0 0 64 64"
-      className={perked && !reducedMotion() ? s.mxBounce : undefined}
+      className={(perked || celebrate) && !reducedMotion() ? s.mxBounce : undefined}
       style={{
         flex: 'none',
         display: 'block',
@@ -251,6 +258,25 @@ export function Logo({
                 <path d="M32 46.2V49.2 M26.4 50.4Q29.2 52.4 32 49.4Q34.8 52.4 37.6 50.4" fill="none" stroke={cap} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
               ))}
           </>
+        )}
+        {!small && (
+          <g
+            style={{
+              transform: hiding ? 'translateY(0px)' : 'translateY(24px)',
+              opacity: hiding ? 1 : 0,
+              transition: 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 160ms ease',
+              pointerEvents: 'none',
+            }}
+          >
+            {/* Left paw gently covering left eye while PIN is focused */}
+            <ellipse cx="22.5" cy="32.5" rx="6.8" ry="5.6" transform="rotate(-14 22.5 32.5)" fill={face} stroke={cap} strokeWidth="2" />
+            <line x1="20.4" y1="28.6" x2="21" y2="32.4" stroke={cap} strokeWidth="1.4" strokeLinecap="round" />
+            <line x1="23.4" y1="28.1" x2="23.6" y2="32" stroke={cap} strokeWidth="1.4" strokeLinecap="round" />
+            {/* Right paw gently covering right eye */}
+            <ellipse cx="41.5" cy="32.5" rx="6.8" ry="5.6" transform="rotate(14 41.5 32.5)" fill={face} stroke={cap} strokeWidth="2" />
+            <line x1="40.6" y1="28.1" x2="40.4" y2="32" stroke={cap} strokeWidth="1.4" strokeLinecap="round" />
+            <line x1="43.6" y1="28.6" x2="43" y2="32.4" stroke={cap} strokeWidth="1.4" strokeLinecap="round" />
+          </g>
         )}
       </g>
     </svg>
