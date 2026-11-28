@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
 import { IC, Icon } from './Icon';
 import { Logo, type MaxieMood } from './Logo';
+import { WhatIfCard } from './WhatIfCard';
 import {
   AUTO_COMPACT_THRESHOLD_PCT,
   COMPACT_KEEP_RECENT,
@@ -16,9 +17,11 @@ import {
   modelLabel,
   type AppliedActionState,
   type AppliedActionUndo,
+  type AppliedScenarioState,
   type ChatAction,
   type ChatMessage,
 } from '../lib/chat';
+import { normalizeWhatIfSpec, parseWhatIfPrompt, simulateWhatIf } from '../lib/whatIf';
 import type { Budget, TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
 import type { FixedBillStatus } from '../lib/fixedBills';
@@ -503,6 +506,9 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
     const id = ++asking.current;
     const timeout = new Promise<'slow'>(r => setTimeout(() => r('slow'), TIMEOUT_MS));
     try {
+      const lastUserQ = [...convo].reverse().find(x => x.role === 'user')?.text ?? '';
+      const parsedScenario = parseWhatIfPrompt(lastUserQ, budget, settings, wealth);
+      const whatIfSim = parsedScenario ? simulateWhatIf(parsedScenario, { cycle, budget, settings, wealth }) : null;
       const freshCtx = chatContext({
         cycle,
         budget,
@@ -515,6 +521,7 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
         fortDip,
         lifestyleCreep,
         pyfStreak,
+        whatIf: whatIfSim,
         now: new Date(),
       });
       let usedCompacted = compactedCount;
@@ -539,10 +546,12 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
       else if ('error' in a) setProblem({ kind: a.error, detail: a.detail });
       else {
         const clean = extractFollowUps(a.reply, a.followUps);
+        const resolvedScenario = parsedScenario ?? normalizeWhatIfSpec(a.scenario, budget, settings) ?? undefined;
         const replyMsg: ChatMessage = {
           role: 'model',
           text: clean.reply,
           actions: a.actions,
+          scenario: resolvedScenario,
           followUps: clean.followUps,
           mood: a.mood,
           model: a.model,
@@ -774,17 +783,36 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
                 </div>
               );
             const clean = extractFollowUps(m.text, m.followUps);
-            const mood = m.mood ?? inferMood(clean.reply);
+            const mood = m.appliedScenario || m.rating === 'up' ? 'happy' : m.mood ?? inferMood(clean.reply);
             const prevUserQ = [...messages.slice(0, i)].reverse().find(x => x.role === 'user')?.text ?? '';
+            const scenarioSpec = m.appliedScenario?.spec ?? m.scenario ?? (prevUserQ ? parseWhatIfPrompt(prevUserQ, budget, settings, wealth) : null);
+            const upNote = isId
+              ? ['Senang bisa bantu — semangat!', 'Yeay, bikin makin tenang kan.', 'Siap, kita jaga ritmenya bareng!'][i % 3]
+              : ['Tail wag! Always in your corner.', 'Glad that clicked — looking steady!', 'Yay! Happy to help map that out.'][i % 3];
+            const updateAppliedScenario = (nextApplied?: AppliedScenarioState) =>
+              setMessages(prev => prev.map((msg, idx) => (idx === i ? { ...msg, appliedScenario: nextApplied } : msg)));
             return (
               <div key={i} style={{ display: 'contents' }}>
                 {compactedDivider}
                 <div className={s.chatTheirsRow}>
-                  <Logo size={26} mood={mood} interactive cheer="Happy to help!" />
+                  <span className={(m.appliedScenario || m.rating === 'up') && !settings.quietMode ? s.chatHappyPop : undefined}>
+                    <Logo size={26} mood={mood} interactive cheer={m.appliedScenario ? (isId ? 'Mantap!' : 'Pockets tucked!') : 'Happy to help!'} />
+                  </span>
                   <div className={s.chatTheirsCol}>
                     <div className={s.chatTheirs}>
                       <Rich text={clean.reply} />
-                      <ReplyWidget question={prevUserQ} cycle={cycle} budget={budget} wealth={wealth} short={short} isId={isId} />
+                      {scenarioSpec ? (
+                        <WhatIfCard
+                          initialSpec={scenarioSpec}
+                          cycle={cycle}
+                          budget={budget}
+                          wealth={wealth}
+                          applied={m.appliedScenario}
+                          onAppliedChange={updateAppliedScenario}
+                        />
+                      ) : (
+                        <ReplyWidget question={prevUserQ} cycle={cycle} budget={budget} wealth={wealth} short={short} isId={isId} />
+                      )}
                       {m.actions && m.actions.length > 0 && (
                         <ActionGroup
                           actions={m.actions}
@@ -830,7 +858,7 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
                       {savedToJournal === i ? (
                         <span className={s.chatRateNote}>Saved to Journal draft.</span>
                       ) : m.rating ? (
-                        <span className={s.chatRateNote}>{m.rating === 'up' ? 'Glad that helped.' : "Got it — I'll tune that next time."}</span>
+                        <span className={s.chatRateNote}>{m.rating === 'up' ? upNote : "Got it — I'll tune that next time."}</span>
                       ) : m.model ? (
                         <span className={s.chatModelTag}>{modelLabel(m.model)}</span>
                       ) : null}

@@ -30,10 +30,12 @@ const GEMINI_SYSTEM = [
   'When "wealth" is present, weave in the user\'s survival runway (months/days forward vs 6-month target), asset-vs-liability balance, passive cash flow freedom %, impulse leaks ("impulseLeaks"), or cooling-off wishlist when relevant.',
   'When the user asks if they can buy or afford a luxury/want, reframe constructively around "How can I afford it?": show their breathing room, the 5-year compounding opportunity cost if invested instead, and offer to pause it in the Cooling-Off Wishlist or fund it from surplus/asset cash flow instead of debt.',
   'Big one-off purchases inflate the daily average; say so when the pace projection looks driven by them.',
+  'When "whatIfSimulation" is present in Data JSON, ALWAYS treat its pre-computed numbers (projectedTotal, projectedSpare, deltaSpare, billsStillDue, etc.) as exact ground truth — NEVER compute hypothetical math yourself or forget billsStillDue. Briefly invite the user to drag the interactive chart or apply the adjustment directly to their spending pockets in the card below.',
   'Transfers between own accounts, savings, investments and card bill payments are not spending.',
   '"answerFeedback" (when present) holds past answers the user rated: write more like the "liked" ones, and avoid whatever made the "disliked" ones unhelpful (length, tone, vagueness, wrong focus).',
   '',
-  'Respond with JSON only: {"reply": string, "actions": Action[], "followUps": string[], "mood": "happy"|"curious"|"steady"}.',
+  'Respond with JSON only: {"reply": string, "actions": Action[], "followUps": string[], "mood": "happy"|"curious"|"steady", "scenario"?: Scenario}.',
+  'Optional "scenario": only include when the user asks a hypothetical projection not already in "whatIfSimulation" (one of daily_cap, weekday_weekend_cap, zero_spend_days, category_trim, big_purchase, runway_eta, income_drop, windfall_split, habit_compound, freedom_path).',
   'CRITICAL: NEVER put follow-up questions or a bullet list of suggested questions inside "reply". Put 2-3 very short (under 45 chars) tappable next questions ONLY in the "followUps" array, in the same language as "reply".',
   '"mood": "happy" for wins, comfortable budgets, or friendly answers; "curious" when investigating or sorting; "steady" when over budget or tight.',
   'Suggest actions only when they clearly help; usually 0-3.',
@@ -135,6 +137,7 @@ function askGemini_(p) {
       mood: mood,
       model: model,
       promptTokens: promptTokens,
+      ...(out.scenario && typeof out.scenario === 'object' ? { scenario: out.scenario } : {}),
     };
   } catch (e) {
     // Not the JSON we asked for: show it as a plain answer, still lifting trailing question bullets into chips.

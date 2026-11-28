@@ -8,6 +8,7 @@ import { merchantKey } from '../data/transactions';
 import type { FixedBillStatus } from './fixedBills';
 import { paceInsight, weekendSafeSplit } from './pace';
 import type { FortAssetsAlert, ImpulseSummary, LifestyleCreepSignal, WealthSnapshot } from './wealth';
+import type { WhatIfResult, WhatIfSpec } from './whatIf';
 
 /** A change Gemini suggests; shown as a card you apply yourself (see askGemini_ in apps-script/Gemini.js). */
 export type ChatAction =
@@ -33,12 +34,29 @@ export type AppliedActionState = {
   undo?: AppliedActionUndo;
 };
 
+/** Serializable undo payload for applied What-If projections (spending pockets, wishlist, PYF, challenge). */
+export type AppliedScenarioUndo =
+  | { type: 'pockets'; prevPcts: Record<string, number> }
+  | { type: 'wishlist'; id: string }
+  | { type: 'pyf'; prevSave: number; prevInv: number }
+  | { type: 'challenge'; category: string; prev?: { category: string; start: string; days?: number; kind?: 'nospend' | 'beat_last'; target?: number } | null };
+
+export type AppliedScenarioState = {
+  appliedAt: string;
+  summary: string;
+  celebration: string;
+  spec: WhatIfSpec;
+  undo?: AppliedScenarioUndo;
+};
+
 /** A reply also carries the model that wrote it, suggested next questions, husky mood, and your thumbs up or down once rated. */
 export type ChatMessage = {
   role: 'user' | 'model';
   text: string;
   actions?: ChatAction[];
   appliedActions?: Record<number, AppliedActionState>;
+  scenario?: WhatIfSpec;
+  appliedScenario?: AppliedScenarioState;
   followUps?: string[];
   mood?: 'happy' | 'curious' | 'steady';
   model?: string;
@@ -46,7 +64,7 @@ export type ChatMessage = {
 };
 
 export type ChatAnswer =
-  | { reply: string; actions: ChatAction[]; followUps?: string[]; mood?: 'happy' | 'curious' | 'steady'; model?: string; promptTokens?: number }
+  | { reply: string; actions: ChatAction[]; followUps?: string[]; mood?: 'happy' | 'curious' | 'steady'; model?: string; promptTokens?: number; scenario?: WhatIfSpec }
   | { error: 'no_key' | 'api' | 'blocked' | 'quota'; detail?: string };
 
 /**
@@ -191,6 +209,7 @@ export function chatContext({
   fortDip,
   lifestyleCreep,
   pyfStreak,
+  whatIf,
   now,
 }: {
   cycle: Cycle;
@@ -204,6 +223,7 @@ export function chatContext({
   fortDip?: FortAssetsAlert | null;
   lifestyleCreep?: LifestyleCreepSignal | null;
   pyfStreak?: number;
+  whatIf?: WhatIfResult | null;
   now?: Date;
 }) {
   const r = Math.round;
@@ -417,5 +437,6 @@ export function chatContext({
             .map(w => ({ name: w.name, amount: r(w.amount), status: w.status, fundingMode: w.fundingMode })),
         }
       : {}),
+    ...(whatIf ? { whatIfSimulation: whatIf.summaryForPrompt } : {}),
   };
 }

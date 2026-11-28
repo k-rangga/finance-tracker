@@ -11320,10 +11320,404 @@ button.sumPulsePill:hover {
   .mxIcon,
   .zeroClubPill,
   .keepsakeCard,
-  .pourFill {
+  .pourFill,
+  .chatHappyPop {
     transition: none;
+    animation: none;
   }
   .mxPopIn {
+    animation: none;
+  }
+}
+
+/* ---- Interactive What-If Scenario Card & 5 Chart Renderers inside Ask Maxie ---- */
+.chatHappyPop {
+  display: inline-flex;
+  animation: mxPopBadge 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.wiCard {
+  margin: 10px 0 6px;
+  padding: 13px 14px;
+  border-radius: 15px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fffaf2 8%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.wiHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.wiTitle {
+  font-family: var(--font-serif);
+  font-size: 16.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--ink);
+  margin-top: 2px;
+}
+.wiTabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--surface-200);
+  border: 1px solid var(--border);
+}
+.wiTab {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.wiTab[aria-selected='true'] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.wiMetrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 10px 14px;
+  padding: 8px 10px;
+  border-radius: 11px;
+  background: var(--bg);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+.wiMetric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.wiMetric strong {
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.wiMetricSub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.wiMetricSub b {
+  font-weight: 600;
+  color: var(--good);
+}
+.wiChartWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wiLegend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--text-soft);
+  margin-bottom: 4px;
+}
+.wiLegendDash,
+.wiLegendSolid {
+  display: inline-block;
+  width: 12px;
+  height: 2px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+.wiLegendDash {
+  border-top: 2px dashed var(--text-faint);
+}
+.wiLegendSolid {
+  background: var(--clay);
+  border-radius: 2px;
+}
+.wiSvg {
+  width: 100%;
+  height: auto;
+  display: block;
+  touch-action: none;
+}
+.wiBars {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.wiBarBtn {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 9px;
+  padding: 5px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: inherit;
+}
+.wiBarBtn:not(:disabled) {
+  cursor: pointer;
+}
+.wiBarBtn:not(:disabled):hover,
+.wiBarBtn[data-active='true'] {
+  background: var(--bg);
+  border-color: var(--border);
+}
+.wiBarTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.wiTreemap {
+  position: relative;
+  width: 100%;
+  height: 152px;
+  border-radius: 11px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.wiTile {
+  position: absolute;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 5px 7px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.14s ease, border-color 0.14s ease;
+}
+.wiTile[data-active='true'] {
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+.wiTileName {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.wiTileVal {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.wiTableWrap {
+  overflow-x: auto;
+}
+.wiTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.wiTable th {
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 4px 6px 6px;
+  border-bottom: 1px solid var(--divider);
+}
+.wiTable td {
+  padding: 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--divider) 65%, transparent);
+  color: var(--ink);
+}
+.wiTable tr[data-active='true'] td {
+  background: var(--clay-soft);
+  font-weight: 600;
+}
+.wiTable tr[data-tone='good'] td:last-child {
+  color: var(--good);
+  font-weight: 600;
+}
+.wiTable tr[data-tone='warn'] td:last-child {
+  color: var(--amber-ink);
+}
+.wiTable tr[data-tone='bad'] td:last-child {
+  color: var(--red-ink);
+}
+.wiBreakdown {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  padding-top: 2px;
+}
+.wiControls {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 11px;
+  border-radius: 11px;
+  background: var(--bg);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+.wiCtrlTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-soft);
+}
+.wiSlider {
+  width: 100%;
+  accent-color: var(--clay);
+  cursor: pointer;
+}
+.wiPillRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 3px;
+}
+.wiPill {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.wiPill[data-active='true'] {
+  border-color: var(--clay);
+  background: var(--clay-soft);
+  color: var(--ink);
+  font-weight: 600;
+}
+.wiPocketsBox {
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 12px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.wiPocketsToggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 11px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.wiPocketsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 11px 11px;
+  border-top: 1px solid var(--divider);
+}
+.wiPocketRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.wiPocketLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.wiDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: none;
+}
+.wiPocketNums {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 12px;
+}
+.wiStepGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.wiStepBtn {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.wiStepBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.wiPocketFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  border-top: 1px solid var(--divider);
+}
+.wiQuickAction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+.wiCelebrate {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--good-soft);
+  border: 1px solid color-mix(in srgb, var(--good) 30%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .wiTile,
+  .chatHappyPop {
+    transition: none;
     animation: none;
   }
 }
