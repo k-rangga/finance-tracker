@@ -191,6 +191,8 @@ export function BudgetCard({
   const [pouring, setPouring] = useState(false);
   const [srcIdx, setSrc] = useState(0);
   const [sharing, setSharing] = useState(false);
+  const [listView, setListView] = useState<'places' | 'txs'>('places');
+  const [showAllTxs, setShowAllTxs] = useState(false);
   const [deltaFloat, setDeltaFloat] = useState<{ id: number; text: string; pos: boolean } | null>(null);
   const step = settings.currency === 'USD' ? 25 : 100_000;
 
@@ -425,7 +427,53 @@ export function BudgetCard({
             </div>
           )}
           {places.length > 0 ? (
-            <PlaceList places={places} onPick={merchant => onShowTransactions(c.name, { q: merchant })} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div className={s.sxMiniSeg} role="group" aria-label="View places or transactions">
+                  <button type="button" aria-pressed={listView === 'places'} onClick={() => setListView('places')}>
+                    Top places
+                  </button>
+                  <button type="button" aria-pressed={listView === 'txs'} onClick={() => setListView('txs')}>
+                    Transactions ({mine.length})
+                  </button>
+                </div>
+              </div>
+              {listView === 'places' ? (
+                <PlaceList places={places} onPick={merchant => onShowTransactions(c.name, { q: merchant })} />
+              ) : (
+                (() => {
+                  const sorted = [...mine].sort((a, b) => b.date.getTime() - a.date.getTime());
+                  const shown = showAllTxs ? sorted : sorted.slice(0, 5);
+                  return (
+                    <div className={s.fbTxList}>
+                      {shown.map(t => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          className={s.fbTxRow}
+                          onClick={() => onShowTransactions(c.name, { q: tidyName(t.title) })}
+                        >
+                          <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
+                            <span className={s.ellipsis} style={{ fontWeight: 500, fontSize: 14 }}>
+                              {tidyName(t.title)}
+                            </span>
+                            <span style={{ fontSize: 12, color: C.textMuted }}>
+                              {dayMonth(t.date)} · {t.account}
+                            </span>
+                          </span>
+                          <span style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap' }}>{full(t.net)}</span>
+                        </button>
+                      ))}
+                      {sorted.length > 5 && (
+                        <button type="button" className={s.textBtnSm} style={{ alignSelf: 'flex-start', padding: '2px 0' }} onClick={() => setShowAllTxs(v => !v)}>
+                          {showAllTxs ? 'Show fewer' : `Show all ${sorted.length} transactions`}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()
+              )}
+            </div>
           ) : (
             <p className={s.mxSummary}>Nothing spent here yet — clean slate.</p>
           )}
@@ -526,6 +574,8 @@ export function BillItem({
   onMark,
   onAmount,
   editor,
+  renderEditor,
+  onTrackTx,
   onShowTransactions,
 }: {
   r: CardRow;
@@ -537,13 +587,19 @@ export function BillItem({
   marked: boolean;
   onMark: () => void;
   onAmount: (amount: number) => void;
-  /** The "Each month" amount editor. */
-  editor: ReactNode;
+  /** The "Monthly plan" amount editor (legacy inline prop). */
+  editor?: ReactNode;
+  /** Optional lazy render callback for clean open/close state. */
+  renderEditor?: (close: () => void) => ReactNode;
+  /** Optional 1-tap conversion of a cycle transaction into an individual recurring fixed bill. */
+  onTrackTx?: (tx: TxView) => void;
   onShowTransactions: (cat: string) => void;
 }) {
   const { settings, full, short } = useSettings();
   const phone = useIsPhone();
   const [justPaid, setJustPaid] = useState(false);
+  const [editingPlan, setEditingPlan] = useState(false);
+  const [showAllTxs, setShowAllTxs] = useState(false);
   useEffect(() => {
     if (!justPaid) return;
     const t = setTimeout(() => setJustPaid(false), 1200);
@@ -600,7 +656,8 @@ export function BillItem({
       />
     );
 
-  const places = topPlaces(mine);
+  const sortedMine = [...mine].sort((a, b) => b.date.getTime() - a.date.getTime());
+  const visibleTxs = showAllTxs ? sortedMine : sortedMine.slice(0, 5);
   return (
     <div className={s.mxBill} data-open={open || undefined}>
       <button type="button" className={s.mxHead} aria-expanded={open} onClick={onToggle}>
@@ -624,7 +681,25 @@ export function BillItem({
       {open && (
         <div className={s.mxBillBody}>
           {fix}
-          {editor}
+          <div className={s.fbPlanStrip}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <span style={{ fontSize: 12, color: C.textMuted }}>Monthly plan</span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>{lim > 0 ? full(lim) : 'Not set'}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <span style={{ fontSize: 12, color: C.textMuted }}>Paid this cycle</span>
+              <span style={{ fontSize: 15, fontWeight: 600, color: cur > 0 ? C.good : C.textMuted }}>{cur > 0 ? full(cur) : '—'}</span>
+            </div>
+            <button
+              type="button"
+              className={s.btnOutlineSm}
+              style={{ marginLeft: 'auto' }}
+              onClick={() => setEditingPlan(v => !v)}
+            >
+              {editingPlan ? 'Done' : lim > 0 ? 'Edit plan' : 'Set monthly plan'}
+            </button>
+          </div>
+          {editingPlan && (renderEditor ? renderEditor(() => setEditingPlan(false)) : editor)}
           {cur === 0 && (
             <button
               type="button"
@@ -641,12 +716,40 @@ export function BillItem({
               {marked ? 'Mark as not paid' : 'Mark as paid'}
             </button>
           )}
-          {places.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <span className={s.mxSubHead}>Top places</span>
-              <PlaceList places={places} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span className={s.mxSubHead}>Transactions this cycle{sortedMine.length > 0 ? ` (${sortedMine.length})` : ''}</span>
             </div>
-          )}
+            {sortedMine.length > 0 ? (
+              <div className={s.fbTxList}>
+                {visibleTxs.map(t => (
+                  <div key={t.id} className={s.fbTxRow} style={{ cursor: 'default' }}>
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
+                      <span className={s.ellipsis} style={{ fontWeight: 500, fontSize: 14 }}>
+                        {tidyName(t.title)}
+                      </span>
+                      <span style={{ fontSize: 12, color: C.textMuted }}>
+                        {dayMonth(t.date)} · {t.account}
+                      </span>
+                    </span>
+                    {onTrackTx && (
+                      <button type="button" className={s.textBtnSm} style={{ fontSize: 12, padding: '2px 6px' }} onClick={() => onTrackTx(t)}>
+                        Track bill
+                      </button>
+                    )}
+                    <span style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap' }}>{full(t.net)}</span>
+                  </div>
+                ))}
+                {sortedMine.length > 5 && (
+                  <button type="button" className={s.textBtnSm} style={{ alignSelf: 'flex-start', padding: '2px 0' }} onClick={() => setShowAllTxs(v => !v)}>
+                    {showAllTxs ? 'Show fewer' : `Show all ${sortedMine.length} transactions`}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <span style={{ fontSize: 13, color: C.textMuted }}>No {c.name.toLowerCase()} transactions recorded this cycle yet.</span>
+            )}
+          </div>
           {last > 0 && (
             <p className={s.mxCompare}>
               Last cycle at this point you'd spent {full(last)} on {c.name.toLowerCase()}.
@@ -654,7 +757,7 @@ export function BillItem({
           )}
           <div className={s.mxLinks}>
             <button type="button" className={s.mxLink} onClick={() => onShowTransactions(c.name)}>
-              See transactions
+              Open in Transactions
             </button>
           </div>
         </div>

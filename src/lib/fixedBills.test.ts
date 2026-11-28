@@ -14,6 +14,7 @@ import {
   fixedBillCategoryLimits,
   fixedBillDueItems,
   fixedBillsForNextCycle,
+  historyForFixedBill,
   matchFixedBills,
   type FixedBill,
 } from './fixedBills';
@@ -176,6 +177,20 @@ test('supports recurring account transfer bills from transactions without inflat
 
   assert.equal(fixedBillDueItems(statuses, cycle).length, 0);
   assert.deepEqual(fixedBillCategoryLimits(statuses), {});
+});
+
+test('historyForFixedBill returns newest-first matching payments across cycles', () => {
+  const plnOct = tx('h1', day(2026, 9, 5), 'PLN Token', 410_000, 'Utilities');
+  const plnNov = tx('h2', day(2026, 10, 5), 'PLN Token', 395_000, 'Utilities');
+  const transferOct = tx('h3', day(2026, 9, 6), 'Transfer to Ibu', 2_000_000, 'Transfer', 'transfer');
+  const unrelated = tx('h4', day(2026, 10, 6), 'Grand Lucky', 200_000, 'Groceries');
+  const transferBill: FixedBill = { id: 'tb', name: 'Transfer to Ibu', category: 'Transfer', amount: 2_000_000, dueDay: 6, merchant: 'ibu' };
+
+  const plnHist = historyForFixedBill(pln, [plnOct, plnNov, transferOct, unrelated], t => t.category);
+  assert.deepEqual(plnHist.map(t => t.id), ['h2', 'h1']);
+
+  const transferHist = historyForFixedBill(transferBill, [plnOct, plnNov, transferOct, unrelated], t => t.category);
+  assert.deepEqual(transferHist.map(t => t.id), ['h3']);
 });
 
 console.log(`\nall passed (${passed})`);

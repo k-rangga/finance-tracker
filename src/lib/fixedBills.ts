@@ -102,6 +102,33 @@ export function billDraftFromTx(tx: Pick<TxView, 'title' | 'cat' | 'amount' | 'n
   };
 }
 
+/** Recent raw transactions matching a recurring bill across all loaded cycles, newest first. */
+export function historyForFixedBill(
+  bill: FixedBill,
+  allRaw: Transaction[],
+  catOf: (t: Transaction) => string,
+  limit = 4,
+): Transaction[] {
+  const keyword = (bill.merchant?.trim() || bill.name).trim();
+  const hasExplicitMerchant = !!(bill.merchant && bill.merchant.trim().length >= 2);
+  const isTransferBill = isTransferBillCategory(bill.category);
+  const tol = bill.varies ? 0.45 : 0.2;
+
+  return allRaw
+    .filter(t => {
+      if (t.type === 'income' || t.plan) return false;
+      if (isTransferBill) {
+        if (t.type !== 'transfer') return false;
+      } else if (t.type !== 'expense' && !(hasExplicitMerchant && t.type === 'transfer')) {
+        return false;
+      }
+      if (keywordMatches(t.title, keyword)) return true;
+      return catOf(t) === bill.category && amountClose(t.amount, bill.amount, tol);
+    })
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .slice(0, limit);
+}
+
 /** The date this bill falls due within `cycle`, or null if paused or not due in this cycle (quarterly/yearly). */
 export function dueDateInCycle(bill: FixedBill, cycle: Cycle): Date | null {
   if (bill.paused) return null;

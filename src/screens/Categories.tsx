@@ -14,7 +14,7 @@ import { useSettings } from '../lib/settings';
 import { useIsPhone } from '../lib/media';
 import { C } from '../lib/tokens';
 import { useSetLimits } from '../lib/limits';
-import type { FixedBillStatus } from '../lib/fixedBills';
+import { isTransferBillCategory, type FixedBillStatus } from '../lib/fixedBills';
 import { merchantKey, type Transaction } from '../data/transactions';
 import {
   BillRing,
@@ -33,7 +33,7 @@ import {
   TrophyIcon,
   type ChallengeState,
 } from './categoriesExtras';
-import { FixedBillsList } from './FixedBills';
+import { FixedBillsList, type FixedBillFilter } from './FixedBills';
 
 type Mode = 'cycle' | 'week';
 type CatFilter = 'all' | 'watch' | 'smooth' | 'untouched' | 'challenges';
@@ -289,12 +289,15 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
   const inst = useInstallmentTotals(cycle);
   const [instOpen, setInstOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const [billFilter, setBillFilter] = useState<FixedBillFilter>('all');
+  const [addingBill, setAddingBill] = useState(false);
+  const [trackTx, setTrackTx] = useState<TxView | null>(null);
 
   return (
     <div className={s.splitGrid}>
       <div className={s.splitMain} style={{ gap: 16 }}>
         {(() => {
-          const rows = mode === 'cycle' ? [...variable, ...fixed] : variable;
+          const rows = mode === 'cycle' ? [...variable, ...fixedAll.filter(r => !r.c.auto)] : variable;
           const spent = sum(rows.map(r => r.cur));
           const limit = sum(rows.map(r => r.lim));
           const frac = mode === 'cycle' && budget.budget > 0 ? budget.paceToday / budget.budget : todayFrac;
@@ -485,43 +488,99 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
 
         {mode === 'cycle' && <FoundInstallments />}
         {mode === 'cycle' && (() => {
-          const activeIndividual = fixedBillStatuses.filter(x => x.status !== 'inactive' && x.status !== 'skipped');
-          const paidIndividual = activeIndividual.filter(x => x.status === 'paid');
-          const overdueCount = activeIndividual.filter(x => x.status === 'overdue').length;
-          const indivPaidAmt = sum(paidIndividual.map(x => x.actual));
-          const indivTotalAmt = sum(activeIndividual.map(x => (x.status === 'paid' ? Math.max(x.actual, x.expected) : x.expected)));
-          const totalItems = activeIndividual.length + fixed.length;
-          const allBillsPaid = totalItems > 0 && paidIndividual.length === activeIndividual.length && fixed.every(isPaid) && inst.paid >= inst.planned;
+          const spendingIndiv = fixedBillStatuses.filter(x => !isTransferBillCategory(x.bill.category));
+          const transferIndiv = fixedBillStatuses.filter(x => isTransferBillCategory(x.bill.category));
+          const activeSpending = spendingIndiv.filter(x => x.status !== 'inactive' && x.status !== 'skipped');
+          const paidSpending = activeSpending.filter(x => x.status === 'paid');
+          const overdueCount = activeSpending.filter(x => x.status === 'overdue').length;
+          const indivPaidAmt = sum(paidSpending.map(x => x.actual));
+          const indivTotalAmt = sum(activeSpending.map(x => (x.status === 'paid' ? Math.max(x.actual, x.expected) : x.expected)));
+          const paidCount = paidSpending.length + fixed.filter(isPaid).length;
+          const totalItems = activeSpending.length + fixed.length;
+          const allBillsPaid = totalItems > 0 && paidSpending.length === activeSpending.length && fixed.every(isPaid) && inst.paid >= inst.planned;
           const hasAny = fixedBillStatuses.length > 0 || fixed.length > 0 || inst.planned > 0;
           const totalPaidAmt = indivPaidAmt + sum(fixed.filter(isPaid).map(r => r.cur || r.lim)) + inst.paid;
           const totalPlannedAmt = indivTotalAmt + sum(fixed.map(r => Math.max(r.lim, r.cur))) + inst.planned;
+          const progressPct = totalPlannedAmt > 0 ? Math.min(100, (totalPaidAmt / totalPlannedAmt) * 100) : 0;
+
+          const legacyFiltered =
+            billFilter === 'transfers'
+              ? []
+              : billOrder(fixed, budget, isPaid).filter(r =>
+                  billFilter === 'unpaid' ? !isPaid(r) : billFilter === 'paid' ? isPaid(r) : true,
+                );
+          const showBillFilters = fixedBillStatuses.length + fixed.length >= 2;
+          const nudgeStep = settings.currency === 'USD' ? 25 : 100_000;
 
           return (
-            <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <SectionHead
                 title="Fixed bills"
                 right={
-                  hasAny ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <BillRing paid={paidIndividual.length + fixed.filter(isPaid).length} total={totalItems} />
-                      {allBillsPaid ? (
-                        <span style={{ color: C.good, fontWeight: 600 }}>All paid</span>
-                      ) : (
-                        <span>
-                          {overdueCount > 0 && (
-                            <span style={{ color: C.redInk, fontWeight: 600, marginRight: 8 }}>
-                              {overdueCount} overdue
-                            </span>
-                          )}
-                          {activeIndividual.length > 0
-                            ? `${paidIndividual.length} of ${activeIndividual.length} paid · ${short(totalPaidAmt)} / ${short(totalPlannedAmt)}`
-                            : `${short(totalPaidAmt)} of ${short(totalPlannedAmt)} paid`}
-                        </span>
-                      )}
-                    </span>
-                  ) : undefined
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {hasAny && totalItems > 0 && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <BillRing paid={paidCount} total={totalItems} />
+                        {allBillsPaid ? (
+                          <span style={{ color: C.good, fontWeight: 600 }}>All paid</span>
+                        ) : (
+                          <span>
+                            {overdueCount > 0 && (
+                              <span style={{ color: C.redInk, fontWeight: 600, marginRight: 8 }}>
+                                {overdueCount} overdue
+                              </span>
+                            )}
+                            {`${paidCount} of ${totalItems} paid · ${short(totalPaidAmt)} / ${short(totalPlannedAmt)}`}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className={s.btnOutlineSm}
+                      onClick={() => {
+                        setTrackTx(null);
+                        setAddingBill(v => !v);
+                      }}
+                    >
+                      <Icon d={addingBill ? IC.close : IC.plus} size={14} />
+                      {addingBill ? 'Close' : 'Add'}
+                    </button>
+                  </span>
                 }
               />
+              {totalPlannedAmt > 0 && (
+                <div className={s.fbProgressBar} aria-hidden="true">
+                  <div
+                    className={s.fbProgressFill}
+                    style={{ width: `${progressPct}%`, background: allBillsPaid ? 'var(--good)' : 'var(--clay)' }}
+                  />
+                </div>
+              )}
+              {showBillFilters && (
+                <div className={s.catFilterPills} role="tablist" aria-label="Filter fixed bills">
+                  {(
+                    [
+                      { key: 'all', label: 'All', count: fixedBillStatuses.length + fixed.length },
+                      { key: 'unpaid', label: 'Unpaid', count: activeSpending.filter(x => x.status !== 'paid').length + fixed.filter(r => !isPaid(r)).length },
+                      { key: 'paid', label: 'Paid', count: paidCount },
+                      ...(transferIndiv.length > 0 ? [{ key: 'transfers' as const, label: 'Transfers', count: transferIndiv.length }] : []),
+                    ] as { key: FixedBillFilter; label: string; count: number }[]
+                  ).map(item => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={billFilter === item.key}
+                      className={s.catFilterPill}
+                      onClick={() => setBillFilter(item.key)}
+                    >
+                      {item.label}
+                      <span className={s.catFilterCount}>{item.count}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <Celebrate id={'bills-' + cycleKey} when={allBillsPaid} />
               {activeChallenges.map(({ ch, st }) => (
                 <Celebrate key={ch.category + ch.start} id={`challenge-${ch.category}-${ch.start}`} when={st.key === 'done'} />
@@ -533,9 +592,9 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
                 </div>
               )}
               <div className={s.mxBills}>
-                {!hasAny && (
+                {!hasAny && !addingBill && (
                   <div style={{ padding: '16px 20px', fontSize: 14, color: C.textMuted, lineHeight: 1.5 }}>
-                    No fixed bills yet. Add what you pay every month (rent, electricity, internet, insurance) so Maxie checks when each receipt lands.
+                    No fixed bills yet. Tap Add above to track rent, utilities, internet, or recurring transfers.
                   </div>
                 )}
                 <FixedBillsList
@@ -544,10 +603,15 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
                   allRaw={allRaw}
                   statuses={fixedBillStatuses}
                   catOf={catOf}
+                  filter={billFilter}
+                  adding={addingBill}
+                  onSetAdding={setAddingBill}
+                  externalSourceTx={trackTx}
+                  onClearExternalTx={() => setTrackTx(null)}
                   onShowTransactions={onShowTransactions}
                   onToast={setToast}
                 />
-                {billOrder(fixed, budget, isPaid).map(r => (
+                {legacyFiltered.map(r => (
                   <BillItem
                     key={r.c.name}
                     r={r}
@@ -558,16 +622,53 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
                     marked={marked.has(r.c.name)}
                     onMark={() => toggleMarked(r.c.name)}
                     onAmount={amount => setAmount(r.c.name, amount, r.lim)}
-                    editor={<AmountEditor key={r.lim} label="Each month" initial={r.lim} onSave={amount => setAmount(r.c.name, amount, r.lim)} onRemove={() => setAmount(r.c.name, 0, r.lim)} />}
+                    onTrackTx={tx => setTrackTx(tx)}
+                    renderEditor={close => (
+                      <AmountEditor
+                        key={r.lim}
+                        autoFocus={false}
+                        label={`Monthly plan (${settings.currency})`}
+                        initial={r.lim}
+                        removeLabel="Clear plan"
+                        helper="Clearing hides this category from Fixed bills until a charge lands."
+                        presets={[
+                          ...(r.cur > 0 ? [{ label: `Match paid (${short(r.cur)})`, value: Math.round(r.cur) }] : []),
+                          ...(r.last > 0 && Math.abs(r.last - r.cur) >= 1 ? [{ label: `Last cycle (${short(r.last)})`, value: Math.round(r.last) }] : []),
+                          ...(r.lim > nudgeStep ? [{ label: `−${short(nudgeStep)}`, value: Math.max(0, r.lim - nudgeStep) }] : []),
+                          ...(r.lim > 0 ? [{ label: `+${short(nudgeStep)}`, value: r.lim + nudgeStep }] : []),
+                        ]}
+                        onSave={amount => {
+                          setAmount(r.c.name, amount, r.lim);
+                          close();
+                        }}
+                        onCancel={close}
+                        onRemove={() => {
+                          setAmount(r.c.name, 0, r.lim);
+                          close();
+                        }}
+                      />
+                    )}
                     onShowTransactions={onShowTransactions}
                   />
                 ))}
-                <InstallmentsGroup cycle={cycle} open={instOpen} onToggle={() => setInstOpen(!instOpen)} />
+                {billFilter !== 'transfers' && <InstallmentsGroup cycle={cycle} open={instOpen} onToggle={() => setInstOpen(!instOpen)} />}
               </div>
             </section>
           );
         })()}
-        {mode === 'week' && <span style={{ fontSize: 13, color: C.textMuted, padding: '0 4px' }}>Fixed bills are monthly, so they're only in the cycle view.</span>}
+        {mode === 'week' && (() => {
+          const spendingIndiv = fixedBillStatuses.filter(x => !isTransferBillCategory(x.bill.category) && x.status !== 'inactive' && x.status !== 'skipped');
+          const paidWeek = spendingIndiv.filter(x => x.status === 'paid').length + fixed.filter(isPaid).length;
+          const totalWeek = spendingIndiv.length + fixed.length;
+          return (
+            <button type="button" className={s.fbWeekStrip} onClick={() => setMode('cycle')}>
+              <span>
+                Fixed bills are monthly{totalWeek > 0 ? ` · ${paidWeek} of ${totalWeek} paid this cycle` : ''}
+              </span>
+              <span style={{ color: C.clayInk, fontWeight: 600 }}>Switch to Cycle →</span>
+            </button>
+          );
+        })()}
       </div>
 
       {phone ? (
@@ -630,7 +731,27 @@ function billOrder(rows: Row[], b: Budget, isPaid: (r: Row) => boolean) {
 }
 
 /** A monthly amount typed in rupiah (or dollars), saved as the bill's plan. */
-export function AmountEditor({ label, initial, onSave, onCancel, onRemove }: { label: string; initial: number; onSave: (v: number) => void; onCancel?: () => void; onRemove?: () => void }) {
+export function AmountEditor({
+  label,
+  initial,
+  onSave,
+  onCancel,
+  onRemove,
+  autoFocus = true,
+  presets = [],
+  removeLabel = 'Remove',
+  helper,
+}: {
+  label: string;
+  initial: number;
+  onSave: (v: number) => void;
+  onCancel?: () => void;
+  onRemove?: () => void;
+  autoFocus?: boolean;
+  presets?: { label: string; value: number }[];
+  removeLabel?: string;
+  helper?: string;
+}) {
   const { settings } = useSettings();
   const idr = settings.currency === 'IDR';
   const show = (v: number) => (v > 0 ? (idr ? Math.round(v).toLocaleString('id-ID') : String(Math.round(v * 100) / 100)) : '');
@@ -639,37 +760,49 @@ export function AmountEditor({ label, initial, onSave, onCancel, onRemove }: { l
   const changed = value > 0 && Math.abs(value - initial) >= (idr ? 1 : 0.01);
   return (
     <form
-      className={s.amountEdit}
+      style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
       onSubmit={e => {
         e.preventDefault();
         if (changed) onSave(value);
       }}
     >
-      <label className={s.field} style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ fontWeight: 500 }}>{label}</span>
-        <input
-          className={s.input}
-          inputMode="decimal"
-          autoFocus
-          value={text}
-          placeholder={idr ? 'e.g. 4.200.000' : 'e.g. 1200'}
-          onChange={e => setText(idr ? (Number(e.target.value.replace(/\D/g, '')) || '').toLocaleString('id-ID') : e.target.value)}
-          aria-label={label}
-        />
-      </label>
-      <button type="submit" className={s.btnPrimary} disabled={!changed}>
-        Save
-      </button>
-      {onCancel && (
-        <button type="button" className={s.btnGhost} onClick={onCancel}>
-          Cancel
+      <div className={s.amountEdit}>
+        <label className={s.field} style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ fontWeight: 500 }}>{label}</span>
+          <input
+            className={s.input}
+            inputMode="decimal"
+            autoFocus={autoFocus}
+            value={text}
+            placeholder={idr ? 'e.g. 4.200.000' : 'e.g. 1200'}
+            onChange={e => setText(idr ? (Number(e.target.value.replace(/\D/g, '')) || '').toLocaleString('id-ID') : e.target.value)}
+            aria-label={label}
+          />
+        </label>
+        <button type="submit" className={s.btnPrimary} disabled={!changed}>
+          Save
         </button>
+        {onCancel && (
+          <button type="button" className={s.btnGhost} onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+        {onRemove && initial > 0 && (
+          <button type="button" className={s.btnGhost} onClick={onRemove} style={{ color: C.redInk }}>
+            {removeLabel}
+          </button>
+        )}
+      </div>
+      {presets.length > 0 && (
+        <div className={s.fbPresetRow}>
+          {presets.map(p => (
+            <button key={p.label} type="button" className={s.fbPresetChip} onClick={() => setText(show(p.value))}>
+              {p.label}
+            </button>
+          ))}
+        </div>
       )}
-      {onRemove && initial > 0 && (
-        <button type="button" className={s.btnGhost} onClick={onRemove} style={{ color: C.redInk }}>
-          Remove
-        </button>
-      )}
+      {helper && <span style={{ fontSize: 12, color: C.textMuted }}>{helper}</span>}
     </form>
   );
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import s from '../styles/ui.module.css';
 import { Checkbox } from '../components/ui';
 import { IC, Icon } from '../components/Icon';
@@ -17,6 +17,7 @@ import { useSwipeRight } from './categoriesExtras';
 import {
   billDraftFromTx,
   FIXED_BILL_PRESETS,
+  historyForFixedBill,
   isTransferBillCategory,
   newBillId,
   suggestFixedBills,
@@ -27,12 +28,19 @@ import {
   type FixedBillSuggestion,
 } from '../lib/fixedBills';
 
+export type FixedBillFilter = 'all' | 'unpaid' | 'paid' | 'transfers';
+
 type Props = {
   cycle: Cycle;
   budget: Budget;
   allRaw: Transaction[];
   statuses: FixedBillStatus[];
   catOf: (t: Transaction) => string;
+  filter?: FixedBillFilter;
+  adding?: boolean;
+  onSetAdding?: (v: boolean) => void;
+  externalSourceTx?: TxView | null;
+  onClearExternalTx?: () => void;
   onShowTransactions: (cat: string) => void;
   onToast: (t: { text: string; undo?: () => void }) => void;
 };
@@ -55,15 +63,44 @@ const ORDER_RANK: Record<FixedBillStatus['status'], number> = {
  * Individual recurring fixed bills with real transaction verification, possible-match confirmation from
  * Buffer/Transfer, overdue tracking, manual linking, cash mark-paid, skip-this-cycle, and 1-step Quick Add.
  */
-export function FixedBillsList({ cycle, budget, allRaw, statuses, catOf, onShowTransactions, onToast }: Props) {
+export function FixedBillsList({
+  cycle,
+  budget,
+  allRaw,
+  statuses,
+  catOf,
+  filter = 'all',
+  adding: addingProp,
+  onSetAdding,
+  externalSourceTx,
+  onClearExternalTx,
+  onShowTransactions,
+  onToast,
+}: Props) {
   const { settings, update, full, short } = useSettings();
   const { subscriptions, setOverride } = useData();
   const [openId, setOpenId] = useState<string | null>(null);
-  const [adding, setAdding] = useState<boolean>(false);
+  const [internalAdding, setInternalAdding] = useState(false);
+  const adding = addingProp ?? internalAdding;
+  const setAdding = (next: boolean | ((v: boolean) => boolean)) => {
+    const val = typeof next === 'function' ? next(adding) : next;
+    if (onSetAdding) onSetAdding(val);
+    else setInternalAdding(val);
+  };
   const [presetDraft, setPresetDraft] = useState<Partial<FixedBill> | null>(null);
   const [pickingSourceTx, setPickingSourceTx] = useState(false);
   const [sourceQuery, setSourceQuery] = useState('');
   const [sourceTx, setSourceTx] = useState<TxView | null>(null);
+
+  useEffect(() => {
+    if (!externalSourceTx) return;
+    setSourceTx(externalSourceTx);
+    setPresetDraft(billDraftFromTx(externalSourceTx));
+    setPickingSourceTx(false);
+    setSourceQuery('');
+    if (onSetAdding) onSetAdding(true);
+    else setInternalAdding(true);
+  }, [externalSourceTx, onSetAdding]);
 
   const cycleId = toISO(cycle.start);
   const bills = settings.fixedBills ?? [];
@@ -237,8 +274,151 @@ export function FixedBillsList({ cycle, budget, allRaw, statuses, catOf, onShowT
       .slice(0, 15);
   }, [pickingSourceTx, sourceQuery, budget.txs]);
 
+  const filtered = useMemo(() => {
+    if (filter === 'unpaid') return ordered.filter(x => x.status === 'overdue' || x.status === 'due');
+    if (filter === 'paid') return ordered.filter(x => x.status === 'paid');
+    if (filter === 'transfers') return ordered.filter(x => isTransferBillCategory(x.bill.category));
+    return ordered;
+  }, [ordered, filter]);
+
+  const spendingRows = filter === 'all' ? filtered.filter(x => !isTransferBillCategory(x.bill.category)) : filtered;
+  const transferRows = filter === 'all' ? filtered.filter(x => isTransferBillCategory(x.bill.category)) : [];
+
+  const renderRow = (item: FixedBillStatus) => (
+    <FixedBillRow
+      key={item.bill.id}
+      item={item}
+      cycle={cycle}
+      txs={budget.txs}
+      allRaw={allRaw}
+      catOf={catOf}
+      open={openId === item.bill.id}
+      onToggle={() => setOpenId(openId === item.bill.id ? null : item.bill.id)}
+      onLink={tx => linkTx(item.bill, tx)}
+      onUnlink={() => unlinkTx(item.bill)}
+      onRejectPossible={txId => rejectPossible(item.bill, txId)}
+      onMarkPaid={paid => toggleManualPaid(item.bill, paid)}
+      onSkip={skip => toggleSkipped(item.bill, skip)}
+      onCycleAmount={amt => setCycleAmount(item.bill, amt)}
+      onUpdate={patch => updateBill(item.bill.id, patch)}
+      onDelete={() => deleteBill(item.bill)}
+      onShowTransactions={onShowTransactions}
+    />
+  );
+
+  const addDrawer = adding && (
+    <div className={s.billAdd} style={addingProp !== undefined ? { borderTop: 'none', borderBottom: '1px solid var(--line)' } : undefined}>
+      <div className={s.tplGrid}>
+        {FIXED_BILL_PRESETS.map(p => (
+          <button
+            key={p.label}
+            type="button"
+            className={s.tplOpt}
+            aria-pressed={!pickingSourceTx && !sourceTx && presetDraft?.name === p.name}
+            onClick={() => {
+              setSourceTx(null);
+              onClearExternalTx?.();
+              setPickingSourceTx(false);
+              setPresetDraft({ name: p.name, category: p.category, dueDay: p.dueDay, merchant: p.merchant, varies: p.varies });
+            }}
+          >
+            {p.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          className={s.tplOpt}
+          aria-pressed={!pickingSourceTx && !sourceTx && presetDraft !== null && !FIXED_BILL_PRESETS.some(p => p.name === presetDraft.name)}
+          onClick={() => {
+            setSourceTx(null);
+            onClearExternalTx?.();
+            setPickingSourceTx(false);
+            setPresetDraft({ name: '', category: 'Utilities', dueDay: cycle.today.getDate() });
+          }}
+        >
+          <Icon d={IC.plus} size={14} />
+          Custom
+        </button>
+        <button
+          type="button"
+          className={s.tplOpt}
+          aria-pressed={pickingSourceTx || !!sourceTx}
+          onClick={() => setPickingSourceTx(v => !v)}
+        >
+          <Icon d={IC.clip} size={14} />
+          From a transaction
+        </button>
+      </div>
+      {pickingSourceTx && (
+        <div className={s.fbPicker}>
+          <input
+            className={s.input}
+            value={sourceQuery}
+            onChange={e => setSourceQuery(e.target.value)}
+            placeholder="Search expenses or account transfers…"
+            aria-label="Search transaction to make recurring"
+          />
+          {sourceCandidates.length === 0 ? (
+            <span style={{ fontSize: 13, color: C.textMuted }}>No matching expenses or account transfers in this cycle.</span>
+          ) : (
+            <div className={s.fbPickerList}>
+              {sourceCandidates.map(t => {
+                const amt = t.isTransfer ? t.amount : t.net;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={s.fbPickerRow}
+                    onClick={() => {
+                      setSourceTx(t);
+                      setPresetDraft(billDraftFromTx(t));
+                      setPickingSourceTx(false);
+                      setSourceQuery('');
+                    }}
+                  >
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
+                      <span className={s.ellipsis} style={{ fontWeight: 500 }}>
+                        {tidyName(t.title)}
+                      </span>
+                      <span style={{ fontSize: 12, color: C.textMuted }}>
+                        {dayMonth(t.date)} · {categoryLabel(t.cat)} · {t.isTransfer && t.toAccount ? `${t.account} → ${t.toAccount}` : t.account}
+                      </span>
+                    </span>
+                    <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{short(amt)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+      <FixedBillForm
+        key={sourceTx ? `tx_${sourceTx.id}` : (presetDraft?.name ?? 'blank')}
+        initial={presetDraft ?? { name: '', category: 'Housing', dueDay: 1 }}
+        submitLabel="Add bill"
+        onSave={draft => {
+          addBill(draft, sourceTx);
+          setAdding(false);
+          setPresetDraft(null);
+          setSourceTx(null);
+          onClearExternalTx?.();
+          setPickingSourceTx(false);
+        }}
+        onCancel={() => {
+          setAdding(false);
+          setPresetDraft(null);
+          setSourceTx(null);
+          onClearExternalTx?.();
+          setPickingSourceTx(false);
+        }}
+      />
+    </div>
+  );
+
   return (
     <>
+      {addingProp !== undefined && addDrawer}
+
       {suggestions.length > 0 && (
         <div className={s.fbSuggest}>
           <div className={s.fbSuggestHead}>
@@ -290,146 +470,35 @@ export function FixedBillsList({ cycle, budget, allRaw, statuses, catOf, onShowT
         </div>
       )}
 
-      {ordered.map(item => (
-        <FixedBillRow
-          key={item.bill.id}
-          item={item}
-          cycle={cycle}
-          txs={budget.txs}
-          open={openId === item.bill.id}
-          onToggle={() => setOpenId(openId === item.bill.id ? null : item.bill.id)}
-          onLink={tx => linkTx(item.bill, tx)}
-          onUnlink={() => unlinkTx(item.bill)}
-          onRejectPossible={txId => rejectPossible(item.bill, txId)}
-          onMarkPaid={paid => toggleManualPaid(item.bill, paid)}
-          onSkip={skip => toggleSkipped(item.bill, skip)}
-          onCycleAmount={amt => setCycleAmount(item.bill, amt)}
-          onUpdate={patch => updateBill(item.bill.id, patch)}
-          onDelete={() => deleteBill(item.bill)}
-          onShowTransactions={onShowTransactions}
-        />
-      ))}
+      {spendingRows.map(renderRow)}
 
-      <button
-        type="button"
-        className={s.catFold}
-        aria-expanded={adding}
-        onClick={() => {
-          setAdding(v => !v);
-          setPresetDraft(null);
-          setSourceTx(null);
-          setPickingSourceTx(false);
-          setSourceQuery('');
-        }}
-        style={{ color: C.clayInk, fontWeight: 600, borderTop: ordered.length > 0 ? '1px solid var(--line)' : 'none' }}
-      >
-        <Icon d={IC.plus} size={14} />
-        Add a fixed bill
-      </button>
+      {transferRows.length > 0 && (
+        <>
+          <div className={s.fbGroupLabel}>Recurring transfers</div>
+          {transferRows.map(renderRow)}
+        </>
+      )}
 
-      {adding && (
-        <div className={s.billAdd}>
-          <div className={s.tplGrid}>
-            {FIXED_BILL_PRESETS.map(p => (
-              <button
-                key={p.label}
-                type="button"
-                className={s.tplOpt}
-                aria-pressed={!pickingSourceTx && !sourceTx && presetDraft?.name === p.name}
-                onClick={() => {
-                  setSourceTx(null);
-                  setPickingSourceTx(false);
-                  setPresetDraft({ name: p.name, category: p.category, dueDay: p.dueDay, merchant: p.merchant, varies: p.varies });
-                }}
-              >
-                {p.label}
-              </button>
-            ))}
-            <button
-              type="button"
-              className={s.tplOpt}
-              aria-pressed={!pickingSourceTx && !sourceTx && presetDraft !== null && !FIXED_BILL_PRESETS.some(p => p.name === presetDraft.name)}
-              onClick={() => {
-                setSourceTx(null);
-                setPickingSourceTx(false);
-                setPresetDraft({ name: '', category: 'Utilities', dueDay: cycle.today.getDate() });
-              }}
-            >
-              <Icon d={IC.plus} size={14} />
-              Custom
-            </button>
-            <button
-              type="button"
-              className={s.tplOpt}
-              aria-pressed={pickingSourceTx || !!sourceTx}
-              onClick={() => setPickingSourceTx(v => !v)}
-            >
-              <Icon d={IC.clip} size={14} />
-              From a transaction
-            </button>
-          </div>
-          {pickingSourceTx && (
-            <div className={s.fbPicker}>
-              <input
-                className={s.input}
-                value={sourceQuery}
-                onChange={e => setSourceQuery(e.target.value)}
-                placeholder="Search expenses or account transfers…"
-                aria-label="Search transaction to make recurring"
-              />
-              {sourceCandidates.length === 0 ? (
-                <span style={{ fontSize: 13, color: C.textMuted }}>No matching expenses or account transfers in this cycle.</span>
-              ) : (
-                <div className={s.fbPickerList}>
-                  {sourceCandidates.map(t => {
-                    const amt = t.isTransfer ? t.amount : t.net;
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        className={s.fbPickerRow}
-                        onClick={() => {
-                          setSourceTx(t);
-                          setPresetDraft(billDraftFromTx(t));
-                          setPickingSourceTx(false);
-                          setSourceQuery('');
-                        }}
-                      >
-                        <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
-                          <span className={s.ellipsis} style={{ fontWeight: 500 }}>
-                            {tidyName(t.title)}
-                          </span>
-                          <span style={{ fontSize: 12, color: C.textMuted }}>
-                            {dayMonth(t.date)} · {categoryLabel(t.cat)} · {t.isTransfer && t.toAccount ? `${t.account} → ${t.toAccount}` : t.account}
-                          </span>
-                        </span>
-                        <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{short(amt)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-          <FixedBillForm
-            key={sourceTx ? `tx_${sourceTx.id}` : (presetDraft?.name ?? 'blank')}
-            initial={presetDraft ?? { name: '', category: 'Housing', dueDay: 1 }}
-            submitLabel="Add bill"
-            onSave={draft => {
-              addBill(draft, sourceTx);
-              setAdding(false);
+      {addingProp === undefined && (
+        <>
+          <button
+            type="button"
+            className={s.catFold}
+            aria-expanded={adding}
+            onClick={() => {
+              setAdding(v => !v);
               setPresetDraft(null);
               setSourceTx(null);
               setPickingSourceTx(false);
+              setSourceQuery('');
             }}
-            onCancel={() => {
-              setAdding(false);
-              setPresetDraft(null);
-              setSourceTx(null);
-              setPickingSourceTx(false);
-            }}
-          />
-        </div>
+            style={{ color: C.clayInk, fontWeight: 600, borderTop: ordered.length > 0 ? '1px solid var(--line)' : 'none' }}
+          >
+            <Icon d={IC.plus} size={14} />
+            Add a fixed bill
+          </button>
+          {addDrawer}
+        </>
       )}
     </>
   );
@@ -439,6 +508,8 @@ function FixedBillRow({
   item,
   cycle,
   txs,
+  allRaw,
+  catOf,
   open,
   onToggle,
   onLink,
@@ -454,6 +525,8 @@ function FixedBillRow({
   item: FixedBillStatus;
   cycle: Cycle;
   txs: TxView[];
+  allRaw: Transaction[];
+  catOf: (t: Transaction) => string;
   open: boolean;
   onToggle: () => void;
   onLink: (tx: TxView) => void;
@@ -536,6 +609,11 @@ function FixedBillRow({
       })
       .slice(0, 12);
   }, [pickingTx, txQuery, txs, bill.merchant, bill.name, expected]);
+
+  const recentHistory = useMemo(
+    () => (open ? historyForFixedBill(bill, allRaw, catOf, 4) : []),
+    [open, bill, allRaw, catOf],
+  );
 
   return (
     <div className={s.mxBill} data-open={open || undefined}>
@@ -620,6 +698,32 @@ function FixedBillRow({
               <button type="button" className={s.textBtnSm} style={{ padding: 0 }} onClick={() => onShowTransactions(matchedTx.cat)}>
                 View
               </button>
+            </div>
+          )}
+
+          {recentHistory.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span className={s.mxSubHead}>Recent history</span>
+              <div className={s.fbTxList}>
+                {recentHistory.map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={s.fbTxRow}
+                    onClick={() => onShowTransactions(catOf(t))}
+                  >
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
+                      <span className={s.ellipsis} style={{ fontWeight: 500, fontSize: 13.5 }}>
+                        {tidyName(t.title)}
+                      </span>
+                      <span style={{ fontSize: 12, color: C.textMuted }}>
+                        {dayMonth(t.date)} · {t.account}{t.toAccount ? ` → ${t.toAccount}` : ''}
+                      </span>
+                    </span>
+                    <span style={{ fontWeight: 600, fontSize: 13.5, whiteSpace: 'nowrap' }}>{full(t.amount)}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
