@@ -1,7 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import s from '../styles/ui.module.css';
-import { AuthBackdrop } from './AuthBackdrop';
+import { AuthBackdrop, type TreatDrop } from './AuthBackdrop';
 import { Logo } from './Logo';
 import { supabase } from '../lib/supabase';
 import { storage } from '../lib/storage';
@@ -69,6 +69,29 @@ export function AuthGate({ children, loading }: { children: ReactNode; loading: 
   return <>{children}</>;
 }
 
+/** Stage wrapper: keeps the centered sign-in board fixed while outside clicks drop pet treats for Maxie. */
+function AuthShell({ children }: { children: ReactNode }) {
+  const [treatDrop, setTreatDrop] = useState<TreatDrop | null>(null);
+  const seqRef = useRef(0);
+
+  return (
+    <div
+      className={s.authStage}
+      onPointerDown={e => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        const target = e.target as HTMLElement | null;
+        if (target?.closest('[data-auth-board="true"]')) return;
+        setTreatDrop({ id: ++seqRef.current, x: e.clientX, y: e.clientY });
+      }}
+    >
+      <AuthBackdrop treatDrop={treatDrop} />
+      <div className={s.authBoard} data-auth-board="true">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /** Focused Change PIN screen shown right after logging in via a Forgot-PIN / Reset-PIN email link. */
 function ChangePinScreen({ email, onDone }: { email: string; onDone: () => void }) {
   const [pin1, setPin1] = useState('');
@@ -88,64 +111,61 @@ function ChangePinScreen({ email, onDone }: { email: string; onDone: () => void 
   };
 
   return (
-    <div className={s.authStage}>
-      <AuthBackdrop />
-      <div className={s.authBoard}>
-        <div className={s.authHeader}>
-          <Logo size={56} mood="happy" interactive followCursor cheer="Almost there!" />
-          <h1 style={{ margin: 0, fontSize: 24, fontFamily: 'var(--font-serif)', fontWeight: 500 }}>Set a new 6-digit PIN</h1>
-          <span style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-            {email ? `Signed in as ${email}. ` : ''}Choose a new PIN so you can sign in instantly next time.
-          </span>
-        </div>
-        <form
-          className={s.authForm}
-          onSubmit={e => {
-            e.preventDefault();
-            void saveNewPin();
-          }}
-        >
-          <input
-            className={s.input}
-            autoFocus
-            type="password"
-            inputMode="numeric"
-            autoComplete="new-password"
-            placeholder="New 6-digit PIN"
-            maxLength={PIN_LENGTH}
-            value={pin1}
-            onChange={e => {
-              setPin1(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH));
-              setErr('');
-            }}
-            aria-label="New 6-digit PIN"
-            style={{ letterSpacing: pin1 ? 6 : undefined, textAlign: 'center', fontWeight: pin1 ? 600 : undefined }}
-          />
-          <input
-            className={s.input}
-            type="password"
-            inputMode="numeric"
-            autoComplete="new-password"
-            placeholder="Confirm 6-digit PIN"
-            maxLength={PIN_LENGTH}
-            value={pin2}
-            onChange={e => {
-              setPin2(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH));
-              setErr('');
-            }}
-            aria-label="Confirm 6-digit PIN"
-            style={{ letterSpacing: pin2 ? 6 : undefined, textAlign: 'center', fontWeight: pin2 ? 600 : undefined }}
-          />
-          {err && <span className={s.error}>{err}</span>}
-          <button type="submit" className={s.btnPrimary} disabled={busy}>
-            {busy ? 'Saving PIN…' : 'Save new PIN & continue'}
-          </button>
-          <button type="button" className={s.textBtnSm} onClick={onDone} style={{ alignSelf: 'center' }}>
-            Skip for now
-          </button>
-        </form>
+    <AuthShell>
+      <div className={s.authHeader}>
+        <Logo size={56} mood="happy" interactive followCursor cheer="Almost there!" />
+        <h1 style={{ margin: 0, fontSize: 24, fontFamily: 'var(--font-serif)', fontWeight: 500 }}>Set a new 6-digit PIN</h1>
+        <span style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          {email ? `Signed in as ${email}. ` : ''}Choose a new PIN so you can sign in instantly next time.
+        </span>
       </div>
-    </div>
+      <form
+        className={s.authForm}
+        onSubmit={e => {
+          e.preventDefault();
+          void saveNewPin();
+        }}
+      >
+        <input
+          className={s.input}
+          autoFocus
+          type="password"
+          inputMode="numeric"
+          autoComplete="new-password"
+          placeholder="New 6-digit PIN"
+          maxLength={PIN_LENGTH}
+          value={pin1}
+          onChange={e => {
+            setPin1(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH));
+            setErr('');
+          }}
+          aria-label="New 6-digit PIN"
+          style={{ letterSpacing: pin1 ? 6 : undefined, textAlign: 'center', fontWeight: pin1 ? 600 : undefined }}
+        />
+        <input
+          className={s.input}
+          type="password"
+          inputMode="numeric"
+          autoComplete="new-password"
+          placeholder="Confirm 6-digit PIN"
+          maxLength={PIN_LENGTH}
+          value={pin2}
+          onChange={e => {
+            setPin2(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH));
+            setErr('');
+          }}
+          aria-label="Confirm 6-digit PIN"
+          style={{ letterSpacing: pin2 ? 6 : undefined, textAlign: 'center', fontWeight: pin2 ? 600 : undefined }}
+        />
+        {err && <span className={s.error}>{err}</span>}
+        <button type="submit" className={s.btnPrimary} disabled={busy}>
+          {busy ? 'Saving PIN…' : 'Save new PIN & continue'}
+        </button>
+        <button type="button" className={s.textBtnSm} onClick={onDone} style={{ alignSelf: 'center' }}>
+          Skip for now
+        </button>
+      </form>
+    </AuthShell>
   );
 }
 
@@ -434,14 +454,12 @@ function SignIn() {
   );
 
   return (
-    <div className={s.authStage}>
-      <AuthBackdrop />
-      <div className={s.authBoard}>
-        <div className={s.authHeader}>
-          <Logo size={64} mood={readyToGo ? 'happy' : 'calm'} interactive followCursor cheer={flow === 'signup' ? 'Nice to meet you!' : 'Welcome back!'} />
-          <h1 style={{ margin: 0, fontSize: 30, fontFamily: 'var(--font-serif)', fontWeight: 500 }}>Maxie</h1>
-          <span style={{ fontSize: 15, fontFamily: 'var(--font-serif)', color: 'var(--ink-muted)' }}>{hello}</span>
-        </div>
+    <AuthShell>
+      <div className={s.authHeader}>
+        <Logo size={64} mood={readyToGo ? 'happy' : 'calm'} interactive followCursor cheer={flow === 'signup' ? 'Nice to meet you!' : 'Welcome back!'} />
+        <h1 style={{ margin: 0, fontSize: 30, fontFamily: 'var(--font-serif)', fontWeight: 500 }}>Maxie</h1>
+        <span style={{ fontSize: 15, fontFamily: 'var(--font-serif)', color: 'var(--ink-muted)' }}>{hello}</span>
+      </div>
 
         {state === 'sent' ? (
           <div className={s.authSection}>
@@ -720,8 +738,7 @@ function SignIn() {
             )}
           </>
         )}
-      </div>
-    </div>
+    </AuthShell>
   );
 }
 
