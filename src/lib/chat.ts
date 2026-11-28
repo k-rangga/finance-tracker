@@ -350,10 +350,12 @@ export function chatContext({
     spent: r(b.spent),
     billsStillDue: r(b.fixedDue),
     left: r(left),
+    remainingAfterBills: r(left),
     variableAveragePerDay: r(b.velDay),
     projectedSpendByPayday: r(b.projTotal),
     ...(b.proj.oneOffs > 0 ? { oneOffsCountedOnce: r(b.proj.oneOffs) } : {}),
     perDayToFinishOnBudget: r(b.safeDay),
+    dailyVariableCapExcludesBills: r(b.safeDay),
     projectionInsight: {
       tier: insight.tier,
       oneOffExplains: insight.oneOffExplains,
