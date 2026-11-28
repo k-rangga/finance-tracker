@@ -27,6 +27,7 @@ function gmailStatus_() {
     last_synced_at: g.lastSyncedAt || null,
     last_sync_status: g.lastStatus || null,
     last_sync_count: g.lastCount == null ? null : g.lastCount,
+    paused: !!g.paused,
   };
 }
 
@@ -36,21 +37,62 @@ function listLabels_() {
     .sort((a, b) => a.localeCompare(b));
 }
 
-/** Fast dry-run count of matching emails in the last 62 days (for onboarding / GmailDialog preview). */
+function cleanSender_(from) {
+  const raw = String(from || '').trim();
+  const angle = raw.match(/^"?([^"<]+)"?\s*<([^>]+)>/);
+  if (angle) return angle[1].trim() || angle[2].trim();
+  return raw.replace(/[<>]/g, '').trim();
+}
+
+/** Fast dry-run count + metadata-only sample headers (up to 4 newest, never reading email bodies) for preview. */
 function previewGmail_(name) {
   const target = name || AUTO_LABEL;
   const token = canFetch_() ? ScriptApp.getOAuthToken() : null;
   const labelId = target === AUTO_LABEL ? null : labelIdByName_(token, target);
   const since = Math.floor((Date.now() - FIRST_SYNC_DAYS * 864e5) / 1000);
   const ids = listMessageIds_(token, labelId, since);
-  return { count: ids.length, label: target, days: FIRST_SYNC_DAYS };
+  const samples = [];
+  const sampleIds = ids.slice(0, 4);
+  if (sampleIds.length) {
+    try {
+      const msgs = token
+        ? UrlFetchApp.fetchAll(
+            sampleIds.map(id => ({
+              url: GMAIL_API + 'messages/' + id + '?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date',
+              headers: { Authorization: 'Bearer ' + token },
+              muteHttpExceptions: true,
+            })),
+          )
+            .filter(r => r.getResponseCode() === 200)
+            .map(r => JSON.parse(r.getContentText()))
+        : sampleIds.map(id =>
+            Gmail.Users.Messages.get('me', id, { format: 'metadata', metadataHeaders: ['From', 'Subject', 'Date'] }),
+          );
+      msgs.forEach(m => {
+        const headers = (m.payload && m.payload.headers) || [];
+        const h = k => (headers.filter(x => String(x.name || '').toLowerCase() === k)[0] || {}).value || '';
+        const subj = String(h('subject') || m.snippet || '').replace(/\s+/g, ' ').trim();
+        const from = cleanSender_(h('from'));
+        if (subj || from) samples.push({ from: from.slice(0, 50), subject: subj.slice(0, 90), date: h('date').slice(0, 16) });
+      });
+    } catch (e) {
+      // Sample header fetch is best-effort; never fail preview count.
+    }
+  }
+  return { count: ids.length, label: target, days: FIRST_SYNC_DAYS, samples: samples };
+}
+
+function setGmailPaused_(paused) {
+  const g = gmailState_();
+  setProps_('gmail', Object.assign({}, g, { paused: !!paused }));
+  return gmailStatus_();
 }
 
 /** Choose a label (or Smart Receipt Scan '__auto__') and import its last 62 days right away. */
 function chooseLabel_(name) {
   if (!name) throw new Error('Choose a Gmail label or Smart Receipt Scan first.');
   if (name !== AUTO_LABEL && !GmailApp.getUserLabelByName(name)) throw new Error('Gmail label "' + name + '" not found.');
-  setProps_('gmail', { label: name });
+  setProps_('gmail', { label: name, paused: false });
   return syncGmail_();
 }
 
@@ -70,7 +112,8 @@ function isSyncHour_(hour) {
  */
 function scheduledSync() {
   scheduledPerpSync_();
-  if (!gmailState_().label) return;
+  const g = gmailState_();
+  if (!g.label || g.paused) return;
   if (!isSyncHour_(Number(Utilities.formatDate(new Date(), TZ, 'H')))) return;
   const running = Number(PropertiesService.getScriptProperties().getProperty(RUN_FLAG) || 0);
   if (running && Date.now() - running < 6 * 60 * 1000) return;

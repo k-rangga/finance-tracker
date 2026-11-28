@@ -9,6 +9,7 @@ import { DEFAULT_INCOME, useSettings, type Settings } from '../lib/settings';
 import type { Currency } from '../lib/format';
 import { applyTheme, getTheme, type Theme } from '../lib/theme';
 import { useData } from '../lib/data';
+import { googleConnectUrl } from '../lib/gmail';
 import { onVercel } from '../lib/supabase';
 import { PIN_LENGTH, setPin, signOut } from './SignIn';
 
@@ -52,7 +53,8 @@ export function SettingsDialog({
     if (!problem) setPinDraft('');
   };
   /** Credit cards seen in your transactions, for their statement and due days. */
-  const { txRows } = useData();
+  const { txRows, gmail } = useData();
+  const [driveBusy, setDriveBusy] = useState(false);
   const cardNames = [...new Set([...txRows.map(r => r.account ?? ''), ...Object.keys(settings.cards ?? {})])].filter(a => a.startsWith('CC ')).sort();
   const setCard = (name: string, key: 'statement' | 'due', text: string) => {
     const v = Math.max(0, Math.min(31, Math.round(Number(text.replace(/\D/g, '')) || 0)));
@@ -289,6 +291,30 @@ export function SettingsDialog({
           />
         </label>
         <span className={s.setHint}>Receipts you attach are saved there as 20261031_id_Merchant.jpg.</span>
+        {onVercel && gmail.google_connected && !gmail.google_has_drive && (
+          <div className={s.gmTipBox} style={{ marginTop: 4 }}>
+            <span>
+              Drive permission is kept off by default during Gmail sync. To upload receipt photos/PDFs to a folder, grant narrow{' '}
+              <code>drive.file</code> access (only files Maxie creates).
+            </span>
+            <button
+              type="button"
+              className={s.btnOutlineSm}
+              style={{ alignSelf: 'flex-start' }}
+              disabled={driveBusy}
+              onClick={async () => {
+                setDriveBusy(true);
+                try {
+                  location.href = (await googleConnectUrl(true)).url;
+                } catch {
+                  setDriveBusy(false);
+                }
+              }}
+            >
+              {driveBusy ? 'Opening Google…' : 'Enable Drive receipt uploads'}
+            </button>
+          </div>
+        )}
       </Section>
 
       <Section title="Appearance">

@@ -318,7 +318,20 @@ async function devApi(action: string, p: unknown): Promise<unknown> {
       save();
       return { url: '/?google=connected' };
     case 'previewGmail':
-      return { count: 24, label: q.name || '__auto__', days: 62 };
+      return {
+        count: 24,
+        label: q.name || '__auto__',
+        days: 62,
+        samples: [
+          { from: 'BCA', subject: 'Internet Transaction Journal — Grand Lucky', date: 'Sat, 28 Nov' },
+          { from: 'Grab', subject: 'Your GrabFood E-Receipt · Saladstop', date: 'Fri, 27 Nov' },
+          { from: 'Tokopedia', subject: 'Pembayaran Tagihan Listrik Berhasil', date: 'Thu, 26 Nov' },
+        ],
+      };
+    case 'setGmailPaused':
+      d.gmailPaused = !!q.paused;
+      save();
+      return { paused: d.gmailPaused };
     case 'chooseLabel':
       d.label = q.name;
       save();

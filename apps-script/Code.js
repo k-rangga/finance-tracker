@@ -178,6 +178,7 @@ const ACTIONS = {
   listLabels: () => listLabels_(),
   previewGmail: p => previewGmail_(p && p.name),
   chooseLabel: p => chooseLabel_(p.name),
+  setGmailPaused: p => setGmailPaused_(p.paused),
   syncNow: () => syncGmail_(),
   syncRange: () => syncRange_(),
   reimportGmail: () => reimportGmail_(),

@@ -15,10 +15,12 @@ import {
   listLabels,
   previewGmail,
   reimportGmail,
+  setGmailPaused,
   SMART_FILTER_QUERY,
   syncAllBatches,
   syncNow,
   syncRange,
+  TRUSTED_RECEIPT_DOMAINS,
   type GmailPreview,
   type SyncResult,
 } from '../lib/gmail';
@@ -151,15 +153,32 @@ export function GmailDialog({ onClose, notice }: { onClose: () => void; notice?:
         )}
         <div className={s.gmTrustRow}>
           <span className={s.gmTrustPill}>
-            <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} /> Read-only Gmail
+            <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} /> Read-only Gmail (no Drive)
           </span>
           <span className={s.gmTrustPill}>
-            <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} /> Never sends or edits
+            <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} /> Token encrypted at rest
           </span>
           <span className={s.gmTrustPill}>
-            <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} /> Disconnect anytime
+            <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} /> Bodies never stored
+          </span>
+          <span className={s.gmTrustPill}>
+            <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} /> Revokes at Google on disconnect
           </span>
         </div>
+        <details className={s.gmPrivacyDetails}>
+          <summary>What Maxie can and cannot see</summary>
+          <div className={s.gmPrivacyBody}>
+            <span>
+              <strong>Scope requested:</strong> <code>gmail.readonly</code> only. Maxie cannot send, delete, or read Google Drive during Gmail connect.
+            </span>
+            <span>
+              <strong>Allowed senders:</strong> {TRUSTED_RECEIPT_DOMAINS.slice(0, 12).join(', ')}, and receipt subjects — personal emails outside these are ignored.
+            </span>
+            <span>
+              <strong>Storage:</strong> Only date, merchant, and amount are kept. Raw email bodies are discarded right after parsing.
+            </span>
+          </div>
+        </details>
         <div className={s.gmTipBox}>
           <span style={{ fontWeight: 600, color: C.text }}>Quick heads-up on Google&apos;s screen</span>
           <span>
@@ -188,12 +207,28 @@ export function GmailDialog({ onClose, notice }: { onClose: () => void; notice?:
       )}
 
       {gmail.label_name && (
-        <div className={s.note} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13.5 }}>
+        <div className={s.note} style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13.5 }}>
           <span>
             Connected to <strong>{gmail.google_email ?? 'your Google account'}</strong> · Source:{' '}
             <strong>{labelDisplay(gmail.label_name)}</strong> · Synced {syncedAgo(gmail.last_synced_at)}
             {gmail.last_sync_count != null && !lastError ? ` (${gmail.last_sync_count} emails checked)` : ''}
           </span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <span className={s.gmTrustPill}>
+              <Icon d={IC.check} size={11} strokeWidth={2.4} color={C.good} />{' '}
+              {gmail.google_has_drive ? 'gmail.readonly + drive.file' : 'gmail.readonly only'}
+            </span>
+            {onVercel && gmail.google_encrypted && (
+              <span className={s.gmTrustPill}>
+                <Icon d={IC.shield} size={11} strokeWidth={2.2} color={C.good} /> Token encrypted (AES-256)
+              </span>
+            )}
+            {gmail.paused && (
+              <span className={s.gmTrustPill} style={{ color: C.amberInk, borderColor: 'var(--amber)' }}>
+                Auto-sync paused (manual only)
+              </span>
+            )}
+          </div>
           {lastError && <span style={{ fontSize: 13, fontWeight: 600, color: C.redInk }}>Last sync failed: {lastError}</span>}
           {partial && <span style={{ fontSize: 13, fontWeight: 600, color: C.amberInk }}>Import still finishing in the background.</span>}
         </div>
@@ -255,17 +290,32 @@ export function GmailDialog({ onClose, notice }: { onClose: () => void; notice?:
       )}
 
       {!isBusySync && target && (
-        <div className={s.gmPreviewRow}>
-          <Icon d={IC.sparkle} size={13} color={C.accent600} />
-          <span>
-            {previewing
-              ? 'Checking matching receipt emails in the last 62 days…'
-              : preview
-                ? preview.count > 0
-                  ? `Found ${preview.count} matching ${preview.count === 1 ? 'email' : 'emails'} in the last ${preview.days} days.`
-                  : `No matching emails found in the last ${preview.days} days.`
-                : 'Syncs automatically every 2 hours (Jakarta time).'}
-          </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className={s.gmPreviewRow}>
+            <Icon d={IC.sparkle} size={13} color={C.accent600} />
+            <span>
+              {previewing
+                ? 'Checking matching receipt emails in the last 62 days…'
+                : preview
+                  ? preview.count > 0
+                    ? `Found ${preview.count} matching ${preview.count === 1 ? 'email' : 'emails'} in the last ${preview.days} days.`
+                    : `No matching emails found in the last ${preview.days} days.`
+                  : 'Syncs automatically every 2 hours (Jakarta time).'}
+            </span>
+          </div>
+          {!previewing && preview?.samples && preview.samples.length > 0 && (
+            <div className={s.gmSampleList}>
+              <span className={s.caption} style={{ fontWeight: 600 }}>
+                Sample matches (only date, merchant &amp; amount are saved; personal emails are ignored):
+              </span>
+              {preview.samples.map((sm, idx) => (
+                <div key={idx} className={s.gmSampleRow}>
+                  <span className={s.gmSampleFrom}>{sm.from}</span>
+                  <span className={s.gmSampleSubj}>{sm.subject}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -364,6 +414,23 @@ export function GmailDialog({ onClose, notice }: { onClose: () => void; notice?:
             className={s.btnGhost}
             disabled={!!busy}
             onClick={() =>
+              run('pause', async () => {
+                const nextPaused = !gmail.paused;
+                await setGmailPaused(nextPaused);
+                await refreshImports();
+                return nextPaused ? 'Automatic 2-hour sync paused. You can still sync manually anytime.' : 'Automatic 2-hour sync resumed.';
+              })
+            }
+          >
+            {gmail.paused ? 'Resume auto-sync' : 'Pause auto-sync'}
+          </button>
+        )}
+        {gmail.label_name && (
+          <button
+            type="button"
+            className={s.btnGhost}
+            disabled={!!busy}
+            onClick={() =>
               run('stop', async () => {
                 await disconnectGmail();
                 setPick('');
@@ -380,21 +447,38 @@ export function GmailDialog({ onClose, notice }: { onClose: () => void; notice?:
             type="button"
             className={s.btnGhost}
             disabled={!!busy}
-            title="Remove the app's access to your Gmail and Drive. Imported transactions are kept."
+            title="Revokes the app's access directly at Google and deletes the encrypted token. Imported transactions stay safe."
             onClick={() =>
               run('unlink', async () => {
                 await disconnectGmail();
                 await googleDisconnect();
                 await refreshImports();
                 setNeedsGoogle(true);
-                return '';
+                return 'Google access revoked and removed from Maxie.';
               })
             }
           >
-            Disconnect Google
+            Revoke &amp; disconnect Google
           </button>
         )}
       </div>
+      <details className={s.gmPrivacyDetails}>
+        <summary>Privacy &amp; permissions transparency</summary>
+        <div className={s.gmPrivacyBody}>
+          <span>
+            <strong>Active access:</strong> Read-only Gmail ({gmail.google_has_drive ? 'plus drive.file for uploaded receipts' : 'no Google Drive access'}). Cannot send or delete emails.
+          </span>
+          <span>
+            <strong>Allowed senders:</strong> {TRUSTED_RECEIPT_DOMAINS.slice(0, 12).join(', ')}, and Indonesian bank/e-receipt subjects.
+          </span>
+          <span>
+            <strong>Manage externally:</strong>{' '}
+            <a href="https://myaccount.google.com/permissions" target="_blank" rel="noreferrer">
+              myaccount.google.com/permissions
+            </a>
+          </span>
+        </div>
+      </details>
       {msg && (
         <span role="status" className={s.gmBannerGood}>
           {msg}

@@ -17,7 +17,8 @@ export async function POST(req: Request) {
 
     // Answered here instead of by the Apps Script code.
     if (action === 'quotes') return json({ ok: true, result: await quotes((payload?.items as { tk: string; mk: string }[]) || []) });
-    if (action === 'googleConnectUrl') return json({ ok: true, result: { url: authUrl(user.id, originOf(req)) } });
+    if (action === 'googleConnectUrl')
+      return json({ ok: true, result: { url: authUrl(user.id, originOf(req), { includeDrive: Boolean(payload?.includeDrive) }) } });
     if (action === 'googleDisconnect') {
       await disconnect(user.id);
       return json({ ok: true, result: true });

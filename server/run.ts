@@ -4,7 +4,7 @@
  */
 import { runAction, runFunction, tableSpec, type RunContext } from './engine.js';
 import { serviceKey, supabaseUrl } from './env.js';
-import { accessToken, hasGoogle } from './google.js';
+import { accessToken, googleConnectionInfo } from './google.js';
 import { SupabaseStore } from './store.js';
 import type { User } from './auth.js';
 
@@ -36,16 +36,23 @@ const GOOGLE = new Set(['listLabels', 'previewGmail', 'chooseLabel', 'syncNow', 
 
 export async function runForUser(user: User, action: string, payload: unknown, timeBudgetMs = 240_000) {
   const s = store(user.id);
-  const [google, connected] = await Promise.all([
+  const [google, connInfo] = await Promise.all([
     GOOGLE.has(action) ? accessToken(user.id) : Promise.resolve(null),
-    action === 'getState' || action === 'getImports' ? hasGoogle(user.id) : Promise.resolve(false),
+    action === 'getState' || action === 'getImports'
+      ? googleConnectionInfo(user.id)
+      : Promise.resolve({ connected: false, scope: '', hasDrive: false, encrypted: false }),
     s.prefetch(PREFETCH[action] ?? []),
   ]);
   const ctx: RunContext = { store: s, email: user.email, google, timeBudgetMs };
   // First load for a new user: the config tab's wallet-address row (Apps Script did this in doGet).
   if (action === 'getState') runFunction(ctx, 'ensurePerpConfig_');
   const result = runAction(ctx, action, payload);
-  if ((action === 'getState' || action === 'getImports') && result && result.gmail) result.gmail.google_connected = connected;
+  if ((action === 'getState' || action === 'getImports') && result && result.gmail) {
+    result.gmail.google_connected = connInfo.connected;
+    result.gmail.google_scopes = connInfo.scope;
+    result.gmail.google_has_drive = connInfo.hasDrive;
+    result.gmail.google_encrypted = connInfo.encrypted;
+  }
   return result;
 }
 
@@ -54,8 +61,8 @@ export async function hourlyForUser(user: User, timeBudgetMs: number) {
   const s = store(user.id);
   const [google] = await Promise.all([accessToken(user.id), s.prefetch([...GMAIL_TABLES, 'config', 'perp_fills', 'perp_funding'])]);
   const ctx: RunContext = { store: s, email: user.email, google, timeBudgetMs };
-  const gmail = JSON.parse(s.getProp('gmail') || '{}') as { label?: string; lastStatus?: string };
-  if (!google || !gmail.label) return runFunction(ctx, 'scheduledPerpSync_');
+  const gmail = JSON.parse(s.getProp('gmail') || '{}') as { label?: string; lastStatus?: string; paused?: boolean };
+  if (!google || !gmail.label || gmail.paused) return runFunction(ctx, 'scheduledPerpSync_');
   // An import that ran out of time carries on now; otherwise the usual schedule decides.
   if (gmail.lastStatus !== 'partial') return runFunction(ctx, 'scheduledSync');
   runFunction(ctx, 'scheduledPerpSync_');

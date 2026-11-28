@@ -14,6 +14,7 @@ import {
   listLabels,
   previewGmail,
   syncAllBatches,
+  TRUSTED_RECEIPT_DOMAINS,
   type GmailPreview,
   type SyncResult,
 } from '../lib/gmail';
@@ -362,15 +363,32 @@ export function OnboardingWizard({
               <>
                 <div className={s.gmTrustRow}>
                   <span className={s.gmTrustPill}>
-                    <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} /> Read-only Gmail
+                    <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} /> Read-only Gmail (no Drive)
                   </span>
                   <span className={s.gmTrustPill}>
-                    <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} /> Zero labels needed
+                    <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} /> Token encrypted at rest
                   </span>
                   <span className={s.gmTrustPill}>
-                    <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} /> Disconnect anytime
+                    <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} /> Bodies never stored
+                  </span>
+                  <span className={s.gmTrustPill}>
+                    <Icon d={IC.check} size={12} strokeWidth={2.4} color={C.good} /> Revokes at Google on disconnect
                   </span>
                 </div>
+                <details className={s.gmPrivacyDetails}>
+                  <summary>What Maxie can and cannot see</summary>
+                  <div className={s.gmPrivacyBody}>
+                    <span>
+                      <strong>Scope requested:</strong> <code>gmail.readonly</code> only — no Send, no Delete, no Drive.
+                    </span>
+                    <span>
+                      <strong>Allowed senders:</strong> {TRUSTED_RECEIPT_DOMAINS.slice(0, 12).join(', ')}, and receipt subjects — personal emails are skipped.
+                    </span>
+                    <span>
+                      <strong>Storage:</strong> Only date, merchant, and amount are saved. Raw email bodies are discarded right after parsing.
+                    </span>
+                  </div>
+                </details>
                 <div className={s.gmTipBox}>
                   <span style={{ fontWeight: 600, color: C.text }}>Quick heads-up on Google&apos;s screen</span>
                   <span>
@@ -441,17 +459,32 @@ export function OnboardingWizard({
                 )}
 
                 {!importing && target && (
-                  <div className={s.gmPreviewRow}>
-                    <Icon d={IC.sparkle} size={13} color={C.accent600} />
-                    <span>
-                      {previewing
-                        ? 'Scanning your last 62 days for bank & app receipts…'
-                        : preview
-                          ? preview.count > 0
-                            ? `Found ${preview.count} receipt ${preview.count === 1 ? 'email' : 'emails'} in the last ${preview.days} days — ready to import.`
-                            : `No matching receipt emails found in the last ${preview.days} days.`
-                          : 'Ready to import your last 62 days.'}
-                    </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div className={s.gmPreviewRow}>
+                      <Icon d={IC.sparkle} size={13} color={C.accent600} />
+                      <span>
+                        {previewing
+                          ? 'Scanning your last 62 days for bank & app receipts…'
+                          : preview
+                            ? preview.count > 0
+                              ? `Found ${preview.count} receipt ${preview.count === 1 ? 'email' : 'emails'} in the last ${preview.days} days — ready to import.`
+                              : `No matching receipt emails found in the last ${preview.days} days.`
+                            : 'Ready to import your last 62 days.'}
+                      </span>
+                    </div>
+                    {!previewing && preview?.samples && preview.samples.length > 0 && (
+                      <div className={s.gmSampleList}>
+                        <span className={s.caption} style={{ fontWeight: 600 }}>
+                          Sample matches (only date, merchant &amp; amount are saved; personal emails are ignored):
+                        </span>
+                        {preview.samples.map((sm, idx) => (
+                          <div key={idx} className={s.gmSampleRow}>
+                            <span className={s.gmSampleFrom}>{sm.from}</span>
+                            <span className={s.gmSampleSubj}>{sm.subject}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
