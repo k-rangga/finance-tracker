@@ -254,7 +254,7 @@ export function OnboardingWizard({
                 autoFocus
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder={isId ? 'contoh: Rangga' : 'e.g. Rangga'}
+                placeholder={isId ? 'contoh: John Doe' : 'e.g. John Doe'}
                 maxLength={40}
               />
             </label>

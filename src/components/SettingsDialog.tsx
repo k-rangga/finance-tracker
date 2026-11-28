@@ -14,7 +14,12 @@ import { googleConnectUrl } from '../lib/gmail';
 import { onVercel } from '../lib/supabase';
 import { PIN_LENGTH, setPin, signOut } from './SignIn';
 
-type NumKey = 'income' | 'savingsPct' | 'investPct' | 'emergencyFund' | 'emergencyTargetMonths' | 'giveFirstPct' | 'idxCap' | 'usCap' | 'cryptoCap' | 'fxRate';
+type NumKey = 'income' | 'savingsPct' | 'investPct' | 'emergencyFund' | 'giveFirstPct' | 'idxCap' | 'usCap' | 'cryptoCap' | 'fxRate';
+
+/** Quick picks; a saved value that isn't one of them is shown too, so nothing is silently changed. */
+const RUNWAY_MONTHS = [3, 6, 9, 12];
+const WARN_AT = [70, 80, 90];
+const withCurrent = (list: number[], cur: number) => (list.includes(cur) ? list : [...list, cur].sort((a, b) => a - b));
 
 export function SettingsDialog({
   onClose,
@@ -34,7 +39,6 @@ export function SettingsDialog({
     savingsPct: String(settings.savingsPct),
     investPct: String(settings.investPct),
     emergencyFund: String(settings.emergencyFund ?? 0),
-    emergencyTargetMonths: String(settings.emergencyTargetMonths ?? 6),
     giveFirstPct: String(settings.giveFirstPct ?? 0),
     idxCap: String(settings.idxCap),
     usCap: String(settings.usCap),
@@ -42,6 +46,8 @@ export function SettingsDialog({
     fxRate: String(settings.fxRate),
   }));
   const [err, setErr] = useState('');
+  /** Less-used settings (charity, alerts, investing caps, exchange rate) stay folded away until asked for. */
+  const [advanced, setAdvanced] = useState(false);
   /** Sign-in PIN (Vercel only): saved on its own, straight away, not with Save settings. */
   const [pinDraft, setPinDraft] = useState('');
   const [pinMsg, setPinMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -90,9 +96,14 @@ export function SettingsDialog({
       return { ...p, cards };
     });
   };
-  // Appearance is per device and applies at once (not part of Save).
-  const [theme, setTheme] = useState<Theme>(getTheme);
+  // Appearance previews live, but like everything else it only sticks when you press Save.
+  const [startTheme] = useState<Theme>(getTheme);
+  const [theme, setTheme] = useState<Theme>(startTheme);
   const THEMES: Record<string, Theme> = { Auto: 'auto', Light: 'light', Dark: 'dark' };
+  const close = () => {
+    if (theme !== startTheme) applyTheme(startTheme);
+    onClose();
+  };
 
   const setCurrency = (c: Currency) => {
     setD(p => ({ ...p, currency: c }));
@@ -100,15 +111,16 @@ export function SettingsDialog({
     if (Number(txt.income) === DEFAULT_INCOME[c === 'IDR' ? 'USD' : 'IDR']) setTxt(t => ({ ...t, income: String(DEFAULT_INCOME[c]) }));
   };
 
+  const n = (k: NumKey) => Number(txt[k].replace(/[^\d.]/g, '')) || 0;
+
   const save = () => {
-    const n = (k: NumKey) => Number(txt[k].replace(/[^\d.]/g, '')) || 0;
     const next: Settings = {
       ...d,
       income: n('income'),
       savingsPct: n('savingsPct'),
       investPct: n('investPct'),
       emergencyFund: Math.max(0, n('emergencyFund')),
-      emergencyTargetMonths: Math.max(1, Math.min(24, Math.round(n('emergencyTargetMonths') || 6))),
+      emergencyTargetMonths: Math.max(1, Math.min(24, Math.round(d.emergencyTargetMonths ?? 6))),
       giveFirstPct: Math.max(0, Math.min(50, n('giveFirstPct'))),
       idxCap: n('idxCap'),
       usCap: n('usCap'),
@@ -116,15 +128,25 @@ export function SettingsDialog({
       fxRate: n('fxRate'),
     };
     if (!(next.income > 0)) return setErr('Enter your monthly income.');
-    if (!(next.fxRate > 0)) return setErr('Enter the USD exchange rate.');
-    if ([next.savingsPct, next.investPct, next.idxCap, next.usCap, next.cryptoCap].some(v => !(v >= 0 && v <= 100))) return setErr('Percentages must be between 0 and 100.');
+    if ([next.savingsPct, next.investPct].some(v => !(v >= 0 && v <= 100))) return setErr('Percentages must be between 0 and 100.');
+    // The rest live under "More settings": open it so the field with the problem is on screen.
+    if (!(next.fxRate > 0)) {
+      setAdvanced(true);
+      return setErr('Enter the USD exchange rate.');
+    }
+    if ([next.idxCap, next.usCap, next.cryptoCap].some(v => !(v >= 0 && v <= 100))) {
+      setAdvanced(true);
+      return setErr('Investing caps must be between 0 and 100.');
+    }
     // Categories are edited in their own dialog; don't write back this dialog's (possibly stale) copies.
     const { customCategories: _c, limitOverrides: _l, colorOverrides: _o, ...rest } = next;
     update(rest);
+    applyTheme(theme);
     onClose();
   };
 
-  const num = (k: NumKey, label: string, suffix?: string) => (
+  /** A number field; `note` is a live line under it, such as what a percentage comes to in money. */
+  const num = (k: NumKey, label: string, suffix?: string, note?: string) => (
     <label className={s.field}>
       <span>
         {label}
@@ -139,6 +161,7 @@ export function SettingsDialog({
           setErr('');
         }}
       />
+      {note && <span className={s.setFieldNote}>{note}</span>}
     </label>
   );
 
@@ -147,37 +170,40 @@ export function SettingsDialog({
   const setRule = (patch: Partial<PaydayRule>) => setD(p => ({ ...p, payday: { ...DEFAULT_PAYDAY, ...p.payday, ...patch } }));
   const WEEKEND: Record<string, PaydayRule['weekend']> = { 'Friday before': 'before', 'Monday after': 'after', 'Keep the date': 'same' };
   const weekendLabel = Object.keys(WEEKEND).find(k => WEEKEND[k] === rule.weekend) ?? 'Friday before';
-  // Category limits are your spending budget; with the savings target they must fit in your income.
-  const budgetPct = Math.round(sum(CATEGORIES.map(c => c.limitPct)));
-  const savePct = Number(txt.savingsPct.replace(/[^\d.]/g, '')) || 0;
-  const planned = budgetPct + savePct;
+
+  // How income splits: category limits are the spending budget, savings (investing included) comes off the top.
+  const income = n('income');
+  const ofIncome = (pct: number) => full(Math.round((income * pct) / 100));
+  const spendPct = Math.round(sum(CATEGORIES.map(c => c.limitPct)));
+  const savePct = n('savingsPct');
+  const investPct = Math.min(n('investPct'), savePct);
+  const planned = spendPct + savePct;
+  const leftPct = Math.max(0, 100 - planned);
+  const scale = Math.max(100, planned); // when over 100%, the bar shrinks to fit instead of overflowing
+  const segs = [
+    { label: 'Spending limits', pct: spendPct, color: 'var(--clay)' },
+    { label: 'Savings', pct: savePct, color: 'var(--good)' },
+    { label: 'Unplanned', pct: leftPct, color: 'var(--border-strong)' },
+  ];
+
+  // Safety net: how many months of planned spending the emergency fund covers.
+  const monthlySpend = (income * spendPct) / 100;
+  const covered = monthlySpend > 0 ? n('emergencyFund') / monthlySpend : 0;
+  const runway = d.emergencyTargetMonths ?? 6;
 
   return (
-    <Modal title="Settings" onClose={onClose} width={600}>
-      <Section title="You">
+    <Modal title="Settings" onClose={close} width={600}>
+      <Section title="Profile">
         <div className={s.setGrid}>
           <label className={s.field}>
             <span>Name</span>
-            <input className={s.input} value={d.name} onChange={e => setD(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Rangga" maxLength={40} />
+            <input className={s.input} value={d.name} onChange={e => setD(p => ({ ...p, name: e.target.value }))} placeholder="e.g. John Doe" maxLength={40} />
           </label>
           <label className={s.field}>
             <span>City</span>
             <input className={s.input} value={d.city ?? ''} onChange={e => setD(p => ({ ...p, city: e.target.value }))} placeholder="e.g. Jakarta Selatan" maxLength={60} />
           </label>
         </div>
-        <label className={s.field} style={{ marginTop: 10 }}>
-          <span>Names on your bank accounts</span>
-          <input
-            className={s.input}
-            value={d.ownAccountNames ?? ''}
-            onChange={e => setD(p => ({ ...p, ownAccountNames: e.target.value }))}
-            placeholder="e.g. Kalaka Rangga, Kalaka Rangga S, 5210"
-            maxLength={140}
-          />
-        </label>
-        <span className={s.setHint}>
-          Comma-separated full names or last 4 digits on your bank accounts — transfers to yourself are automatically marked as Transfer (Rp 0 spending) so you don&apos;t have to remove them.
-        </span>
         <Row label="Maxie speaks">
           <Options
             label="Maxie speaks"
@@ -186,13 +212,34 @@ export function SettingsDialog({
             onChange={v => setD(p => ({ ...p, maxieLanguage: v === 'Bahasa Indonesia' ? 'id' : 'en' }))}
           />
         </Row>
-        <span className={s.setHint}>Used for greetings and plan checks. Ask Maxie chat defaults to English and automatically answers in Bahasa Indonesia when you chat in Indonesian.</span>
+        <span className={s.setHint}>For greetings and plan checks. In chat, Maxie replies in whichever language you write in.</span>
         <Row label="Currency">
           <Options label="Currency" items={['IDR', 'USD'] as const} value={d.currency} onChange={setCurrency} />
         </Row>
       </Section>
 
-      <Section title="Income and payday">
+      <Section title="Money plan">
+        <div className={s.setPlan} aria-label="How your income is planned">
+          <div className={s.setPlanBar}>
+            {segs.map(g => g.pct > 0 && <span key={g.label} style={{ width: `${(g.pct / scale) * 100}%`, background: g.color }} />)}
+          </div>
+          <div className={s.setPlanLegend}>
+            {segs.map(
+              g =>
+                (g.pct > 0 || g.label !== 'Unplanned') && (
+                  <span key={g.label}>
+                    <i style={{ background: g.color }} />
+                    {g.label} <b>{Math.round(g.pct)}%</b>
+                  </span>
+                ),
+            )}
+          </div>
+          {planned > 100 && (
+            <span className={s.setHint} style={{ color: 'var(--amber-ink)', fontWeight: 600 }}>
+              That's {Math.round(planned)}% of your income. Lower the savings target or a category limit to fit.
+            </span>
+          )}
+        </div>
         <div className={s.setGrid}>
           {num('income', 'Monthly income', d.currency)}
           <div className={s.field}>
@@ -208,56 +255,25 @@ export function SettingsDialog({
             />
           </div>
         </div>
-        <Row label="On a weekend, paid">
-          <Options label="On a weekend, paid" items={Object.keys(WEEKEND)} value={weekendLabel} onChange={k => setRule({ weekend: WEEKEND[k] })} />
+        <Row label="If payday is a weekend">
+          <Options label="If payday is a weekend" items={Object.keys(WEEKEND)} value={weekendLabel} onChange={k => setRule({ weekend: WEEKEND[k] })} />
         </Row>
-        <span className={s.setHint}>Next payday {dayLabel(nextPaydayFor(rule, startOfToday()))}. Each cycle runs from one payday to the day before the next.</span>
-      </Section>
-
-      <Section title="Saving and alerts">
+        <span className={s.setHint}>Next payday is {dayLabel(nextPaydayFor(rule, startOfToday()))}.</span>
         <div className={s.setGrid}>
-          {num('savingsPct', 'Savings target', '% of income')}
-          {num('investPct', 'Invest each payday', '% of income')}
+          {num('savingsPct', 'Save each payday', '% of income', `${ofIncome(savePct)} a month`)}
+          {num('investPct', 'Of which, invest', '% of income', `${ofIncome(investPct)} a month`)}
         </div>
-        <div className={s.setGrid} style={{ marginTop: 10 }}>
-          {num('emergencyFund', 'Emergency fund', d.currency)}
-          {num('emergencyTargetMonths', 'Runway goal', 'months')}
-        </div>
-        <div className={s.setGrid} style={{ marginTop: 10 }}>
-          {num('giveFirstPct', 'Give first / charity', '% of income')}
-        </div>
-        <span className={s.setHint}>
-          Emergency fund powers your survival runway (6 months is the urban Indonesia benchmark). Give first tracks optional zakat/charity before everyday spending.
-        </span>
-        <span className={s.setHint} style={planned > 100 ? { color: 'var(--amber-ink)', fontWeight: 600 } : undefined}>
-          Category limits {budgetPct}% and savings {savePct}% make {planned}% of income
-          {planned > 100 ? '. Lower the savings target or a category limit to fit.' : planned < 100 ? `, ${100 - planned}% left unplanned.` : '.'}
-        </span>
-        <label className={s.field}>
-          <span>
-            Warn me when a category reaches <strong style={{ color: 'var(--text)' }}>{d.warnAt}%</strong> of its limit
-          </span>
-          <input
-            type="range"
-            min={60}
-            max={95}
-            step={5}
-            value={d.warnAt}
-            onChange={e => setD(p => ({ ...p, warnAt: Number(e.target.value) }))}
-            style={{ accentColor: 'var(--clay)', minHeight: 32 }}
-          />
-        </label>
-      </Section>
-
-      <Section title="Your categories">
         {settings.customCategories.length === 0 ? (
-          <span className={s.setHint}>None yet. Add one from a transaction's category menu.</span>
+          <span className={s.setHint}>Want your own category? Add one from any transaction&apos;s category menu.</span>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {settings.customCategories.map((cc, i) => {
+            <span className={s.setRowLabel} style={{ marginTop: 4 }}>
+              Your categories
+            </span>
+            {settings.customCategories.map(cc => {
               const c = toCategory(cc);
               return (
-                <div key={c.name} className={s.setListRow} style={i === 0 ? { borderTop: 'none' } : undefined}>
+                <div key={c.name} className={s.setListRow}>
                   <IconChip d={c.icon} bg={c.tint} ink={c.ink} size={32} iconSize={15} />
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', minWidth: 0 }}>
                     <span style={{ fontSize: 14, fontWeight: 600 }}>{c.name}</span>
@@ -275,37 +291,67 @@ export function SettingsDialog({
         )}
       </Section>
 
-      {cardNames.length > 0 && (
-        <Section title="Credit cards">
-          <span className={s.setHint}>From your card statement. Installment payments land on the statement day, so they count in the right cycle.</span>
-          {cardNames.map((name, i) => (
-            <div key={name} className={s.setCardRow} style={i === 0 ? { borderTop: 'none', paddingTop: 0 } : undefined}>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>{name}</span>
-              <label className={s.field}>
-                <span>Statement day</span>
-                <input className={s.input} inputMode="numeric" placeholder="e.g. 18" value={d.cards?.[name]?.statement || ''} onChange={e => setCard(name, 'statement', e.target.value)} />
-              </label>
-              <label className={s.field}>
-                <span>Due day</span>
-                <input className={s.input} inputMode="numeric" placeholder="e.g. 3" value={d.cards?.[name]?.due || ''} onChange={e => setCard(name, 'due', e.target.value)} />
-              </label>
-            </div>
-          ))}
-        </Section>
-      )}
-
-      <Section title="Investing">
-        <div className={s.setGrid3}>
-          {num('idxCap', 'IDX cap', '%')}
-          {num('usCap', 'US cap', '%')}
-          {num('cryptoCap', 'Crypto cap', '%')}
-        </div>
-        {num('fxRate', 'USD exchange rate', 'Rp per $1')}
+      <Section title="Safety net">
+        {num(
+          'emergencyFund',
+          'Emergency fund',
+          d.currency,
+          monthlySpend <= 0
+            ? undefined
+            : covered <= 0
+              ? 'Add what you have set aside to see how long it would last'
+              : `Covers about ${covered < 10 ? covered.toFixed(1) : Math.round(covered)} months of planned spending`,
+        )}
+        <Row label="Aim to cover">
+          <Options
+            label="Aim to cover"
+            items={withCurrent(RUNWAY_MONTHS, runway)}
+            value={runway}
+            render={m => `${m} months`}
+            onChange={m => setD(p => ({ ...p, emergencyTargetMonths: m }))}
+          />
+        </Row>
+        <span className={s.setHint}>6 months is a common goal for city living.</span>
       </Section>
 
-      <Section title="Receipts">
+      <Section title="Connections">
         <label className={s.field}>
-          <span>Google Drive folder link</span>
+          <span>Other names on your bank accounts</span>
+          <input
+            className={s.input}
+            value={d.ownAccountNames ?? ''}
+            onChange={e => setD(p => ({ ...p, ownAccountNames: e.target.value }))}
+            placeholder="e.g. John Doe, John D, 5210"
+            maxLength={140}
+          />
+        </label>
+        <span className={s.setHint}>
+          Your name is already included. Add other spellings or an account&apos;s last 4 digits, separated by commas. Money moved between your own accounts
+          counts as a transfer, not spending.
+        </span>
+        {cardNames.length > 0 && (
+          <>
+            <span className={s.setRowLabel} style={{ marginTop: 4 }}>
+              Credit cards
+            </span>
+            <span className={s.setHint}>Statement and due days from your card bill, so installments land in the right cycle.</span>
+            {cardNames.map((name, i) => (
+              <div key={name} className={s.setCardRow} style={i === 0 ? { borderTop: 'none', paddingTop: 0 } : undefined}>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{name}</span>
+                <label className={s.field}>
+                  <span>Statement day</span>
+                  <input className={s.input} inputMode="numeric" placeholder="e.g. 18" value={d.cards?.[name]?.statement || ''} onChange={e => setCard(name, 'statement', e.target.value)} />
+                </label>
+                <label className={s.field}>
+                  <span>Due day</span>
+                  <input className={s.input} inputMode="numeric" placeholder="e.g. 3" value={d.cards?.[name]?.due || ''} onChange={e => setCard(name, 'due', e.target.value)} />
+                </label>
+              </div>
+            ))}
+          </>
+        )}
+        <label className={s.field} style={{ marginTop: 4 }}>
+          <span>Receipts folder (Google Drive link)</span>
           <input
             className={s.input}
             value={d.receiptsFolder}
@@ -314,12 +360,11 @@ export function SettingsDialog({
             inputMode="url"
           />
         </label>
-        <span className={s.setHint}>Receipts you attach are saved there as 20261031_id_Merchant.jpg.</span>
+        <span className={s.setHint}>Photos and PDFs you attach to transactions are saved here.</span>
         {onVercel && gmail.google_connected && !gmail.google_has_drive && (
           <div className={s.gmTipBox} style={{ marginTop: 4 }}>
             <span>
-              Drive permission is kept off by default during Gmail sync. To upload receipt photos/PDFs to a folder, grant narrow{' '}
-              <code>drive.file</code> access (only files Maxie creates).
+              To save receipts to Drive, Maxie needs permission to create files there. It can only see the files it creates.
             </span>
             <button
               type="button"
@@ -335,16 +380,16 @@ export function SettingsDialog({
                 }
               }}
             >
-              {driveBusy ? 'Opening Google…' : 'Enable Drive receipt uploads'}
+              {driveBusy ? 'Opening Google…' : 'Allow Drive uploads'}
             </button>
           </div>
         )}
       </Section>
 
-      <Section title="Appearance">
-        <Row label="On this device">
+      <Section title="App">
+        <Row label="Theme on this device">
           <Options
-            label="Appearance"
+            label="Theme"
             items={['Auto', 'Light', 'Dark'] as const}
             value={(Object.keys(THEMES) as ('Auto' | 'Light' | 'Dark')[]).find(k => THEMES[k] === theme) ?? 'Auto'}
             onChange={k => {
@@ -361,8 +406,43 @@ export function SettingsDialog({
             onChange={v => setD(p => ({ ...p, quietMode: v === 'Quiet' }))}
           />
         </Row>
-        <span className={s.setHint}>Quiet hides confetti, streaks, and win badges when you just want a calm, minimal check-in.</span>
+        <span className={s.setHint}>Quiet turns off confetti, streaks, and badges.</span>
       </Section>
+
+      <section className={s.setSection} aria-label="More settings">
+        <button type="button" className={s.setAdvBtn} aria-expanded={advanced} onClick={() => setAdvanced(v => !v)}>
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span className={s.setTitle}>More settings</span>
+            <span className={s.setHint}>Charity, spending alerts, investing caps, exchange rate</span>
+          </span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+        {advanced && (
+          <>
+            {num('giveFirstPct', 'Give first / charity', '% of income', n('giveFirstPct') > 0 ? `${ofIncome(n('giveFirstPct'))} a month, set aside before everyday spending` : 'Set aside before everyday spending, e.g. zakat')}
+            <Row label="Warn me when a category hits">
+              <Options
+                label="Warn me when a category hits"
+                items={withCurrent(WARN_AT, d.warnAt)}
+                value={d.warnAt}
+                render={v => `${v}%`}
+                onChange={v => setD(p => ({ ...p, warnAt: v }))}
+              />
+            </Row>
+            <span className={s.setRowLabel} style={{ marginTop: 4 }}>
+              Investing caps (% of portfolio)
+            </span>
+            <div className={s.setGrid3}>
+              {num('idxCap', 'Indonesia (IDX)')}
+              {num('usCap', 'US stocks')}
+              {num('cryptoCap', 'Crypto')}
+            </div>
+            {num('fxRate', 'USD exchange rate', 'Rp per $1')}
+          </>
+        )}
+      </section>
 
       <Section title="Account">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -461,14 +541,13 @@ export function SettingsDialog({
           </div>
         )}
       </Section>
-
       <div className={s.setFoot}>
         {err && <span className={s.error}>{err}</span>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <button type="button" className={s.btnPrimary} onClick={save}>
             Save settings
           </button>
-          <button type="button" className={s.btnGhost} onClick={onClose}>
+          <button type="button" className={s.btnGhost} onClick={close}>
             Cancel
           </button>
           {onReplayOnboarding && (
@@ -477,7 +556,7 @@ export function SettingsDialog({
               className={s.textBtnSm}
               style={{ marginLeft: 'auto' }}
               onClick={() => {
-                onClose();
+                close();
                 onReplayOnboarding();
               }}
             >

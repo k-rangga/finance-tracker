@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { getCycle } from './cycle';
 import { projectCycles } from './projection';
+import { toISO } from './format';
 import type { FixedBill } from './fixedBills';
 import type { PlanView } from './installments';
 
@@ -122,7 +123,7 @@ test('compounds investing returns and honors future cycle plans', () => {
     regularInvest: 10_000_000,
     annualReturn: 0.08,
     cyclePlans: {
-      [nextCycle.start.toISOString().slice(0, 10)]: {
+      [toISO(nextCycle.start)]: {
         extras: [{ id: 'e1', name: 'THR', amount: 10_000_000 }],
       },
     },

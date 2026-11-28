@@ -5009,7 +5009,8 @@ button.sxTile:disabled {
 }
 .setFoot {
   position: sticky;
-  bottom: 0;
+  /* Sticky stops at the overlay's 40px padding; reach past it so the bar meets the window's bottom edge. */
+  bottom: -40px;
   z-index: 2;
   margin: 8px -24px -24px;
   padding: 16px 24px;
@@ -5021,7 +5022,85 @@ button.sxTile:disabled {
   background: var(--surface);
   border-top: 1px solid var(--divider);
 }
+/* Settings: how income splits — a stacked bar with a legend underneath. */
+.setPlan {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface-100);
+  border: 1px solid var(--divider);
+}
+.setPlanBar {
+  display: flex;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--divider);
+}
+.setPlanBar > span {
+  height: 100%;
+  transition: width 0.25s ease;
+}
+.setPlanLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-muted);
+}
+.setPlanLegend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.setPlanLegend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.setPlanLegend b {
+  color: var(--text);
+  font-weight: 600;
+}
+.setFieldNote {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.setAdvBtn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.setAdvBtn svg {
+  transition: transform 0.2s ease;
+  color: var(--text-muted);
+}
+.setAdvBtn[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
 @media (max-width: 759px) {
+  /* On phones the sheet itself scrolls, with 20px padding plus the home-bar inset: match both so the bar sits flush. */
+  .setFoot {
+    bottom: calc(-20px - env(safe-area-inset-bottom));
+    margin: 8px -20px calc(-20px - env(safe-area-inset-bottom));
+    padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
+    border-radius: 0;
+  }
   .setGrid,
   .setGrid3 {
     grid-template-columns: minmax(0, 1fr);
