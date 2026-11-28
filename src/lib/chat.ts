@@ -156,6 +156,18 @@ export function buildLocalCompactedSummary(previousSummary: string, dropped: Cha
   return combined.join('\n').slice(0, 1100);
 }
 
+/** Automatically decide whether a question needs Deep reasoning (3.6 Flash) vs Quick lookup (3.5 Flash-Lite). */
+const DEEP_QUESTION_RE =
+  /\b(plan|strategy|optimize|compare|comparison|analy[sz]e|breakdown|audit|review|why am i|explain|how should i|how can i|recommend|suggest|rebalance|restructure|allocate|allocation|portfolio|runway|freedom|rat race|retire|invest|installment|cicilan|debt|windfall|bonus|thr|stress test|compound|opportunity cost|what if|projection|forecast|scenario|local price|jakarta|rencana|strategi|banding|analisa|analisis|kenapa|jelaskan|sarankan|rekomendasi|alokasi|dana darurat|bebas finansial|proyeksi|simulasi|kalau aku|seandainya|sort.*buffer|rapikan.*buffer)\b/i;
+
+export function shouldUseDeepMode(question: string, hasWhatIf = false): boolean {
+  if (hasWhatIf) return true;
+  const trimmed = String(question || '').trim();
+  if (trimmed.length >= 110) return true;
+  if ((trimmed.match(/\?/g) || []).length >= 2) return true;
+  return DEEP_QUESTION_RE.test(trimmed);
+}
+
 /** `deep`: deeper reasoning + local price context (Free Tier: 3.6 Flash → 3.5 Flash-Lite → 3.8 Flash). */
 export const askGemini = (messages: ChatMessage[], context: object, deep = false, summary?: string) =>
   run<ChatAnswer>('askGemini', {
@@ -194,15 +206,15 @@ const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'S
 
 /**
  * What Gemini sees with each question: this cycle's numbers, savings & card bills, pre-aggregated top merchants,
- * categories (with sub-categories and last cycle at the same point), bills still due, and recent transactions.
- * Notes only when you allow them.
+ * categories (with sub-categories and last cycle at the same point), bills still due, recent transactions,
+ * and your personal transaction notes automatically so answers stay tailored.
  */
 export function chatContext({
   cycle,
   budget: b,
   settings,
   notes,
-  withNotes,
+  withNotes = true,
   fixedBills,
   wealth,
   impulse,
@@ -216,7 +228,7 @@ export function chatContext({
   budget: Budget;
   settings: Settings;
   notes: Record<string, string>;
-  withNotes: boolean;
+  withNotes?: boolean;
   fixedBills?: FixedBillStatus[];
   wealth?: WealthSnapshot;
   impulse?: ImpulseSummary;

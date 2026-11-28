@@ -15,6 +15,7 @@ import {
   estimateTokens,
   extractFollowUps,
   modelLabel,
+  shouldUseDeepMode,
   type AppliedActionState,
   type AppliedActionUndo,
   type AppliedScenarioState,
@@ -325,8 +326,8 @@ type Props = {
 };
 
 /**
- * Chat with Maxie about this cycle. Persists across panel close/reopen within this browser session, supports Quick vs
- * Deep reasoning modes, context-aware starters, one-tap follow-up chips, and safe Apply/Undo action cards.
+ * Chat with Maxie about this cycle. Automatically picks Quick vs Deep reasoning per question, always weaves in your
+ * transaction notes, silently auto-compacts older turns into memory at 60% context, and persists Apply/Undo cards.
  */
 export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortDip, lifestyleCreep, pyfStreak, ask, pageMode, onClose }: Props) {
   const { settings, update, short } = useSettings();
@@ -334,11 +335,9 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
   const sessionKey = 'maxie.chat.' + toISO(cycle.start);
   const initial = useMemo(() => readSession(sessionKey), [sessionKey]);
   const [messages, setMessages] = useState<ChatMessage[]>(() => initial.messages);
-  const [deep, setDeep] = useState<boolean>(() => !!initial.deep);
+  const [thinkingDeep, setThinkingDeep] = useState(false);
   const [summary, setSummary] = useState<string>(() => initial.summary ?? '');
   const [compactedCount, setCompactedCount] = useState<number>(() => initial.compactedCount ?? 0);
-  const [compacting, setCompacting] = useState(false);
-  const [tokenSample, setTokenSample] = useState<{ activeCount: number; compactedCount: number; tokens: number } | null>(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<{ kind: 'no_key' | 'api' | 'blocked' | 'quota' | 'network' | 'slow'; detail?: string } | null>(null);
@@ -351,43 +350,10 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
   const recRef = useRef<{ stop: () => void } | null>(null);
   /** The question being answered; an answer for an older one (after Stop, timeout, or New chat) is dropped. */
   const asking = useRef(0);
-  const [withNotes, setWithNotes] = useState(false);
   const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
 
   const isId = settings.maxieLanguage === 'id';
-  const liveContext = useMemo(
-    () =>
-      chatContext({
-        cycle,
-        budget,
-        settings,
-        notes,
-        withNotes,
-        fixedBills,
-        wealth,
-        impulse,
-        fortDip,
-        lifestyleCreep,
-        pyfStreak,
-      }),
-    [cycle, budget, settings, notes, withNotes, fixedBills, wealth, impulse, fortDip, lifestyleCreep, pyfStreak],
-  );
-  const activeMessages = useMemo(() => messages.slice(compactedCount), [messages, compactedCount]);
-  const reportedTokensForActive =
-    tokenSample && tokenSample.activeCount === activeMessages.length && tokenSample.compactedCount === compactedCount
-      ? tokenSample.tokens
-      : null;
-  const ctxUsage = useMemo(
-    () =>
-      estimateChatContextUsage({
-        context: liveContext,
-        summary,
-        activeMessages,
-        reportedPromptTokens: reportedTokensForActive,
-      }),
-    [liveContext, summary, activeMessages, reportedTokensForActive],
-  );
   const starters = useMemo(() => buildStarters(cycle, budget, short, isId, wealth), [cycle, budget, short, isId, wealth]);
   const openingPulse = useMemo(() => buildOpeningPulse(cycle, budget, short, isId), [cycle, budget, short, isId]);
   const left = budget.budget - budget.spent - budget.fixedDue;
@@ -461,8 +427,8 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
   };
 
   useEffect(() => {
-    writeSession(sessionKey, { messages, deep, summary, compactedCount });
-  }, [sessionKey, messages, deep, summary, compactedCount]);
+    writeSession(sessionKey, { messages, summary, compactedCount });
+  }, [sessionKey, messages, summary, compactedCount]);
 
   const compactNow = async (
     msgs: ChatMessage[],
@@ -475,7 +441,6 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
     const toFold = msgs.slice(curCompacted, nextCompacted);
     if (!toFold.length) return { summary: curSummary, compactedCount: curCompacted };
 
-    setCompacting(true);
     let nextSummary = '';
     try {
       const res = await Promise.race([
@@ -486,20 +451,17 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
         nextSummary = res.summary.trim();
       }
     } catch {
-      // Fallback handled cleanly below so compaction never blocks the chat.
-    } finally {
-      setCompacting(false);
+      // Fallback handled silently below so auto-compaction never disrupts the conversation.
     }
     if (!nextSummary) {
       nextSummary = buildLocalCompactedSummary(curSummary, toFold);
     }
     setSummary(nextSummary);
     setCompactedCount(nextCompacted);
-    setTokenSample(null);
     return { summary: nextSummary, compactedCount: nextCompacted };
   };
 
-  const request = async (convo: ChatMessage[], useDeep = deep) => {
+  const request = async (convo: ChatMessage[]) => {
     setProblem(null);
     setBusy(true);
     setWaited(0);
@@ -508,13 +470,15 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
     try {
       const lastUserQ = [...convo].reverse().find(x => x.role === 'user')?.text ?? '';
       const parsedScenario = parseWhatIfPrompt(lastUserQ, budget, settings, wealth);
+      const useDeep = shouldUseDeepMode(lastUserQ, Boolean(parsedScenario));
+      setThinkingDeep(useDeep);
       const whatIfSim = parsedScenario ? simulateWhatIf(parsedScenario, { cycle, budget, settings, wealth }) : null;
       const freshCtx = chatContext({
         cycle,
         budget,
         settings,
         notes,
-        withNotes,
+        withNotes: true,
         fixedBills,
         wealth,
         impulse,
@@ -562,13 +526,6 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
         const activeAfterReply = nextMsgs.slice(usedCompacted);
         const totalTokensAfterReply =
           a.promptTokens != null && a.promptTokens > 0 ? a.promptTokens + estimateTokens(clean.reply) + 12 : undefined;
-        if (totalTokensAfterReply != null) {
-          setTokenSample({
-            activeCount: activeAfterReply.length,
-            compactedCount: usedCompacted,
-            tokens: totalTokensAfterReply,
-          });
-        }
         const postUsage = estimateChatContextUsage({
           context: freshCtx,
           summary: usedSummary,
@@ -711,10 +668,9 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
                 setMessages([]);
                 setSummary('');
                 setCompactedCount(0);
-                setTokenSample(null);
                 setProblem(null);
                 setBusy(false);
-                writeSession(sessionKey, { messages: [], deep, summary: '', compactedCount: 0 });
+                writeSession(sessionKey, { messages: [], summary: '', compactedCount: 0 });
               }}
             >
               New
@@ -769,19 +725,7 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
           })()}
 
           {messages.map((m, i) => {
-            const compactedDivider =
-              i === compactedCount && compactedCount > 0 ? (
-                <div className={s.chatCompactDivider} title={summary || undefined}>
-                  <span>{isId ? 'Percakapan sebelumnya diringkas ke memori' : 'Earlier messages compacted into memory'}</span>
-                </div>
-              ) : null;
-            if (m.role === 'user')
-              return (
-                <div key={i} style={{ display: 'contents' }}>
-                  {compactedDivider}
-                  <div className={s.chatMine}>{m.text}</div>
-                </div>
-              );
+            if (m.role === 'user') return <div key={i} className={s.chatMine}>{m.text}</div>;
             const clean = extractFollowUps(m.text, m.followUps);
             const mood = m.appliedScenario || m.rating === 'up' ? 'happy' : m.mood ?? inferMood(clean.reply);
             const prevUserQ = [...messages.slice(0, i)].reverse().find(x => x.role === 'user')?.text ?? '';
@@ -792,13 +736,11 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
             const updateAppliedScenario = (nextApplied?: AppliedScenarioState) =>
               setMessages(prev => prev.map((msg, idx) => (idx === i ? { ...msg, appliedScenario: nextApplied } : msg)));
             return (
-              <div key={i} style={{ display: 'contents' }}>
-                {compactedDivider}
-                <div className={s.chatTheirsRow}>
-                  <span className={(m.appliedScenario || m.rating === 'up') && !settings.quietMode ? s.chatHappyPop : undefined}>
-                    <Logo size={26} mood={mood} interactive cheer={m.appliedScenario ? (isId ? 'Mantap!' : 'Pockets tucked!') : 'Happy to help!'} />
-                  </span>
-                  <div className={s.chatTheirsCol}>
+              <div key={i} className={s.chatTheirsRow}>
+                <span className={(m.appliedScenario || m.rating === 'up') && !settings.quietMode ? s.chatHappyPop : undefined}>
+                  <Logo size={26} mood={mood} interactive cheer={m.appliedScenario ? (isId ? 'Mantap!' : 'Pockets tucked!') : 'Happy to help!'} />
+                </span>
+                <div className={s.chatTheirsCol}>
                     <div className={s.chatTheirs}>
                       <Rich text={clean.reply} />
                       {scenarioSpec ? (
@@ -874,7 +816,6 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
                         ))}
                       </div>
                     )}
-                  </div>
                 </div>
               </div>
             );
@@ -884,7 +825,7 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
             <div className={s.chatTheirsRow} role="status" aria-live="polite">
               <Logo size={26} mood="curious" />
               <span className={s.thinking}>
-                <span className={s.thinkLabel}>{thinkingLabel(waited, deep)}</span>
+                <span className={s.thinkLabel}>{thinkingLabel(waited, thinkingDeep)}</span>
                 <ThinkingArcs />
               </span>
             </div>
@@ -938,41 +879,6 @@ export function Chat({ cycle, budget, allTxs, fixedBills, wealth, impulse, fortD
                 <Icon d={IC.arrowUp} size={18} strokeWidth={2.25} />
               </button>
             )}
-          </div>
-          <div className={s.chatFootRow}>
-            <div className={s.sxMiniSeg} role="group" aria-label="Answer speed and depth" title="Quick: instant · Deep: deeper reasoning">
-              <button type="button" aria-pressed={!deep} onClick={() => setDeep(false)}>
-                Quick
-              </button>
-              <button type="button" aria-pressed={deep} onClick={() => setDeep(true)}>
-                Deep
-              </button>
-            </div>
-            <button
-              type="button"
-              className={s.chatNotesChip}
-              aria-pressed={withNotes}
-              onClick={() => setWithNotes(v => !v)}
-              title="Include your personal transaction notes when asking Maxie"
-            >
-              <Icon d={withNotes ? IC.check : IC.plus} size={12} />
-              Notes
-            </button>
-            <button
-              type="button"
-              className={s.chatCtxChip}
-              data-tone={ctxUsage.pct >= 50 ? 'warn' : undefined}
-              disabled={!ctxUsage.canCompact || busy || compacting}
-              onClick={() => void compactNow(messages, compactedCount, summary)}
-              title={
-                ctxUsage.canCompact
-                  ? `Context ${ctxUsage.pct}% — auto-compacts at ${AUTO_COMPACT_THRESHOLD_PCT}%. Tap to compact now.`
-                  : `Context ${ctxUsage.pct}% — auto-compacts at ${AUTO_COMPACT_THRESHOLD_PCT}% once conversation grows.`
-              }
-            >
-              {compacting ? 'Compacting…' : `${ctxUsage.pct}% ctx`}
-            </button>
-            <span className={s.chatDisclosure} style={{ marginLeft: 'auto' }}>Gemini</span>
           </div>
         </form>
       </section>
@@ -1243,7 +1149,7 @@ export function Problem({ p, onRetry }: { p: { kind: string; detail?: string }; 
     return (
       <div className={s.chatNote}>
         <strong>I've hit my Gemini limit for now.</strong>
-        <span>The free Gemini key allows only so many questions a minute and a day. Try again in a minute, or switch to Quick mode.</span>
+        <span>The free Gemini key allows only so many questions a minute and a day. Try again in a minute.</span>
         <button type="button" className={s.textBtnSm} onClick={onRetry} style={{ alignSelf: 'flex-start', padding: 0 }}>
           Try again
         </button>
@@ -1254,7 +1160,7 @@ export function Problem({ p, onRetry }: { p: { kind: string; detail?: string }; 
       <div className={s.chatNote}>
         <strong>Maxie is taking too long.</strong>
         <span>
-          Try again or switch to <strong>Quick</strong> mode. You can also set <code>GEMINI_MODEL</code> = <code>gemini-3.5-flash-lite</code> in{' '}
+          Try asking again in a moment. You can also set <code>GEMINI_MODEL</code> = <code>gemini-3.5-flash-lite</code> in{' '}
           <strong>{where}</strong>.
         </span>
         <button type="button" className={s.textBtnSm} onClick={onRetry} style={{ alignSelf: 'flex-start', padding: 0 }}>

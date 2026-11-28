@@ -14,6 +14,7 @@ import {
   buildLocalCompactedSummary,
   chatContext,
   estimateChatContextUsage,
+  shouldUseDeepMode,
   type ChatMessage,
 } from './chat';
 
@@ -163,6 +164,41 @@ test('estimateChatContextUsage hits 60% threshold cleanly and buildLocalCompacte
   const merged = buildLocalCompactedSummary('- User lives in Jakarta Selatan.', msgs.slice(0, 4));
   assert.match(merged, /Jakarta Selatan/);
   assert.match(merged, /Turn 4/);
+});
+
+test('shouldUseDeepMode auto-routes simple lookups vs deep reasoning and includes notes by default', () => {
+  assert.equal(shouldUseDeepMode('check today budget', false), false);
+  assert.equal(shouldUseDeepMode('today is saturday', false), false);
+  assert.equal(shouldUseDeepMode('how much left in dining?', false), false);
+
+  assert.equal(shouldUseDeepMode('what if I cap my spending at 300k per day', true), true);
+  assert.equal(shouldUseDeepMode('How should I plan my emergency runway and investments this cycle?', false), true);
+  assert.equal(shouldUseDeepMode('kenapa pengeluaran dining naik minggu ini? gimana solusinya?', false), true);
+
+  const sat = new Date(2026, 10, 28, 11, 58, 0);
+  const cycle = getCycle(sat);
+  const prevCycle = getCycle(addDays(cycle.start, -1));
+  const txs = [makeTx('note-1', '2026-11-28', 95_000, 'Saladstop', 'Dining')];
+  const budget = computeBudget({
+    cycle,
+    prevCycle,
+    transactions: txs,
+    prevTransactions: [],
+    bills: [],
+    recat: {},
+    links: {},
+    shares: {},
+    warnAt: 80,
+    income: baseSettings.income,
+  });
+  const ctx = chatContext({
+    cycle,
+    budget,
+    settings: baseSettings,
+    notes: { 'note-1': 'Team lunch reimbursed Monday' },
+    now: sat,
+  });
+  assert.equal(ctx.transactions[0].note, 'Team lunch reimbursed Monday');
 });
 
 console.log(`\nall passed (${passed})`);
