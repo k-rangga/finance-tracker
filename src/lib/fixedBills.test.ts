@@ -9,6 +9,7 @@ import { toISO } from './format';
 import { txViews } from './budget';
 import { type Transaction } from '../data/transactions';
 import {
+  billDraftFromTx,
   dueDateInCycle,
   fixedBillCategoryLimits,
   fixedBillDueItems,
@@ -129,6 +130,52 @@ test('schedules active individual fixed bills for next cycle', () => {
   assert.equal(toISO(items[0].date), '2026-12-01');
   assert.equal(items[1].title, 'Electricity (PLN)');
   assert.equal(toISO(items[1].date), '2026-12-05');
+});
+
+test('supports recurring account transfer bills from transactions without inflating spending due/limits', () => {
+  const trRaw: Transaction = {
+    id: 'tr1',
+    date: day(2026, 10, 5),
+    time: '09:00',
+    title: 'Transfer to Ibu',
+    category: 'Transfer',
+    amount: 2_000_000,
+    source: 'Gmail',
+    account: 'BCA',
+    toAccount: 'Mandiri',
+    type: 'transfer',
+  };
+  const { txs } = txViews([trRaw], [trRaw], { recat: {}, links: {}, shares: {}, cycle, subs: [] });
+  const draft = billDraftFromTx(txs[0]);
+  assert.equal(draft.category, 'Transfer');
+  assert.equal(draft.amount, 2_000_000);
+  assert.equal(draft.dueDay, 5);
+
+  const transferBill: FixedBill = {
+    id: 'bt1',
+    name: draft.name!,
+    category: draft.category!,
+    amount: draft.amount!,
+    dueDay: draft.dueDay!,
+    merchant: draft.merchant,
+  };
+  const unpaidBill: FixedBill = {
+    id: 'bt2',
+    name: 'Monthly Savings',
+    category: 'Savings',
+    amount: 5_000_000,
+    dueDay: 18,
+    merchant: 'blu saving',
+  };
+
+  const statuses = matchFixedBills([transferBill, unpaidBill], txs, cycle);
+  assert.equal(statuses[0].status, 'paid');
+  assert.equal(statuses[0].matchKind, 'auto');
+  assert.equal(statuses[0].actual, 2_000_000);
+  assert.equal(statuses[1].status, 'due');
+
+  assert.equal(fixedBillDueItems(statuses, cycle).length, 0);
+  assert.deepEqual(fixedBillCategoryLimits(statuses), {});
 });
 
 console.log(`\nall passed (${passed})`);

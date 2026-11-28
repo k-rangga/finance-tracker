@@ -2,7 +2,7 @@ import type { TxView } from './budget';
 import type { Cycle } from './cycle';
 import { sum, tidyName } from './format';
 import { merchantKey, type Bill, type Transaction } from '../data/transactions';
-import { CATEGORIES, categoryByName } from '../data/categories';
+import { CATEGORIES, categoryByName, INVESTMENT_CATEGORY, SAVINGS_CATEGORY, TRANSFER_CATEGORY } from '../data/categories';
 import type { Subscription } from './subscriptions';
 
 export type BillEvery = 'month' | 'quarter' | 'year';
@@ -82,6 +82,25 @@ export const FIXED_BILL_PRESETS: FixedBillPreset[] = [
 ];
 
 export const newBillId = () => 'bill_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+/** True when a recurring bill tracks an own-account transfer (Transfer, Savings, or Investment). */
+export function isTransferBillCategory(cat: string): boolean {
+  return cat === TRANSFER_CATEGORY || cat === SAVINGS_CATEGORY || cat === INVESTMENT_CATEGORY;
+}
+
+/** Build a prefilled recurring fixed-bill draft from an existing expense or account-transfer transaction. */
+export function billDraftFromTx(tx: Pick<TxView, 'title' | 'cat' | 'amount' | 'net' | 'isTransfer' | 'date'>): Partial<FixedBill> {
+  const knownCat = categoryByName(tx.cat) || isTransferBillCategory(tx.cat) ? tx.cat : 'Housing';
+  return {
+    name: tidyName(tx.title),
+    category: knownCat,
+    amount: tx.isTransfer ? tx.amount : tx.net,
+    dueDay: tx.date.getDate(),
+    every: 'month',
+    anchorMonth: tx.date.getMonth() + 1,
+    merchant: merchantKey(tx.title) || undefined,
+  };
+}
 
 /** The date this bill falls due within `cycle`, or null if paused or not due in this cycle (quarterly/yearly). */
 export function dueDateInCycle(bill: FixedBill, cycle: Cycle): Date | null {
@@ -179,32 +198,41 @@ export function matchFixedBills(
       continue;
     }
 
-    // 2. Automatic transaction verification (spending transactions in this cycle)
+    // 2. Automatic transaction verification (spending transactions, or own-account transfers for Transfer/Savings/Investment bills)
     const keyword = (bill.merchant?.trim() || bill.name).trim();
     const hasExplicitMerchant = !!(bill.merchant && bill.merchant.trim().length >= 2);
     const tol = bill.varies ? 0.45 : 0.15;
+    const isTransferBill = isTransferBillCategory(bill.category);
 
-    const spendingCandidates = txs.filter(t => !claimed.has(t.id) && !t.isIncome && !t.isTransfer && t.net > 0);
-    const scored = spendingCandidates
+    const candidates = txs.filter(
+      t =>
+        !claimed.has(t.id) &&
+        !t.isIncome &&
+        !t.isCcPayment &&
+        !t.isInstallment &&
+        (isTransferBill ? t.isTransfer && t.amount > 0 : !t.isTransfer && t.net > 0),
+    );
+    const scored = candidates
       .map(t => {
+        const amt = isTransferBill ? t.amount : t.net;
         const sameCat = t.cat === bill.category;
         const kw = keywordMatches(t.title, keyword);
-        const close = amountClose(t.net, expected, tol);
+        const close = amountClose(amt, expected, tol);
         let score = 0;
         if (sameCat && kw) score = 100 + (close ? 20 : 0);
         else if (sameCat && close) score = 70;
         else if (hasExplicitMerchant && kw && close) score = 65;
         if (!score) return null;
         // Prefer closest amount & closest date to dueDate
-        const amtErr = expected > 0 ? Math.abs(t.net - expected) / expected : 0;
+        const amtErr = expected > 0 ? Math.abs(amt - expected) / expected : 0;
         const dayErr = Math.abs(t.date.getTime() - dueDate.getTime()) / 864e5;
-        return { t, score: score - amtErr * 10 - dayErr * 0.2 };
+        return { t, amt, score: score - amtErr * 10 - dayErr * 0.2 };
       })
-      .filter((x): x is { t: TxView; score: number } => !!x)
+      .filter((x): x is { t: TxView; amt: number; score: number } => !!x)
       .sort((a, z) => z.score - a.score);
 
     if (scored[0]) {
-      const matchedTx = scored[0].t;
+      const { t: matchedTx, amt } = scored[0];
       claimed.add(matchedTx.id);
       out.push({
         bill,
@@ -213,8 +241,8 @@ export function matchFixedBills(
         status: 'paid',
         matchKind: 'auto',
         matchedTx,
-        actual: matchedTx.net,
-        variance: matchedTx.net - expected,
+        actual: amt,
+        variance: amt - expected,
       });
       continue;
     }
@@ -275,7 +303,7 @@ export function matchFixedBills(
  */
 export function fixedBillDueItems(statuses: FixedBillStatus[], cycle: Cycle): Bill[] {
   return statuses
-    .filter(x => (x.status === 'due' || x.status === 'overdue') && x.dueDate && x.expected > 0)
+    .filter(x => !!categoryByName(x.bill.category) && (x.status === 'due' || x.status === 'overdue') && x.dueDate && x.expected > 0)
     .map(x => ({
       date: x.dueDate! < cycle.today ? cycle.today : x.dueDate!,
       title: x.status === 'overdue' ? `${x.bill.name} (overdue)` : x.bill.name,
@@ -308,7 +336,7 @@ export function fixedBillsForNextCycle(bills: FixedBill[], nextCycle: Cycle): Bi
 export function fixedBillCategoryLimits(statuses: FixedBillStatus[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const x of statuses) {
-    if (x.status === 'inactive' || x.status === 'skipped') continue;
+    if (!categoryByName(x.bill.category) || x.status === 'inactive' || x.status === 'skipped') continue;
     const amt = x.status === 'paid' ? Math.max(x.actual, x.expected) : x.expected;
     out[x.bill.category] = (out[x.bill.category] ?? 0) + amt;
   }

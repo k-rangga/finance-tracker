@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import s from '../styles/ui.module.css';
-import { Checkbox, IconChip, Toast } from '../components/ui';
+import { Checkbox, IconChip, Modal, Toast } from '../components/ui';
 import { Logo } from '../components/Logo';
 import { IC, Icon } from '../components/Icon';
 import { CategoryDialog } from '../components/CategoryDialog';
@@ -9,7 +9,8 @@ import { Select } from '../components/Select';
 import { InstallmentDialog } from '../components/InstallmentDialog';
 import { planOf, planSummary, usePlans } from '../components/Plans';
 import { leftAfter, type PlanView } from '../lib/installments';
-import type { FixedBillStatus } from '../lib/fixedBills';
+import { billDraftFromTx, newBillId, type FixedBill, type FixedBillCycleState, type FixedBillStatus } from '../lib/fixedBills';
+import { FixedBillForm } from './FixedBills';
 import { useData } from '../lib/data';
 import { dayAmount, dayTotalLabel, iconChip, inDayTotal, type Budget, type TxView } from '../lib/budget';
 import type { Cycle } from '../lib/cycle';
@@ -114,12 +115,14 @@ export function Activity({
   subscriptions = {},
   plans = [],
 }: Props) {
-  const { full, settings } = useSettings();
+  const { full, settings, update } = useSettings();
   const [view, setView] = useState<'list' | 'calendar'>('list');
   /** The row with an open popover: an income's "paid back for" picker or an expense's "my share" editor. */
   const [open, setOpen] = useState<{ id: string; kind: Popover } | null>(null);
   /** "New category" dialog, opened from a row's category menu; the new category is applied to that row. */
   const [creating, setCreating] = useState<{ name: string; tx: TxView } | null>(null);
+  /** Transaction currently being turned into a recurring fixed bill (supports both expenses and account transfers). */
+  const [recurringTx, setRecurringTx] = useState<TxView | null>(null);
   const [panel, setPanel] = useState<'cal' | 'filter' | 'sort' | null>(null);
   const panelSwipe = useSwipeDown(() => setPanel(null));
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -134,7 +137,45 @@ export function Activity({
       document.removeEventListener('keydown', onKey);
     };
   }, [panel]);
-  const { installments, setInstallment, notes, rules, ruleSubs, subs, setRules, setSub, receipts, recat } = useData();
+  const { installments, setInstallment, notes, rules, ruleSubs, subs, setRules, setSub, setOverride, receipts, recat } = useData();
+  const linkedBillTxIds = useMemo(
+    () => new Set(fixedBillStatuses.map(x => x.matchedTx?.id).filter((id): id is string => !!id)),
+    [fixedBillStatuses],
+  );
+
+  const saveRecurringFromTx = (src: TxView, draft: Omit<FixedBill, 'id'>) => {
+    const created: FixedBill = { ...draft, id: newBillId() };
+    const beforeBills = settings.fixedBills ?? [];
+    const beforeCycles = settings.fixedBillCycles;
+    const cycleId = toISO(cycle.start);
+    const inCurCycle = budget.txs.some(x => x.id === src.id);
+    const movedCat = inCurCycle && !!categoryByName(created.category) && (src.cat === 'Buffer' || (src.isTransfer && !src.isCcPayment));
+    const prevCat = src.cat;
+
+    if (inCurCycle) {
+      if (movedCat) setOverride(src.id, src.category, created.category);
+      const cycleStates = settings.fixedBillCycles ?? {};
+      const curState: FixedBillCycleState = cycleStates[cycleId] ?? {};
+      const nextState: FixedBillCycleState = {
+        ...curState,
+        linked: { ...(curState.linked ?? {}), [created.id]: src.id },
+      };
+      const entries = Object.entries({ ...cycleStates, [cycleId]: nextState }).sort(([a], [b]) => b.localeCompare(a)).slice(0, 6);
+      update({ fixedBills: [...beforeBills, created], fixedBillCycles: Object.fromEntries(entries) });
+    } else {
+      update({ fixedBills: [...beforeBills, created] });
+    }
+
+    setRecurringTx(null);
+    setToast({
+      text: `Added ${created.name} as a recurring bill`,
+      action: 'Undo',
+      run: () => {
+        if (movedCat) setOverride(src.id, src.category, prevCat);
+        update({ fixedBills: beforeBills, ...(inCurCycle ? { fixedBillCycles: beforeCycles } : {}) });
+      },
+    });
+  };
   /** The purchase whose installment plan is open in the dialog. */
   const [planFor, setPlanFor] = useState<string | null>(null);
   const planTx = planFor ? allTxs.find(x => x.id === planFor) : undefined;
@@ -660,6 +701,8 @@ export function Activity({
                       onRemove={() => remove(t)}
                       onPlan={setPlanFor}
                       onUnplan={unplan}
+                      alreadyRecurring={linkedBillTxIds.has(t.id)}
+                      onMakeRecurring={tx => setRecurringTx(tx)}
                       expenses={expenses}
                       compact={phone}
                       usualAccount={usualAccount}
@@ -758,6 +801,18 @@ export function Activity({
           onClose={() => setCreating(null)}
           onSaved={name => recategorise(creating.tx, name)}
         />
+      )}
+      {recurringTx && (
+        <Modal title="Make recurring bill" onClose={() => setRecurringTx(null)} width={520}>
+          <FixedBillForm
+            key={recurringTx.id}
+            initial={billDraftFromTx(recurringTx)}
+            submitLabel="Add recurring bill"
+            cycleAnchorMonth={cycle.start.getMonth() + 1}
+            onSave={draft => saveRecurringFromTx(recurringTx, draft)}
+            onCancel={() => setRecurringTx(null)}
+          />
+        </Modal>
       )}
     </div>
   );
@@ -931,6 +986,10 @@ type RowProps = {
   onPlan: (purchaseId: string) => void;
   /** Make an installment purchase one purchase again. */
   onUnplan: (purchaseId: string) => void;
+  /** True when this transaction is already linked/matched to a tracked recurring bill. */
+  alreadyRecurring?: boolean;
+  /** Open the "Make recurring bill" modal prefilled from this transaction or account transfer. */
+  onMakeRecurring?: (t: TxView) => void;
   /** Open the "New category" dialog, prefilled with what was typed in the category search. */
   onNewCategory: (name: string) => void;
   /** This cycle's expenses, newest first: what an income can pay back. */
@@ -946,7 +1005,7 @@ type RowProps = {
   onNotice: (text: string) => void;
 };
 
-function TxRow({ t, showDate, sameMerchant, suggested, guess, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, onNewCategory, expenses, popover, setPopover, compact, usualAccount, onNotice }: RowProps) {
+function TxRow({ t, showDate, sameMerchant, suggested, guess, onRecat, onLink, onShare, onRemove, onPlan, onUnplan, alreadyRecurring, onMakeRecurring, onNewCategory, expenses, popover, setPopover, compact, usualAccount, onNotice }: RowProps) {
   const { installments, notes, setNote, receipts, attachReceipt, removeReceipt } = useData();
   /** The installment plan this row is (a purchase you split) or pays into (a monthly payment), from the one schedule. */
   const { views: plans, openSchedule, untrack } = usePlans();
@@ -1020,6 +1079,9 @@ function TxRow({ t, showDate, sameMerchant, suggested, guess, onRecat, onLink, o
   const more: Item[] = [
     [note ? 'Edit note' : 'Add note…', () => setPopover('note')],
     ...(isExpense && !t.plan ? [[t.share != null ? 'Edit my share' : 'My share…', () => setPopover('share')] as Item] : []),
+    ...(onMakeRecurring && !alreadyRecurring && !t.isIncome && !t.isCcPayment && !t.plan && !t.isInstallment
+      ? [['Make recurring bill…', () => onMakeRecurring(t)] as Item]
+      : []),
     ...(canLink && !t.reimbursesId ? [['Paid back for…', () => setPicking(true)] as Item] : []),
     // Installments: card purchases, and shopping paid any other way (paylater, store credit).
     ...(planId && detected

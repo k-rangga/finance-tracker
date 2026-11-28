@@ -11,11 +11,13 @@ import { useIsPhone } from '../lib/media';
 import { dayMonth, ordinal, tidyName, toISO } from '../lib/format';
 import { haptic } from '../lib/haptics';
 import { C } from '../lib/tokens';
-import { CATEGORIES, categoryByName } from '../data/categories';
+import { CATEGORIES, categoryByName, categoryLabel, INVESTMENT_CATEGORY, SAVINGS_CATEGORY, TRANSFER_CATEGORY } from '../data/categories';
 import { merchantKey, type Transaction } from '../data/transactions';
 import { useSwipeRight } from './categoriesExtras';
 import {
+  billDraftFromTx,
   FIXED_BILL_PRESETS,
+  isTransferBillCategory,
   newBillId,
   suggestFixedBills,
   type BillEvery,
@@ -59,6 +61,9 @@ export function FixedBillsList({ cycle, budget, allRaw, statuses, catOf, onShowT
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState<boolean>(false);
   const [presetDraft, setPresetDraft] = useState<Partial<FixedBill> | null>(null);
+  const [pickingSourceTx, setPickingSourceTx] = useState(false);
+  const [sourceQuery, setSourceQuery] = useState('');
+  const [sourceTx, setSourceTx] = useState<TxView | null>(null);
 
   const cycleId = toISO(cycle.start);
   const bills = settings.fixedBills ?? [];
@@ -78,12 +83,34 @@ export function FixedBillsList({ cycle, budget, allRaw, statuses, catOf, onShowT
     update({ fixedBillCycles: Object.fromEntries(entries) });
   };
 
-  const addBill = (b: Omit<FixedBill, 'id'>) => {
+  const addBill = (b: Omit<FixedBill, 'id'>, linkedSource?: TxView | null) => {
     const created: FixedBill = { ...b, id: newBillId() };
-    saveBills([...bills, created]);
+    const beforeBills = bills;
+    const beforeCycles = settings.fixedBillCycles;
+    const movedCat =
+      !!linkedSource &&
+      !!categoryByName(created.category) &&
+      (linkedSource.cat === 'Buffer' || (linkedSource.isTransfer && !linkedSource.isCcPayment));
+    const prevCat = linkedSource?.cat;
+
+    if (linkedSource) {
+      if (movedCat) setOverride(linkedSource.id, linkedSource.category, created.category);
+      const nextState: FixedBillCycleState = {
+        ...curState,
+        linked: { ...(curState.linked ?? {}), [created.id]: linkedSource.id },
+      };
+      const entries = Object.entries({ ...cycleStates, [cycleId]: nextState }).sort(([a], [b]) => b.localeCompare(a)).slice(0, 6);
+      update({ fixedBills: [...beforeBills, created], fixedBillCycles: Object.fromEntries(entries) });
+    } else {
+      saveBills([...beforeBills, created]);
+    }
+
     onToast({
       text: `Added ${created.name} (${short(created.amount)}, due ${ordinal(created.dueDay)})`,
-      undo: () => saveBills(bills),
+      undo: () => {
+        if (movedCat && linkedSource && prevCat) setOverride(linkedSource.id, linkedSource.category, prevCat);
+        update({ fixedBills: beforeBills, ...(linkedSource ? { fixedBillCycles: beforeCycles } : {}) });
+      },
     });
   };
 
@@ -116,12 +143,12 @@ export function FixedBillsList({ cycle, budget, allRaw, statuses, catOf, onShowT
     update({ notFixedBills: [...(settings.notFixedBills ?? []).filter(k => k !== key), key] });
   };
 
-  /** Link an actual transaction to a bill, recategorizing it out of Buffer / Transfer if needed. */
+  /** Link an actual transaction to a bill, recategorizing it out of Buffer / Transfer when the bill tracks spending. */
   const linkTx = (bill: FixedBill, tx: TxView) => {
     const prevLinked = curState.linked ?? {};
     const prevPaid = curState.paid ?? [];
     const prevSkipped = curState.skipped ?? [];
-    const movedCat = tx.cat === 'Buffer' || (tx.isTransfer && !tx.isCcPayment);
+    const movedCat = !!categoryByName(bill.category) && (tx.cat === 'Buffer' || (tx.isTransfer && !tx.isCcPayment));
     const prevCat = tx.cat;
     if (movedCat) setOverride(tx.id, tx.category, bill.category);
     saveCycleState({
@@ -201,6 +228,14 @@ export function FixedBillsList({ cycle, budget, allRaw, statuses, catOf, onShowT
       return ra - rb || (a.dueDate?.getTime() ?? 0) - (b.dueDate?.getTime() ?? 0) || a.bill.name.localeCompare(b.bill.name);
     });
   }, [statuses]);
+
+  const sourceCandidates = useMemo(() => {
+    if (!pickingSourceTx) return [];
+    const q = sourceQuery.trim().toLowerCase();
+    return budget.txs
+      .filter(t => !t.isIncome && !t.isCcPayment && !t.isInstallment && (!q || `${t.title} ${t.cat} ${t.account} ${t.toAccount ?? ''}`.toLowerCase().includes(q)))
+      .slice(0, 15);
+  }, [pickingSourceTx, sourceQuery, budget.txs]);
 
   return (
     <>
@@ -282,6 +317,9 @@ export function FixedBillsList({ cycle, budget, allRaw, statuses, catOf, onShowT
         onClick={() => {
           setAdding(v => !v);
           setPresetDraft(null);
+          setSourceTx(null);
+          setPickingSourceTx(false);
+          setSourceQuery('');
         }}
         style={{ color: C.clayInk, fontWeight: 600, borderTop: ordered.length > 0 ? '1px solid var(--line)' : 'none' }}
       >
@@ -297,8 +335,12 @@ export function FixedBillsList({ cycle, budget, allRaw, statuses, catOf, onShowT
                 key={p.label}
                 type="button"
                 className={s.tplOpt}
-                aria-pressed={presetDraft?.name === p.name}
-                onClick={() => setPresetDraft({ name: p.name, category: p.category, dueDay: p.dueDay, merchant: p.merchant, varies: p.varies })}
+                aria-pressed={!pickingSourceTx && !sourceTx && presetDraft?.name === p.name}
+                onClick={() => {
+                  setSourceTx(null);
+                  setPickingSourceTx(false);
+                  setPresetDraft({ name: p.name, category: p.category, dueDay: p.dueDay, merchant: p.merchant, varies: p.varies });
+                }}
               >
                 {p.label}
               </button>
@@ -306,25 +348,85 @@ export function FixedBillsList({ cycle, budget, allRaw, statuses, catOf, onShowT
             <button
               type="button"
               className={s.tplOpt}
-              aria-pressed={presetDraft !== null && !FIXED_BILL_PRESETS.some(p => p.name === presetDraft.name)}
-              onClick={() => setPresetDraft({ name: '', category: 'Utilities', dueDay: cycle.today.getDate() })}
+              aria-pressed={!pickingSourceTx && !sourceTx && presetDraft !== null && !FIXED_BILL_PRESETS.some(p => p.name === presetDraft.name)}
+              onClick={() => {
+                setSourceTx(null);
+                setPickingSourceTx(false);
+                setPresetDraft({ name: '', category: 'Utilities', dueDay: cycle.today.getDate() });
+              }}
             >
               <Icon d={IC.plus} size={14} />
               Custom
             </button>
+            <button
+              type="button"
+              className={s.tplOpt}
+              aria-pressed={pickingSourceTx || !!sourceTx}
+              onClick={() => setPickingSourceTx(v => !v)}
+            >
+              <Icon d={IC.clip} size={14} />
+              From a transaction
+            </button>
           </div>
+          {pickingSourceTx && (
+            <div className={s.fbPicker}>
+              <input
+                className={s.input}
+                value={sourceQuery}
+                onChange={e => setSourceQuery(e.target.value)}
+                placeholder="Search expenses or account transfers…"
+                aria-label="Search transaction to make recurring"
+              />
+              {sourceCandidates.length === 0 ? (
+                <span style={{ fontSize: 13, color: C.textMuted }}>No matching expenses or account transfers in this cycle.</span>
+              ) : (
+                <div className={s.fbPickerList}>
+                  {sourceCandidates.map(t => {
+                    const amt = t.isTransfer ? t.amount : t.net;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className={s.fbPickerRow}
+                        onClick={() => {
+                          setSourceTx(t);
+                          setPresetDraft(billDraftFromTx(t));
+                          setPickingSourceTx(false);
+                          setSourceQuery('');
+                        }}
+                      >
+                        <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
+                          <span className={s.ellipsis} style={{ fontWeight: 500 }}>
+                            {tidyName(t.title)}
+                          </span>
+                          <span style={{ fontSize: 12, color: C.textMuted }}>
+                            {dayMonth(t.date)} · {categoryLabel(t.cat)} · {t.isTransfer && t.toAccount ? `${t.account} → ${t.toAccount}` : t.account}
+                          </span>
+                        </span>
+                        <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{short(amt)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           <FixedBillForm
-            key={presetDraft?.name ?? 'blank'}
+            key={sourceTx ? `tx_${sourceTx.id}` : (presetDraft?.name ?? 'blank')}
             initial={presetDraft ?? { name: '', category: 'Housing', dueDay: 1 }}
             submitLabel="Add bill"
             onSave={draft => {
-              addBill(draft);
+              addBill(draft, sourceTx);
               setAdding(false);
               setPresetDraft(null);
+              setSourceTx(null);
+              setPickingSourceTx(false);
             }}
             onCancel={() => {
               setAdding(false);
               setPresetDraft(null);
+              setSourceTx(null);
+              setPickingSourceTx(false);
             }}
           />
         </div>
@@ -371,6 +473,15 @@ function FixedBillRow({
   const [editing, setEditing] = useState(false);
   const { bill, dueDate, expected, status, matchKind, matchedTx, actual, variance, possibleTx } = item;
   const cat = categoryByName(bill.category);
+  const billIcon =
+    cat?.icon ??
+    (bill.category === SAVINGS_CATEGORY
+      ? IC.piggy
+      : bill.category === INVESTMENT_CATEGORY
+        ? IC.trend
+        : isTransferBillCategory(bill.category)
+          ? IC.transfer
+          : IC.calendar);
   const canSwipePay = status === 'due' || status === 'overdue';
   const swipe = useSwipeRight(() => onMarkPaid(true), { enabled: canSwipePay, quiet: settings.quietMode });
 
@@ -451,12 +562,12 @@ function FixedBillRow({
           }}
         >
           <span className={s.mxIcon} style={{ background: cat?.tint ?? 'var(--surface-200)', color: 'var(--ink)' }}>
-            <Icon d={cat?.icon ?? IC.calendar} size={19} />
+            <Icon d={billIcon} size={19} />
           </span>
           <span className={s.mxTitles} style={{ gap: 4 }}>
             <span className={s.fbNameRow}>
               <span className={s.mxLabel}>{bill.name}</span>
-              <span className={s.fbCatTag}>{bill.category}</span>
+              <span className={s.fbCatTag}>{categoryLabel(bill.category)}</span>
             </span>
             <span className={s.mxMeta}>
               {badge}
@@ -626,7 +737,7 @@ function FixedBillRow({
   );
 }
 
-function FixedBillForm({
+export function FixedBillForm({
   initial,
   defaultAmount,
   showCycleScope,
@@ -666,7 +777,12 @@ function FixedBillForm({
   const catOptions = useMemo(() => {
     const fixed = CATEGORIES.filter(c => c.type === 'fixed' && !c.auto).map(c => ({ value: c.name, label: c.name }));
     const variable = CATEGORIES.filter(c => c.type === 'variable').map(c => ({ value: c.name, label: `${c.name} (everyday)` }));
-    return [...fixed, ...variable];
+    const transfers = [
+      { value: TRANSFER_CATEGORY, label: categoryLabel(TRANSFER_CATEGORY) },
+      { value: SAVINGS_CATEGORY, label: categoryLabel(SAVINGS_CATEGORY) },
+      { value: INVESTMENT_CATEGORY, label: categoryLabel(INVESTMENT_CATEGORY) },
+    ];
+    return [...fixed, ...variable, ...transfers];
   }, []);
 
   return (
