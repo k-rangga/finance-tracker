@@ -295,7 +295,7 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
 
   return (
     <div className={s.splitGrid}>
-      <div className={s.splitMain} style={{ gap: 16 }}>
+      <div className={`${s.splitMain} ${s.catMain}`}>
         {(() => {
           const rows = mode === 'cycle' ? [...variable, ...fixedAll.filter(r => !r.c.auto)] : variable;
           const spent = sum(rows.map(r => r.cur));
@@ -371,7 +371,7 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
           );
         })()}
 
-        <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <section className={s.catSection}>
           <SectionHead
             title={mode === 'cycle' ? 'Everyday spending' : `Everyday, week ${wi + 1}`}
             right={
@@ -479,7 +479,12 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
             </div>
           )}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            <button type="button" className={s.catFold} onClick={onNewCategory} style={{ color: C.clayInk, fontWeight: 600, border: 'none' }}>
+            <button
+              type="button"
+              className={s.catFold}
+              onClick={onNewCategory}
+              style={{ color: C.clayInk, fontWeight: 600, border: 'none', width: 'auto', padding: '8px 10px', borderRadius: 10, fontSize: 13.5 }}
+            >
               <Icon d={IC.plus} size={14} />
               New category
             </button>
@@ -513,48 +518,51 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
           const nudgeStep = settings.currency === 'USD' ? 25 : 100_000;
 
           return (
-            <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <section className={s.catSection}>
               <SectionHead
                 title="Fixed bills"
                 right={
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    {hasAny && totalItems > 0 && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                        <BillRing paid={paidCount} total={totalItems} />
-                        {allBillsPaid ? (
-                          <span style={{ color: C.good, fontWeight: 600 }}>All paid</span>
-                        ) : (
-                          <span>
-                            {overdueCount > 0 && (
-                              <span style={{ color: C.redInk, fontWeight: 600, marginRight: 8 }}>
-                                {overdueCount} overdue
-                              </span>
-                            )}
-                            {`${paidCount} of ${totalItems} paid · ${short(totalPaidAmt)} / ${short(totalPlannedAmt)}`}
-                          </span>
-                        )}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className={s.btnOutlineSm}
-                      onClick={() => {
-                        setTrackTx(null);
-                        setAddingBill(v => !v);
-                      }}
-                    >
-                      <Icon d={addingBill ? IC.close : IC.plus} size={14} />
-                      {addingBill ? 'Close' : 'Add'}
-                    </button>
-                  </span>
+                  <button
+                    type="button"
+                    className={s.btnOutlineSm}
+                    onClick={() => {
+                      setTrackTx(null);
+                      setAddingBill(v => !v);
+                    }}
+                  >
+                    <Icon d={addingBill ? IC.close : IC.plus} size={14} />
+                    {addingBill ? 'Close' : 'Add'}
+                  </button>
                 }
               />
-              {totalPlannedAmt > 0 && (
-                <div className={s.fbProgressBar} aria-hidden="true">
-                  <div
-                    className={s.fbProgressFill}
-                    style={{ width: `${progressPct}%`, background: allBillsPaid ? 'var(--good)' : 'var(--clay)' }}
-                  />
+              {hasAny && totalItems > 0 && (
+                <div className={s.fbRingSummary}>
+                  <BillRing paid={paidCount} total={totalItems} />
+                  <div className={s.fbRingBody}>
+                    <div className={s.fbRingTop}>
+                      <div className={s.fbRingTitleRow}>
+                        <span className={s.fbRingTitle} data-done={allBillsPaid || undefined}>
+                          {allBillsPaid ? 'All bills paid' : `${paidCount} of ${totalItems} ${totalItems === 1 ? 'bill' : 'bills'} paid`}
+                        </span>
+                        {!allBillsPaid && overdueCount > 0 && (
+                          <span className={s.fbOverduePill}>{overdueCount} overdue</span>
+                        )}
+                      </div>
+                      {totalPlannedAmt > 0 && (
+                        <span className={s.fbRingAmt}>
+                          {fit(totalPaidAmt)} / {fit(totalPlannedAmt)}
+                        </span>
+                      )}
+                    </div>
+                    {totalPlannedAmt > 0 && (
+                      <div className={s.fbProgressBar} aria-hidden="true">
+                        <div
+                          className={s.fbProgressFill}
+                          style={{ width: `${progressPct}%`, background: allBillsPaid ? 'var(--good)' : 'var(--clay)' }}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               {showBillFilters && (
@@ -675,7 +683,7 @@ export function Categories({ cycle, budget, allTxs, allRaw, fixedBillStatuses, c
         <section className={s.splitSide}>
           <button type="button" className={s.rowBtn} aria-expanded={insightsOpen} onClick={() => setInsightsOpen(v => !v)} style={{ padding: '14px 16px', minHeight: 48 }}>
             <span style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 'auto', textAlign: 'left' }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>Highlights &amp; changes</span>
+              <span className={s.sideTitle}>Highlights &amp; changes</span>
               <span style={{ fontSize: 13, color: C.textMuted }}>Watch list, biggest win, and changes vs last {mode === 'cycle' ? 'cycle' : 'week'}</span>
             </span>
             <Icon d={IC.chevDown} size={16} color={C.textMuted} style={{ transform: insightsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.16s ease' }} />
@@ -870,7 +878,7 @@ function CategoriesPanel({
               <button key={r.c.name} type="button" className={s.recapRow} onClick={() => onPick(r.c.name)}>
                 <span style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14 }}>
                   <Badge ink={r.st.ink}>{r.c.name}</Badge>
-                  <span style={{ whiteSpace: 'nowrap', color: r.st.key === 'over' ? C.redInk : C.amberInk }}>
+                  <span style={{ whiteSpace: 'nowrap', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: r.st.key === 'over' ? C.redInk : C.amberInk }}>
                     {r.lim - r.cur >= 0 ? `${short(r.lim - r.cur)} left` : `${short(r.cur - r.lim)} over`}
                   </span>
                 </span>
@@ -974,7 +982,7 @@ function CategoriesPanel({
               <button key={r.c.name} type="button" className={s.recapRow} onClick={() => onPick(r.c.name)}>
                 <span style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14 }}>
                   <span>{r.c.name}</span>
-                  <span style={{ whiteSpace: 'nowrap', color: changeBadge(r.cur, r.last).ink }}>
+                  <span style={{ whiteSpace: 'nowrap', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: changeBadge(r.cur, r.last).ink }}>
                     {r.cur >= r.last ? '+' : '−'}
                     {short(Math.abs(r.cur - r.last))} ({changeBadge(r.cur, r.last).label})
                   </span>

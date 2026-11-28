@@ -155,13 +155,13 @@ export function Summary({
   );
 }
 
-/** A section title with its total on the right, instead of a line of dots. */
+/** A section title with its total or primary control on the right. */
 export function SectionHead({ title, right }: { title: string; right?: ReactNode }) {
   return (
-    <h2 className={s.sectionHead}>
-      <span>{title}</span>
-      {right != null && <span className={s.sectionHeadRight}>{right}</span>}
-    </h2>
+    <div className={s.sectionHead}>
+      <h2 className={s.sectionHeadTitle}>{title}</h2>
+      {right != null && <div className={s.sectionHeadRight}>{right}</div>}
+    </div>
   );
 }
 
@@ -248,29 +248,34 @@ export const HeartSparkIcon = ({ size = 15 }: { size?: number }) => (
   </svg>
 );
 
-/** Crisp mini progress ring for Fixed Bills completion. */
-export const BillRing = ({ paid, total }: { paid: number; total: number }) => {
+/** Crisp progress ring with centered completion readout for Fixed Bills. */
+export const BillRing = ({ paid, total, size = 40 }: { paid: number; total: number; size?: number }) => {
   if (total <= 0) return null;
-  const r = 8;
+  const r = 16;
   const circ = 2 * Math.PI * r;
   const frac = Math.max(0, Math.min(1, paid / total));
   const done = paid >= total;
   return (
-    <svg width={20} height={20} viewBox="0 0 20 20" aria-hidden="true" style={{ flex: 'none', transform: 'rotate(-90deg)' }}>
-      <circle cx="10" cy="10" r={r} fill="none" stroke="var(--border-strong)" strokeWidth="2.4" opacity="0.45" />
-      <circle
-        cx="10"
-        cy="10"
-        r={r}
-        fill="none"
-        stroke={done ? 'var(--good)' : 'var(--clay)'}
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeDasharray={circ}
-        strokeDashoffset={circ * (1 - frac)}
-        style={{ transition: 'stroke-dashoffset 420ms cubic-bezier(0.22, 1, 0.36, 1)' }}
-      />
-    </svg>
+    <span className={s.fbRingWrap} style={{ width: size, height: size }} aria-hidden="true">
+      <svg width={size} height={size} viewBox="0 0 40 40" style={{ transform: 'rotate(-90deg)', display: 'block' }}>
+        <circle cx="20" cy="20" r={r} fill="none" stroke="var(--divider)" strokeWidth="3.2" />
+        <circle
+          cx="20"
+          cy="20"
+          r={r}
+          fill="none"
+          stroke={done ? 'var(--good)' : 'var(--clay)'}
+          strokeWidth="3.2"
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={circ * (1 - frac)}
+          style={{ transition: 'stroke-dashoffset 420ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+        />
+      </svg>
+      <span className={s.fbRingCenter} style={done ? { color: 'var(--good)' } : undefined}>
+        {done ? <Icon d={IC.check} size={15} strokeWidth={2.5} /> : `${paid}/${total}`}
+      </span>
+    </span>
   );
 };
 

@@ -713,14 +713,14 @@ function FixedBillRow({
                     onClick={() => onShowTransactions(catOf(t))}
                   >
                     <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
-                      <span className={s.ellipsis} style={{ fontWeight: 500, fontSize: 13.5 }}>
+                      <span className={s.ellipsis} style={{ fontWeight: 500, fontSize: 14 }}>
                         {tidyName(t.title)}
                       </span>
                       <span style={{ fontSize: 12, color: C.textMuted }}>
                         {dayMonth(t.date)} · {t.account}{t.toAccount ? ` → ${t.toAccount}` : ''}
                       </span>
                     </span>
-                    <span style={{ fontWeight: 600, fontSize: 13.5, whiteSpace: 'nowrap' }}>{full(t.amount)}</span>
+                    <span style={{ fontWeight: 600, fontSize: 14, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{full(t.amount)}</span>
                   </button>
                 ))}
               </div>

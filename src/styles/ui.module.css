@@ -1677,6 +1677,7 @@ textarea.input {
   border-top: 1px solid var(--divider);
 }
 .sideTitle {
+  font-family: var(--font-serif);
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -3564,8 +3565,8 @@ textarea.input {
 .sumCard {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 18px 20px;
+  gap: 14px;
+  padding: 20px 22px;
   border-radius: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -3586,7 +3587,7 @@ textarea.input {
 }
 @media (max-width: 759px) {
   .sumBig { font-size: 24px; }
-  .sumCard { padding: 16px; }
+  .sumCard { padding: 16px; gap: 12px; }
 }
 .sumTrack {
   position: relative;
@@ -3615,22 +3616,48 @@ textarea.input {
   opacity: 0.6;
   pointer-events: none;
 }
+.catMain {
+  gap: 24px;
+}
+.catSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .sectionHead {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  padding: 0 4px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-muted);
+  gap: 8px 12px;
+  padding: 0 2px;
+}
+.sectionHeadTitle {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink);
 }
 .sectionHeadRight {
   margin-left: auto;
-  font-weight: 500;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 @media (max-width: 759px) {
+  .catMain {
+    gap: 20px;
+  }
+  .sectionHeadTitle {
+    font-size: 18px;
+    line-height: 24px;
+  }
   .sectionHeadRight {
     white-space: normal;
     text-align: right;
@@ -5220,8 +5247,8 @@ button.sxTile:disabled {
 }
 .mxSummary {
   margin: 0;
-  font-size: 15px;
-  line-height: 22px;
+  font-size: 14px;
+  line-height: 20px;
   color: var(--ink-muted);
 }
 .mxSummary strong {
@@ -5235,8 +5262,8 @@ button.sxTile:disabled {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 15px;
-  line-height: 22px;
+  font-size: 14px;
+  line-height: 20px;
 }
 .mxList li {
   display: flex;
@@ -5520,7 +5547,10 @@ button.sxTile:disabled {
     font-size: 15px;
   }
   .mxMeter {
-    margin: 0 14px 14px;
+    margin: 0 14px 10px;
+  }
+  .mxMetaFoot {
+    padding: 0 14px 13px;
   }
   .mxBody {
     padding: 0 14px 14px;
@@ -6679,24 +6709,110 @@ button.sxTile:disabled {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.fbRingSummary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--card-glow);
+}
+.fbRingWrap {
+  position: relative;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+}
+.fbRingCenter {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.fbRingBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fbRingTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 12px;
+  flex-wrap: wrap;
+}
+.fbRingTitleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.fbRingTitle {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.fbRingTitle[data-done] {
+  color: var(--good);
+}
+.fbOverduePill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.fbRingAmt {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .fbProgressBar {
-  height: 4px;
+  height: 6px;
   border-radius: 999px;
   background: var(--surface-200);
   overflow: hidden;
-  margin-bottom: 2px;
+  margin: 0;
 }
 .fbProgressFill {
   height: 100%;
   border-radius: inherit;
   transition: width 0.25s ease-out, background-color 0.2s ease;
 }
+@media (max-width: 759px) {
+  .fbRingSummary {
+    padding: 12px 14px;
+    gap: 12px;
+  }
+}
 .fbPlanStrip {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 12px 24px;
   flex-wrap: wrap;
-  padding: 10px 14px;
+  padding: 12px 14px;
   border-radius: 12px;
   background: var(--surface-100);
   border: 1px solid var(--border);
@@ -11322,7 +11438,7 @@ button.sumPulsePill:hover {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border-radius: 14px;
   background: var(--surface);
   border: 1px dashed color-mix(in srgb, var(--good) 35%, var(--border));

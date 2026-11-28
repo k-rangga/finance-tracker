@@ -461,7 +461,7 @@ export function BudgetCard({
                               {dayMonth(t.date)} · {t.account}
                             </span>
                           </span>
-                          <span style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap' }}>{full(t.net)}</span>
+                          <span style={{ fontWeight: 600, fontSize: 14, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{full(t.net)}</span>
                         </button>
                       ))}
                       {sorted.length > 5 && (
@@ -684,11 +684,11 @@ export function BillItem({
           <div className={s.fbPlanStrip}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               <span style={{ fontSize: 12, color: C.textMuted }}>Monthly plan</span>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>{lim > 0 ? full(lim) : 'Not set'}</span>
+              <span style={{ fontSize: 15, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{lim > 0 ? full(lim) : 'Not set'}</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               <span style={{ fontSize: 12, color: C.textMuted }}>Paid this cycle</span>
-              <span style={{ fontSize: 15, fontWeight: 600, color: cur > 0 ? C.good : C.textMuted }}>{cur > 0 ? full(cur) : '—'}</span>
+              <span style={{ fontSize: 15, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: cur > 0 ? C.good : C.textMuted }}>{cur > 0 ? full(cur) : '—'}</span>
             </div>
             <button
               type="button"
@@ -737,7 +737,7 @@ export function BillItem({
                         Track bill
                       </button>
                     )}
-                    <span style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap' }}>{full(t.net)}</span>
+                    <span style={{ fontWeight: 600, fontSize: 14, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{full(t.net)}</span>
                   </div>
                 ))}
                 {sortedMine.length > 5 && (
