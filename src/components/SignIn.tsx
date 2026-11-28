@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import s from '../styles/ui.module.css';
+import { AuthBackdrop } from './AuthBackdrop';
 import { Logo } from './Logo';
 import { supabase } from '../lib/supabase';
 import { storage } from '../lib/storage';
@@ -87,17 +88,18 @@ function ChangePinScreen({ email, onDone }: { email: string; onDone: () => void 
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, textAlign: 'center', width: 'min(360px, 100%)' }}>
-        <Logo size={56} mood="happy" interactive followCursor cheer="Almost there!" />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <h1 style={{ fontSize: 24, fontFamily: 'var(--font-serif)', fontWeight: 500 }}>Set a new 6-digit PIN</h1>
+    <div className={s.authStage}>
+      <AuthBackdrop />
+      <div className={s.authBoard}>
+        <div className={s.authHeader}>
+          <Logo size={56} mood="happy" interactive followCursor cheer="Almost there!" />
+          <h1 style={{ margin: 0, fontSize: 24, fontFamily: 'var(--font-serif)', fontWeight: 500 }}>Set a new 6-digit PIN</h1>
           <span style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.5 }}>
             {email ? `Signed in as ${email}. ` : ''}Choose a new PIN so you can sign in instantly next time.
           </span>
         </div>
         <form
-          style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}
+          className={s.authForm}
           onSubmit={e => {
             e.preventDefault();
             void saveNewPin();
@@ -117,7 +119,7 @@ function ChangePinScreen({ email, onDone }: { email: string; onDone: () => void 
               setErr('');
             }}
             aria-label="New 6-digit PIN"
-            style={{ letterSpacing: 6, textAlign: 'center', fontWeight: 600 }}
+            style={{ letterSpacing: pin1 ? 6 : undefined, textAlign: 'center', fontWeight: pin1 ? 600 : undefined }}
           />
           <input
             className={s.input}
@@ -132,7 +134,7 @@ function ChangePinScreen({ email, onDone }: { email: string; onDone: () => void 
               setErr('');
             }}
             aria-label="Confirm 6-digit PIN"
-            style={{ letterSpacing: 6, textAlign: 'center', fontWeight: 600 }}
+            style={{ letterSpacing: pin2 ? 6 : undefined, textAlign: 'center', fontWeight: pin2 ? 600 : undefined }}
           />
           {err && <span className={s.error}>{err}</span>}
           <button type="submit" className={s.btnPrimary} disabled={busy}>
@@ -432,17 +434,18 @@ function SignIn() {
   );
 
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, textAlign: 'center', width: 'min(380px, 100%)' }}>
-        <Logo size={64} mood={readyToGo ? 'happy' : 'calm'} interactive followCursor cheer={flow === 'signup' ? 'Nice to meet you!' : 'Welcome back!'} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <h1 style={{ fontSize: 30, fontFamily: 'var(--font-serif)', fontWeight: 500 }}>Maxie</h1>
+    <div className={s.authStage}>
+      <AuthBackdrop />
+      <div className={s.authBoard}>
+        <div className={s.authHeader}>
+          <Logo size={64} mood={readyToGo ? 'happy' : 'calm'} interactive followCursor cheer={flow === 'signup' ? 'Nice to meet you!' : 'Welcome back!'} />
+          <h1 style={{ margin: 0, fontSize: 30, fontFamily: 'var(--font-serif)', fontWeight: 500 }}>Maxie</h1>
           <span style={{ fontSize: 15, fontFamily: 'var(--font-serif)', color: 'var(--ink-muted)' }}>{hello}</span>
         </div>
 
         {state === 'sent' ? (
-          <>
-            <span style={{ fontSize: 15, color: 'var(--text-soft)', lineHeight: 1.55 }}>
+          <div className={s.authSection}>
+            <span style={{ fontSize: 14.5, color: 'var(--text-soft)', lineHeight: 1.55 }}>
               {otpPurpose === 'reset' ? (
                 <>
                   We emailed <strong>{email.trim()}</strong> a one-time link and 6-digit code — signing in takes you straight to set a new PIN.
@@ -453,7 +456,7 @@ function SignIn() {
                 </>
               ) : (
                 <>
-                  Check <strong>{email.trim()}</strong> for your one-time sign-in link, or paste the 6-digit code below.
+                  Check <strong>{email.trim()}</strong> for your one-time login link, or paste the 6-digit code below.
                 </>
               )}
             </span>
@@ -479,15 +482,15 @@ function SignIn() {
                   if (next.length === 6 && !checking) void verify(next);
                 }}
                 aria-label="Code from the email"
-                style={{ letterSpacing: 4, textAlign: 'center', fontWeight: 600 }}
+                style={{ letterSpacing: code ? 5 : undefined, textAlign: 'center', fontWeight: code ? 600 : undefined }}
               />
               <button type="submit" className={s.btnPrimary} disabled={checking} style={{ flex: 'none' }}>
-                {checking ? 'Checking…' : otpPurpose === 'reset' ? 'Continue' : 'Sign in'}
+                {checking ? 'Checking…' : otpPurpose === 'reset' ? 'Continue' : 'Log in'}
               </button>
             </form>
             {err && <span className={s.error}>{err}</span>}
             {freshAccountCta}
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 18, alignItems: 'center', justifyContent: 'center' }}>
               <button type="button" className={s.textBtnSm} disabled={resendIn > 0} onClick={() => void resendEmail()}>
                 {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend link'}
               </button>
@@ -507,12 +510,12 @@ function SignIn() {
             <span style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>
               Didn&apos;t receive it? Check Spam, or try Continue with Google.
             </span>
-          </>
+          </div>
         ) : state === 'duplicate' ? (
           <div className={s.authNoticeCard}>
             <strong style={{ fontSize: 15 }}>You already have an account</strong>
             <span style={{ fontSize: 13.5, color: 'var(--text-soft)', lineHeight: 1.5 }}>
-              <strong>{email.trim()}</strong> is already registered. Reset your PIN or sign in with a one-time email link:
+              <strong>{email.trim()}</strong> is already registered. Reset your PIN or log in with a one-time email link:
             </span>
             {err && <span className={s.error}>{err}</span>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
@@ -531,16 +534,15 @@ function SignIn() {
                   setSignInMethod('pin');
                 }}
               >
-                Sign in with PIN instead
+                Log in with PIN instead
               </button>
             </div>
           </div>
         ) : (
           <>
-            {/* Top flow switch: Already have account vs New here? */}
-            <div className={s.segment} role="group" aria-label="Choose sign in or sign up" style={{ alignSelf: 'center' }}>
+            <div className={s.authToggle} role="group" aria-label="Choose log in or create account">
               <button type="button" aria-pressed={flow === 'signin'} onClick={() => switchFlow('signin')}>
-                Already have account
+                Log in
               </button>
               <button type="button" aria-pressed={flow === 'signup'} onClick={() => switchFlow('signup')}>
                 New here?
@@ -548,7 +550,7 @@ function SignIn() {
             </div>
 
             {flow === 'signup' ? (
-              <>
+              <div className={s.authSection}>
                 <button
                   type="button"
                   className={s.googleSignInBtn}
@@ -560,11 +562,11 @@ function SignIn() {
                 </button>
 
                 <div className={s.authDivider}>
-                  <span>or sign up with email</span>
+                  <span>or</span>
                 </div>
 
                 <form
-                  style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}
+                  className={s.authForm}
                   onSubmit={e => {
                     e.preventDefault();
                     void signUpWithPin();
@@ -592,26 +594,26 @@ function SignIn() {
                       setErr('');
                     }}
                     aria-label="Choose 6-digit PIN"
-                    style={{ letterSpacing: 6, textAlign: 'center', fontWeight: 600 }}
+                    style={{ letterSpacing: pin ? 6 : undefined, textAlign: 'center', fontWeight: pin ? 600 : undefined }}
                   />
                   {err && <span className={s.error}>{err}</span>}
                   {freshAccountCta}
                   <button type="submit" className={s.btnPrimary} disabled={checking || googleBusy || state === 'sending'}>
-                    {checking ? 'Creating account…' : 'Sign up'}
+                    {checking ? 'Creating account…' : 'Create account'}
                   </button>
                   <button
                     type="button"
                     className={s.textBtnSm}
                     disabled={state === 'sending'}
                     onClick={() => void sendOtp(email, 'signup')}
-                    style={{ alignSelf: 'center' }}
+                    style={{ alignSelf: 'center', marginTop: 2 }}
                   >
                     Or sign up with one-time email link
                   </button>
                 </form>
-              </>
+              </div>
             ) : (
-              <>
+              <div className={s.authSection}>
                 <button
                   type="button"
                   className={s.googleSignInBtn}
@@ -623,21 +625,12 @@ function SignIn() {
                 </button>
 
                 <div className={s.authDivider}>
-                  <span>or with email</span>
-                </div>
-
-                <div className={s.segment} role="group" aria-label="Sign in method" style={{ alignSelf: 'center' }}>
-                  <button type="button" aria-pressed={signInMethod === 'pin'} onClick={() => setSignInMethod('pin')}>
-                    Email + PIN
-                  </button>
-                  <button type="button" aria-pressed={signInMethod === 'link'} onClick={() => setSignInMethod('link')}>
-                    Email link
-                  </button>
+                  <span>or</span>
                 </div>
 
                 {signInMethod === 'pin' ? (
                   <form
-                    style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}
+                    className={s.authForm}
                     onSubmit={e => {
                       e.preventDefault();
                       void signInWithPin();
@@ -667,32 +660,36 @@ function SignIn() {
                         if (next.length === PIN_LENGTH && hasEmail && !checking) void signInWithPin(next);
                       }}
                       aria-label="PIN"
-                      style={{ letterSpacing: 6, textAlign: 'center', fontWeight: 600 }}
+                      style={{ letterSpacing: pin ? 6 : undefined, textAlign: 'center', fontWeight: pin ? 600 : undefined }}
                     />
                     {err && <span className={s.error}>{err}</span>}
                     {freshAccountCta}
                     <button type="submit" className={s.btnPrimary} disabled={checking || googleBusy || state === 'sending'}>
-                      {checking ? 'Signing in…' : 'Sign in'}
+                      {checking ? 'Logging in…' : 'Log in'}
                     </button>
-                    <button
-                      type="button"
-                      className={s.textBtnSm}
-                      disabled={state === 'sending' || checking}
-                      onClick={() => void sendOtp(email, 'reset')}
-                      style={{ alignSelf: 'center' }}
-                    >
-                      Forgot PIN? Email a link to reset
-                    </button>
+                    <div className={s.authFootRow}>
+                      <button type="button" className={s.textBtnSm} onClick={() => setSignInMethod('link')}>
+                        Use email link
+                      </button>
+                      <button
+                        type="button"
+                        className={s.textBtnSm}
+                        disabled={state === 'sending' || checking}
+                        onClick={() => void sendOtp(email, 'reset')}
+                      >
+                        Forgot PIN?
+                      </button>
+                    </div>
                   </form>
                 ) : (
                   <form
-                    style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}
+                    className={s.authForm}
                     onSubmit={e => {
                       e.preventDefault();
                       void sendOtp(email, 'login');
                     }}
                   >
-                    <span style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
+                    <span style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.45 }}>
                       We&apos;ll email you a one-tap link and 6-digit code.
                     </span>
                     <input
@@ -707,11 +704,19 @@ function SignIn() {
                     {err && <span className={s.error}>{err}</span>}
                     {freshAccountCta}
                     <button type="submit" className={s.btnPrimary} disabled={state === 'sending' || googleBusy}>
-                      {state === 'sending' ? 'Sending…' : 'Send sign-in link'}
+                      {state === 'sending' ? 'Sending…' : 'Send login link'}
+                    </button>
+                    <button
+                      type="button"
+                      className={s.textBtnSm}
+                      onClick={() => setSignInMethod('pin')}
+                      style={{ alignSelf: 'center', marginTop: 2 }}
+                    >
+                      Use 6-digit PIN instead
                     </button>
                   </form>
                 )}
-              </>
+              </div>
             )}
           </>
         )}
