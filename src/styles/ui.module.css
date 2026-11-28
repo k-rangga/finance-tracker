@@ -11904,3 +11904,15 @@ button.sumPulsePill:hover {
   height: 1px;
   background: var(--divider);
 }
+.authNoticeCard {
+  width: 100%;
+  padding: 18px 16px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border));
+  box-shadow: var(--card-glow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
