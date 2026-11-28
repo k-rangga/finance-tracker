@@ -166,6 +166,7 @@ function SignIn() {
   const [googleBusy, setGoogleBusy] = useState(false);
   const [resendIn, setResendIn] = useState(0);
   const [err, setErr] = useState('');
+  const [deactivatedNotice, setDeactivatedNotice] = useState(false);
   const [code, setCode] = useState('');
   const [checking, setChecking] = useState(false);
 
@@ -175,8 +176,10 @@ function SignIn() {
     const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
     const raw = q.get('error_description') || hash.get('error_description') || q.get('error') || hash.get('error');
     if (raw) {
-      const msg = /banned|inactive/i.test(raw)
-        ? 'This account has been deactivated.'
+      const banned = /banned|inactive/i.test(raw);
+      setDeactivatedNotice(banned);
+      const msg = banned
+        ? 'This email belongs to a deactivated account.'
         : /access_denied|cancel/i.test(raw)
           ? 'Google sign-in was cancelled.'
           : raw;
@@ -195,12 +198,55 @@ function SignIn() {
     setFlow(next);
     setState('');
     setErr('');
+    setDeactivatedNotice(false);
     setPin('');
     setCode('');
   };
 
+  const formatAuthError = (msg: string, disabledMsg?: string) => {
+    if (/banned|inactive/i.test(msg)) {
+      setDeactivatedNotice(true);
+      return 'This email belongs to a deactivated account.';
+    }
+    setDeactivatedNotice(false);
+    if (/rate|many|limit|exceeded/i.test(msg)) {
+      return 'Email limit reached (~2/hour on default mailer). Wait a bit, check Spam, or Continue with Google.';
+    }
+    if (/disabled|not enabled/i.test(msg)) {
+      return disabledMsg ?? 'Email sign-in is disabled — please Continue with Google above.';
+    }
+    return msg;
+  };
+
+  /** Free any email still held by an old deactivated user_id so a fresh user_id can be created. */
+  const prepareSignupEmail = async (rawEmail: string) => {
+    try {
+      await fetch('/api/auth/prepare-signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: rawEmail.trim() }),
+      });
+    } catch {
+      /* non-blocking: proceed with Supabase auth */
+    }
+  };
+
+  const reopenWithFreshAccount = async () => {
+    if (!email.trim()) return;
+    setChecking(true);
+    setErr('');
+    await prepareSignupEmail(email);
+    setChecking(false);
+    setDeactivatedNotice(false);
+    setState('');
+    setCode('');
+    setPin('');
+    setFlow('signup');
+  };
+
   const signInWithGoogle = async () => {
     setErr('');
+    setDeactivatedNotice(false);
     setGoogleBusy(true);
     const { error } = await supabase!.auth.signInWithOAuth({
       provider: 'google',
@@ -224,25 +270,46 @@ function SignIn() {
     setOtpPurpose(purpose);
     setState('sending');
     setErr('');
+    setDeactivatedNotice(false);
     try {
       if (purpose === 'reset') sessionStorage.setItem(RESET_PIN_KEY, '1');
       else sessionStorage.removeItem(RESET_PIN_KEY);
     } catch {
       /* ignore */
     }
+    if (purpose === 'signup') {
+      await prepareSignupEmail(e);
+    }
     const redirectTo = purpose === 'reset' ? `${location.origin}/?resetPin=1` : location.origin;
     const { error } = await supabase!.auth.signInWithOtp({ email: e, options: { emailRedirectTo: redirectTo } });
     if (error) {
       setState('');
-      setErr(
-        /disabled|not enabled/i.test(error.message)
-          ? 'Email sign-in is currently disabled — use Google above or enable Email in Supabase.'
-          : error.message,
-      );
+      setErr(formatAuthError(error.message, 'Email sign-in is currently disabled — use Google above or enable Email in Supabase.'));
     } else {
       setState('sent');
       setResendIn(30);
     }
+  };
+
+  /** Resend either a signup confirmation email or a magic-link OTP email depending on the active step. */
+  const resendEmail = async () => {
+    const e = email.trim();
+    if (!e || resendIn > 0) return;
+    if (otpPurpose === 'signup') {
+      setErr('');
+      setDeactivatedNotice(false);
+      setResendIn(30);
+      const { error } = await supabase!.auth.resend({
+        type: 'signup',
+        email: e,
+        options: { emailRedirectTo: location.origin },
+      });
+      if (error) {
+        setErr(formatAuthError(error.message));
+      }
+      return;
+    }
+    await sendOtp(e, otpPurpose);
   };
 
   /** Verify 6-digit OTP code from email. */
@@ -251,6 +318,7 @@ function SignIn() {
     if (token.length < 6) return setErr('Enter the 6-digit code from the email.');
     setChecking(true);
     setErr('');
+    setDeactivatedNotice(false);
     const e = email.trim();
     let res = await supabase!.auth.verifyOtp({ email: e, token, type: otpPurpose === 'signup' ? 'signup' : 'email' });
     if (res.error && otpPurpose === 'signup') {
@@ -258,11 +326,16 @@ function SignIn() {
     }
     setChecking(false);
     if (res.error) {
-      setErr(
-        res.error.message.includes('expired') || res.error.message.includes('invalid')
-          ? 'That code is wrong or has expired. Send a new link.'
-          : res.error.message,
-      );
+      if (/banned|inactive/i.test(res.error.message)) {
+        setDeactivatedNotice(true);
+        setErr('This email belongs to a deactivated account.');
+      } else {
+        setErr(
+          res.error.message.includes('expired') || res.error.message.includes('invalid')
+            ? 'That code is wrong or has expired. Send a new link.'
+            : formatAuthError(res.error.message),
+        );
+      }
     }
   };
 
@@ -275,20 +348,20 @@ function SignIn() {
     storage.setRaw(LAST_EMAIL_KEY, e);
     setChecking(true);
     setErr('');
+    setDeactivatedNotice(false);
     const { error } = await supabase!.auth.signInWithPassword({ email: e, password: p });
     setChecking(false);
     if (error) {
       setPin('');
+      if (/banned|inactive/i.test(error.message)) {
+        setDeactivatedNotice(true);
+        setErr('This email belongs to a deactivated account.');
+        return;
+      }
       setErr(
-        /banned|inactive/i.test(error.message)
-          ? 'This account has been deactivated.'
-          : /invalid/i.test(error.message)
-            ? "That email and PIN don't match. Forgot your PIN? Send a one-time reset link below."
-            : /rate|many/i.test(error.message)
-              ? 'Too many tries. Wait a few minutes, or sign in with Google.'
-              : /disabled|not enabled/i.test(error.message)
-                ? 'Email sign-in is disabled — please Continue with Google above.'
-                : error.message,
+        /invalid/i.test(error.message)
+          ? "That email and PIN don't match. Forgot your PIN? Send a one-time reset link below."
+          : formatAuthError(error.message),
       );
     }
   };
@@ -303,6 +376,8 @@ function SignIn() {
     storage.setRaw(LAST_EMAIL_KEY, e);
     setChecking(true);
     setErr('');
+    setDeactivatedNotice(false);
+    await prepareSignupEmail(e);
     const { data, error } = await supabase!.auth.signUp({
       email: e,
       password: p,
@@ -321,11 +396,7 @@ function SignIn() {
     }
 
     if (error) {
-      setErr(
-        /disabled|not enabled/i.test(error.message)
-          ? 'Email sign-up is currently disabled — tap Sign up with Google above.'
-          : error.message,
-      );
+      setErr(formatAuthError(error.message, 'Email sign-up is currently disabled — tap Sign up with Google above.'));
       return;
     }
 
@@ -341,6 +412,24 @@ function SignIn() {
   const hello = hr < 12 ? 'Good morning! Ready to check in?' : hr < 18 ? 'Good afternoon! Ready to check in?' : 'Good evening! Ready to check in?';
   const hasEmail = /^\S+@\S+\.\S+$/.test(email.trim());
   const readyToGo = state === 'sent' || hasEmail || pin.length === PIN_LENGTH;
+
+  const onEmailChange = (v: string) => {
+    setEmail(v);
+    if (err) setErr('');
+    if (deactivatedNotice) setDeactivatedNotice(false);
+  };
+
+  const freshAccountCta = deactivatedNotice && (
+    <button
+      type="button"
+      className={s.textBtnSm}
+      disabled={checking}
+      onClick={() => void reopenWithFreshAccount()}
+      style={{ alignSelf: 'center', textDecoration: 'underline' }}
+    >
+      {checking ? 'Preparing fresh account…' : 'Create a fresh account with this email'}
+    </button>
+  );
 
   return (
     <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
@@ -397,8 +486,9 @@ function SignIn() {
               </button>
             </form>
             {err && <span className={s.error}>{err}</span>}
+            {freshAccountCta}
             <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-              <button type="button" className={s.textBtnSm} disabled={resendIn > 0} onClick={() => void sendOtp(email, otpPurpose)}>
+              <button type="button" className={s.textBtnSm} disabled={resendIn > 0} onClick={() => void resendEmail()}>
                 {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend link'}
               </button>
               <button
@@ -408,11 +498,15 @@ function SignIn() {
                   setState('');
                   setCode('');
                   setErr('');
+                  setDeactivatedNotice(false);
                 }}
               >
                 Back
               </button>
             </div>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+              Didn&apos;t receive it? Check Spam, or try Continue with Google.
+            </span>
           </>
         ) : state === 'duplicate' ? (
           <div className={s.authNoticeCard}>
@@ -482,7 +576,7 @@ function SignIn() {
                     autoComplete="email"
                     placeholder="you@example.com"
                     value={email}
-                    onChange={e => setEmail(e.target.value)}
+                    onChange={e => onEmailChange(e.target.value)}
                     aria-label="Email"
                   />
                   <input
@@ -501,6 +595,7 @@ function SignIn() {
                     style={{ letterSpacing: 6, textAlign: 'center', fontWeight: 600 }}
                   />
                   {err && <span className={s.error}>{err}</span>}
+                  {freshAccountCta}
                   <button type="submit" className={s.btnPrimary} disabled={checking || googleBusy || state === 'sending'}>
                     {checking ? 'Creating account…' : 'Sign up'}
                   </button>
@@ -508,7 +603,7 @@ function SignIn() {
                     type="button"
                     className={s.textBtnSm}
                     disabled={state === 'sending'}
-                    onClick={() => void sendOtp(email, 'login')}
+                    onClick={() => void sendOtp(email, 'signup')}
                     style={{ alignSelf: 'center' }}
                   >
                     Or sign up with one-time email link
@@ -554,7 +649,7 @@ function SignIn() {
                       autoComplete="username"
                       placeholder="you@example.com"
                       value={email}
-                      onChange={e => setEmail(e.target.value)}
+                      onChange={e => onEmailChange(e.target.value)}
                       aria-label="Email"
                     />
                     <input
@@ -575,6 +670,7 @@ function SignIn() {
                       style={{ letterSpacing: 6, textAlign: 'center', fontWeight: 600 }}
                     />
                     {err && <span className={s.error}>{err}</span>}
+                    {freshAccountCta}
                     <button type="submit" className={s.btnPrimary} disabled={checking || googleBusy || state === 'sending'}>
                       {checking ? 'Signing in…' : 'Sign in'}
                     </button>
@@ -605,10 +701,11 @@ function SignIn() {
                       autoComplete="email"
                       placeholder="you@example.com"
                       value={email}
-                      onChange={e => setEmail(e.target.value)}
+                      onChange={e => onEmailChange(e.target.value)}
                       aria-label="Email"
                     />
                     {err && <span className={s.error}>{err}</span>}
+                    {freshAccountCta}
                     <button type="submit" className={s.btnPrimary} disabled={state === 'sending' || googleBusy}>
                       {state === 'sending' ? 'Sending…' : 'Send sign-in link'}
                     </button>

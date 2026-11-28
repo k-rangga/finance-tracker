@@ -3,6 +3,7 @@
  * while archiving anonymized learnings (merchant category rules, rated Maxie answer feedback, and trigger
  * aggregates — zero PII, zero email bodies, zero bank names, zero raw transactions).
  */
+import crypto from 'node:crypto';
 import { admin, serviceKey, supabaseUrl } from './env.js';
 import { disconnect } from './google.js';
 
@@ -93,6 +94,70 @@ export function isInactiveAuthUser(u: { app_metadata?: Record<string, unknown>; 
   return false;
 }
 
+/** Deterministic non-routable placeholder email assigned when releasing a deactivated account's email. */
+export function archivedEmailFor(userId: string, now = new Date()): string {
+  const id8 = userId.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) || 'user';
+  return `inactive+${id8}+${now.getTime()}@deleted.maxie.local`;
+}
+
+/** Short non-reversible digest for auditing which prior email belonged to an archived row without keeping PII. */
+export function hashEmail(email: string): string {
+  return crypto.createHash('sha256').update(email.trim().toLowerCase()).digest('hex').slice(0, 16);
+}
+
+/**
+ * Free an email address currently held by any `inactive` / banned Supabase Auth user so the same
+ * person can register a brand-new `user_id` with that email. Active accounts are never touched.
+ * Old deactivated `user_id`s, `props`, `category_rules`, `user_profiles`, and learnings stay intact.
+ */
+export async function releaseInactiveEmail(rawEmail: string): Promise<boolean> {
+  const email = rawEmail.trim().toLowerCase();
+  if (!email || !/^\S+@\S+\.\S+$/.test(email)) return false;
+
+  const key = serviceKey();
+  const base = supabaseUrl();
+  let released = false;
+
+  for (let page = 1; page <= 5; page++) {
+    const res = await fetch(`${base}/auth/v1/admin/users?page=${page}&per_page=50&filter=${encodeURIComponent(email)}`, {
+      headers: { apikey: key, Authorization: 'Bearer ' + key },
+    });
+    if (!res.ok) break;
+
+    const body = (await res.json()) as {
+      users?: Array<{ id: string; email?: string | null; app_metadata?: Record<string, unknown>; banned_until?: string | null }>;
+    };
+    const users = body.users ?? [];
+    if (users.length === 0) break;
+
+    for (const u of users) {
+      if ((u.email ?? '').trim().toLowerCase() !== email) continue;
+      if (!isInactiveAuthUser(u)) continue;
+
+      const now = new Date();
+      const put = await fetch(`${base}/auth/v1/admin/users/${encodeURIComponent(u.id)}`, {
+        method: 'PUT',
+        headers: { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: archivedEmailFor(u.id, now),
+          email_confirm: true,
+          app_metadata: {
+            ...(u.app_metadata ?? {}),
+            status: 'inactive',
+            prior_email_hash: hashEmail(email),
+            email_released_at: now.toISOString(),
+          },
+        }),
+      });
+      if (put.ok) released = true;
+    }
+
+    if (users.length < 50) break;
+  }
+
+  return released;
+}
+
 /**
  * Soft-delete an account:
  * 1. Revoke Google OAuth access & delete tokens.
@@ -166,14 +231,41 @@ export async function deactivateUser(userId: string, reason?: string): Promise<{
     // Table may not exist on deployments that haven't re-run schema.sql yet; `props` already preserves state.
   }
 
-  // Ban/deactivate the Auth user (~100 years) so tokens are rejected while keeping the user row & learnings.
+  // Ban/deactivate the Auth user (~100 years) and free their real email so future signups create a fresh user_id
+  // while preserving this old user_id row & archived learnings intact.
   const key = serviceKey();
-  const r = await fetch(`${supabaseUrl()}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+  const base = supabaseUrl();
+  const encodedId = encodeURIComponent(userId);
+  let priorEmailHash: string | undefined;
+  let existingMeta: Record<string, unknown> = {};
+  try {
+    const cur = await fetch(`${base}/auth/v1/admin/users/${encodedId}`, {
+      headers: { apikey: key, Authorization: 'Bearer ' + key },
+    });
+    if (cur.ok) {
+      const u = (await cur.json()) as { email?: string | null; app_metadata?: Record<string, unknown> };
+      existingMeta = u.app_metadata ?? {};
+      if (u.email && !u.email.endsWith('@deleted.maxie.local')) {
+        priorEmailHash = hashEmail(u.email);
+      }
+    }
+  } catch {
+    /* non-blocking: still archive the email placeholder below */
+  }
+
+  const r = await fetch(`${base}/auth/v1/admin/users/${encodedId}`, {
     method: 'PUT',
     headers: { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      email: archivedEmailFor(userId, now),
+      email_confirm: true,
       ban_duration: '876000h',
-      app_metadata: { status: 'inactive', deactivated_at: archivedAt },
+      app_metadata: {
+        ...existingMeta,
+        status: 'inactive',
+        deactivated_at: archivedAt,
+        ...(priorEmailHash ? { prior_email_hash: priorEmailHash } : {}),
+      },
     }),
   });
   if (!r.ok) {

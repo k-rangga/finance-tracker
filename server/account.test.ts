@@ -3,7 +3,7 @@
  * Run with `npm run test:account`.
  */
 import assert from 'node:assert/strict';
-import { buildArchivedLearnings, isInactiveAuthUser } from './account.js';
+import { archivedEmailFor, buildArchivedLearnings, hashEmail, isInactiveAuthUser } from './account.js';
 
 let passed = 0;
 const test = (name: string, fn: () => void) => {
@@ -56,6 +56,21 @@ test('isInactiveAuthUser blocks inactive app_metadata or future banned_until', (
   assert.equal(isInactiveAuthUser({ banned_until: new Date(Date.now() - 86_400_000).toISOString() }), false);
   assert.equal(isInactiveAuthUser({ app_metadata: { status: 'active' } }), false);
   assert.equal(isInactiveAuthUser({}), false);
+});
+
+test('archivedEmailFor generates deterministic non-routable placeholder email', () => {
+  const ts = new Date('2026-11-28T06:00:00Z');
+  const out = archivedEmailFor('AB12-CD34-EF56', ts);
+  assert.equal(out, `inactive+ab12cd34+${ts.getTime()}@deleted.maxie.local`);
+  assert.equal(archivedEmailFor('---', ts), `inactive+user+${ts.getTime()}@deleted.maxie.local`);
+});
+
+test('hashEmail normalizes case/whitespace to a fixed 16-char hex digest', () => {
+  const a = hashEmail('  Rangga@Example.COM ');
+  const b = hashEmail('rangga@example.com');
+  assert.equal(a, b);
+  assert.match(a, /^[0-9a-f]{16}$/);
+  assert.notEqual(a, hashEmail('other@example.com'));
 });
 
 console.log(`\nall passed (${passed})`);
