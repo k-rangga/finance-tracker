@@ -11896,6 +11896,7 @@ button.sumPulsePill:hover {
   gap: 12px;
   color: var(--text-faint);
   font-size: 12px;
+  user-select: none;
 }
 .authDivider::before,
 .authDivider::after {
@@ -11915,6 +11916,29 @@ button.sumPulsePill:hover {
   flex-direction: column;
   gap: 10px;
   text-align: left;
+}
+.authWarmNotice {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--clay-soft) 24%, var(--surface) 76%);
+  border: 1px solid color-mix(in srgb, var(--clay) 38%, var(--border));
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.authWarmNotice strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.authWarmTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
 }
 
 /* Sign-in stage, signature board, and atmospheric jumping-husky backdrop */
@@ -11990,6 +12014,9 @@ button.sumPulsePill:hover {
   display: flex;
   flex-direction: column;
   gap: 11px;
+}
+.authForm input {
+  text-align: center;
 }
 .authFootRow {
   width: 100%;

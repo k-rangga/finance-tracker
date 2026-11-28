@@ -8,6 +8,7 @@ import { storage } from '../lib/storage';
 
 const METHOD_KEY = 'moneyTracker.signInMethod';
 const LAST_EMAIL_KEY = 'moneyTracker.lastEmail';
+const EMAIL_COOLDOWN_KEY = 'maxie.emailCooldownUntil';
 export const RESET_PIN_KEY = 'maxie.resetPin';
 /** A PIN is 6 digits: Supabase keeps it as the account password. */
 export const PIN_LENGTH = 6;
@@ -18,6 +19,32 @@ type OtpPurpose = 'signup' | 'login' | 'reset';
 
 function isWeakPin(p: string): boolean {
   return /^(\d)\1+$/.test(p) || '0123456789'.includes(p) || '9876543210'.includes(p);
+}
+
+function clearStoredCooldown() {
+  try {
+    localStorage.removeItem(EMAIL_COOLDOWN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function resolveCooldownUntil(rawMsg: string, nowMs = Date.now()): number {
+  const secMatch = rawMsg.match(/after\s+(\d+)\s*sec/i);
+  if (secMatch) {
+    return nowMs + Math.max(5, Number(secMatch[1])) * 1000;
+  }
+  const existing = Number(storage.getRaw(EMAIL_COOLDOWN_KEY));
+  if (Number.isFinite(existing) && existing > nowMs + 10_000) {
+    return existing;
+  }
+  const until = nowMs + 60 * 60 * 1000;
+  storage.setRaw(EMAIL_COOLDOWN_KEY, String(until));
+  return until;
+}
+
+function formatClockTime(ms: number): string {
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(ms));
 }
 
 /** The Vercel version: the app once signed in (routing Forgot-PIN arrivals straight to Change PIN first). */
@@ -188,6 +215,8 @@ function SignIn() {
   const [googleBusy, setGoogleBusy] = useState(false);
   const [resendIn, setResendIn] = useState(0);
   const [err, setErr] = useState('');
+  const [rateLimitUntil, setRateLimitUntil] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const [deactivatedNotice, setDeactivatedNotice] = useState(false);
   const [code, setCode] = useState('');
   const [checking, setChecking] = useState(false);
@@ -201,9 +230,9 @@ function SignIn() {
       const banned = /banned|inactive/i.test(raw);
       setDeactivatedNotice(banned);
       const msg = banned
-        ? 'This email belongs to a deactivated account.'
+        ? 'That email was from a deactivated account — happy to set up a fresh one for you.'
         : /access_denied|cancel/i.test(raw)
-          ? 'Google sign-in was cancelled.'
+          ? "No worries — Google sign-in was cancelled. Try again whenever you're ready."
           : raw;
       setErr(msg);
       history.replaceState(null, '', location.pathname);
@@ -216,10 +245,32 @@ function SignIn() {
     return () => clearTimeout(t);
   }, [resendIn]);
 
+  // Keep the comeback countdown fresh without spinning unnecessary ticks.
+  useEffect(() => {
+    if (rateLimitUntil === null) return;
+    const check = () => {
+      const now = Date.now();
+      if (now >= rateLimitUntil) {
+        setRateLimitUntil(null);
+        clearStoredCooldown();
+      } else {
+        setNowTick(now);
+      }
+    };
+    const rem = rateLimitUntil - Date.now();
+    if (rem <= 0) {
+      check();
+      return;
+    }
+    const id = window.setInterval(check, rem <= 90_000 ? 1000 : 15_000);
+    return () => window.clearInterval(id);
+  }, [rateLimitUntil]);
+
   const switchFlow = (next: AuthFlow) => {
     setFlow(next);
     setState('');
     setErr('');
+    setRateLimitUntil(null);
     setDeactivatedNotice(false);
     setPin('');
     setCode('');
@@ -228,14 +279,19 @@ function SignIn() {
   const formatAuthError = (msg: string, disabledMsg?: string) => {
     if (/banned|inactive/i.test(msg)) {
       setDeactivatedNotice(true);
-      return 'This email belongs to a deactivated account.';
+      setRateLimitUntil(null);
+      return 'That email was from a deactivated account — happy to set up a fresh one for you.';
     }
     setDeactivatedNotice(false);
-    if (/rate|many|limit|exceeded/i.test(msg)) {
-      return 'Email limit reached (~2/hour on default mailer). Wait a bit, check Spam, or Continue with Google.';
+    if (/rate|many|limit|exceeded|after\s+\d+\s*sec/i.test(msg)) {
+      const until = resolveCooldownUntil(msg);
+      setRateLimitUntil(until);
+      setNowTick(Date.now());
+      return '';
     }
+    setRateLimitUntil(null);
     if (/disabled|not enabled/i.test(msg)) {
-      return disabledMsg ?? 'Email sign-in is disabled — please Continue with Google above.';
+      return disabledMsg ?? 'Email sign-in is taking a break right now — Google above will get you straight in.';
     }
     return msg;
   };
@@ -306,8 +362,10 @@ function SignIn() {
     const { error } = await supabase!.auth.signInWithOtp({ email: e, options: { emailRedirectTo: redirectTo } });
     if (error) {
       setState('');
-      setErr(formatAuthError(error.message, 'Email sign-in is currently disabled — use Google above or enable Email in Supabase.'));
+      setErr(formatAuthError(error.message, 'Email sign-in is taking a break right now — Google above will get you straight in.'));
     } else {
+      setRateLimitUntil(null);
+      clearStoredCooldown();
       setState('sent');
       setResendIn(30);
     }
@@ -328,6 +386,9 @@ function SignIn() {
       });
       if (error) {
         setErr(formatAuthError(error.message));
+      } else {
+        setRateLimitUntil(null);
+        clearStoredCooldown();
       }
       return;
     }
@@ -350,11 +411,11 @@ function SignIn() {
     if (res.error) {
       if (/banned|inactive/i.test(res.error.message)) {
         setDeactivatedNotice(true);
-        setErr('This email belongs to a deactivated account.');
+        setErr('That email was from a deactivated account — happy to set up a fresh one for you.');
       } else {
         setErr(
           res.error.message.includes('expired') || res.error.message.includes('invalid')
-            ? 'That code is wrong or has expired. Send a new link.'
+            ? 'That code looks expired or off by a digit — tap Resend link for a fresh one.'
             : formatAuthError(res.error.message),
         );
       }
@@ -365,7 +426,7 @@ function SignIn() {
   const signInWithPin = async (rawPin = pin) => {
     const e = email.trim();
     const p = rawPin.replace(/\D/g, '');
-    if (!/^\S+@\S+\.\S+$/.test(e)) return setErr('Enter your email address.');
+    if (!/^\S+@\S+\.\S+$/.test(e)) return setErr('Pop in your email address first.');
     if (p.length !== PIN_LENGTH) return setErr(`Enter your ${PIN_LENGTH}-digit PIN.`);
     storage.setRaw(LAST_EMAIL_KEY, e);
     setChecking(true);
@@ -377,12 +438,12 @@ function SignIn() {
       setPin('');
       if (/banned|inactive/i.test(error.message)) {
         setDeactivatedNotice(true);
-        setErr('This email belongs to a deactivated account.');
+        setErr('That email was from a deactivated account — happy to set up a fresh one for you.');
         return;
       }
       setErr(
         /invalid/i.test(error.message)
-          ? "That email and PIN don't match. Forgot your PIN? Send a one-time reset link below."
+          ? "That email and PIN didn't quite match. Need a hand? Tap Forgot PIN below."
           : formatAuthError(error.message),
       );
     }
@@ -392,9 +453,9 @@ function SignIn() {
   const signUpWithPin = async () => {
     const e = email.trim();
     const p = pin.replace(/\D/g, '');
-    if (!/^\S+@\S+\.\S+$/.test(e)) return setErr('Enter your email address.');
+    if (!/^\S+@\S+\.\S+$/.test(e)) return setErr('Pop in your email address first.');
     if (p.length !== PIN_LENGTH) return setErr(`Choose a ${PIN_LENGTH}-digit PIN.`);
-    if (isWeakPin(p)) return setErr('Pick a PIN that is harder to guess than a run or repeat.');
+    if (isWeakPin(p)) return setErr("Try a PIN that's a little trickier to guess than repeats or 123456.");
     storage.setRaw(LAST_EMAIL_KEY, e);
     setChecking(true);
     setErr('');
@@ -418,10 +479,12 @@ function SignIn() {
     }
 
     if (error) {
-      setErr(formatAuthError(error.message, 'Email sign-up is currently disabled — tap Sign up with Google above.'));
+      setErr(formatAuthError(error.message, 'Email sign-up is taking a break right now — Sign up with Google above works right away.'));
       return;
     }
 
+    setRateLimitUntil(null);
+    clearStoredCooldown();
     if (!data.session) {
       // Confirm email is ON: show one-time verification code/link screen.
       setOtpPurpose('signup');
@@ -438,8 +501,33 @@ function SignIn() {
   const onEmailChange = (v: string) => {
     setEmail(v);
     if (err) setErr('');
+    if (rateLimitUntil !== null) setRateLimitUntil(null);
     if (deactivatedNotice) setDeactivatedNotice(false);
   };
+
+  const remainingCooldownMs = rateLimitUntil !== null ? Math.max(0, rateLimitUntil - nowTick) : 0;
+  const warmRateNotice = rateLimitUntil !== null && remainingCooldownMs > 0 && (
+    <div className={s.authWarmNotice} role="status">
+      {remainingCooldownMs <= 90_000 ? (
+        <>
+          <span className={s.authWarmTitle}>Just catching our breath</span>
+          <span>
+            Give email about <strong>{Math.max(1, Math.ceil(remainingCooldownMs / 1000))} seconds</strong> before trying again, or hop straight in with{' '}
+            <strong>{flow === 'signup' ? 'Sign up with Google' : 'Continue with Google'}</strong> above.
+          </span>
+        </>
+      ) : (
+        <>
+          <span className={s.authWarmTitle}>Our mailbox needs a short breather</span>
+          <span>
+            Check Spam in case an earlier link already landed, or come back around <strong>{formatClockTime(rateLimitUntil)}</strong> (about{' '}
+            {Math.max(1, Math.ceil(remainingCooldownMs / 60_000))} min). Want in right now?{' '}
+            <strong>{flow === 'signup' ? 'Sign up with Google' : 'Continue with Google'}</strong> works immediately.
+          </span>
+        </>
+      )}
+    </div>
+  );
 
   const freshAccountCta = deactivatedNotice && (
     <button
@@ -507,6 +595,7 @@ function SignIn() {
               </button>
             </form>
             {err && <span className={s.error}>{err}</span>}
+            {warmRateNotice}
             {freshAccountCta}
             <div style={{ display: 'flex', gap: 18, alignItems: 'center', justifyContent: 'center' }}>
               <button type="button" className={s.textBtnSm} disabled={resendIn > 0} onClick={() => void resendEmail()}>
@@ -615,6 +704,7 @@ function SignIn() {
                     style={{ letterSpacing: pin ? 6 : undefined, textAlign: 'center', fontWeight: pin ? 600 : undefined }}
                   />
                   {err && <span className={s.error}>{err}</span>}
+                  {warmRateNotice}
                   {freshAccountCta}
                   <button type="submit" className={s.btnPrimary} disabled={checking || googleBusy || state === 'sending'}>
                     {checking ? 'Creating account…' : 'Create account'}
@@ -681,6 +771,7 @@ function SignIn() {
                       style={{ letterSpacing: pin ? 6 : undefined, textAlign: 'center', fontWeight: pin ? 600 : undefined }}
                     />
                     {err && <span className={s.error}>{err}</span>}
+                    {warmRateNotice}
                     {freshAccountCta}
                     <button type="submit" className={s.btnPrimary} disabled={checking || googleBusy || state === 'sending'}>
                       {checking ? 'Logging in…' : 'Log in'}
@@ -720,6 +811,7 @@ function SignIn() {
                       aria-label="Email"
                     />
                     {err && <span className={s.error}>{err}</span>}
+                    {warmRateNotice}
                     {freshAccountCta}
                     <button type="submit" className={s.btnPrimary} disabled={state === 'sending' || googleBusy}>
                       {state === 'sending' ? 'Sending…' : 'Send login link'}
