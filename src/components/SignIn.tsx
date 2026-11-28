@@ -10,7 +10,13 @@ const LAST_EMAIL_KEY = 'moneyTracker.lastEmail';
 /** A PIN is 6 digits: Supabase keeps it as the account password. */
 export const PIN_LENGTH = 6;
 
-/** The Vercel version: the app once you're signed in, else the email-link sign-in. */
+type AuthMethod = 'pin' | 'signup' | 'link';
+
+function isWeakPin(p: string): boolean {
+  return /^(\d)\1+$/.test(p) || '0123456789'.includes(p) || '9876543210'.includes(p);
+}
+
+/** The Vercel version: the app once you're signed in, else Google + Email/PIN sign-in. */
 export function AuthGate({ children, loading }: { children: ReactNode; loading: ReactNode }) {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   useEffect(() => {
@@ -24,20 +30,40 @@ export function AuthGate({ children, loading }: { children: ReactNode; loading: 
 }
 
 function SignIn() {
-  /** Email link (no password) or email + the PIN you set in Settings; the last one used is remembered on this device. */
-  const [method, setMethodState] = useState<'link' | 'pin'>(() => (storage.getRaw(METHOD_KEY) === 'pin' ? 'pin' : 'link'));
-  const setMethod = (m: 'link' | 'pin') => {
+  const [method, setMethodState] = useState<AuthMethod>(() => {
+    const saved = storage.getRaw(METHOD_KEY);
+    return saved === 'link' || saved === 'signup' || saved === 'pin' ? saved : 'pin';
+  });
+  const setMethod = (m: AuthMethod) => {
     storage.setRaw(METHOD_KEY, m);
     setMethodState(m);
     setErr('');
+    setPin('');
   };
   const [pin, setPin] = useState('');
   const [email, setEmail] = useState(() => storage.getRaw(LAST_EMAIL_KEY) ?? '');
   const [state, setState] = useState<'' | 'sending' | 'sent'>('');
+  const [googleBusy, setGoogleBusy] = useState(false);
   const [resendIn, setResendIn] = useState(0);
   const [err, setErr] = useState('');
   const [code, setCode] = useState('');
   const [checking, setChecking] = useState(false);
+
+  // Surface friendly error messages if returning from a cancelled or inactive OAuth redirect.
+  useEffect(() => {
+    const q = new URLSearchParams(location.search);
+    const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+    const raw = q.get('error_description') || hash.get('error_description') || q.get('error') || hash.get('error');
+    if (raw) {
+      const msg = /banned|inactive/i.test(raw)
+        ? 'This account has been deactivated.'
+        : /access_denied|cancel/i.test(raw)
+          ? 'Google sign-in was cancelled.'
+          : raw;
+      setErr(msg);
+      history.replaceState(null, '', location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -45,7 +71,24 @@ function SignIn() {
     return () => clearTimeout(t);
   }, [resendIn]);
 
-  /** The 6-digit code from the same email: for when the email opens on another device. */
+  const signInWithGoogle = async () => {
+    setErr('');
+    setGoogleBusy(true);
+    const { error } = await supabase!.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: location.origin },
+    });
+    if (error) {
+      setGoogleBusy(false);
+      setErr(
+        /not enabled|unsupported provider/i.test(error.message)
+          ? "Google sign-in isn't enabled in Supabase yet (Authentication → Providers → Google)."
+          : error.message,
+      );
+    }
+  };
+
+  /** The 6-digit code from the confirmation / sign-in email. */
   const verify = async (raw = code) => {
     const token = raw.replace(/\D/g, '');
     if (token.length < 6) return setErr('Enter the 6-digit code from the email.');
@@ -55,6 +98,7 @@ function SignIn() {
     setChecking(false);
     if (error) setErr(error.message.includes('expired') || error.message.includes('invalid') ? 'That code is wrong or has expired. Send a new link.' : error.message);
   };
+
   const signInWithPin = async (rawPin = pin) => {
     const e = email.trim();
     const p = rawPin.replace(/\D/g, '');
@@ -68,14 +112,51 @@ function SignIn() {
     if (error) {
       setPin('');
       setErr(
-        /invalid/i.test(error.message)
-          ? "That email and PIN don't match. No PIN yet? Sign in with an email link, then set one in Settings."
-          : /rate|many/i.test(error.message)
-            ? 'Too many tries. Wait a few minutes, or sign in with an email link.'
-            : error.message,
+        /banned|inactive/i.test(error.message)
+          ? 'This account has been deactivated.'
+          : /invalid/i.test(error.message)
+            ? "That email and PIN don't match. New here? Tap Create account, or sign in with Google."
+            : /rate|many/i.test(error.message)
+              ? 'Too many tries. Wait a few minutes, or sign in with Google.'
+              : /disabled|not enabled/i.test(error.message)
+                ? 'Email sign-in is currently disabled — please Continue with Google above.'
+                : error.message,
       );
     }
   };
+
+  const signUpWithPin = async (rawPin = pin) => {
+    const e = email.trim();
+    const p = rawPin.replace(/\D/g, '');
+    if (!/^\S+@\S+\.\S+$/.test(e)) return setErr('Enter your email address.');
+    if (p.length !== PIN_LENGTH) return setErr(`Choose a ${PIN_LENGTH}-digit PIN.`);
+    if (isWeakPin(p)) return setErr('Pick a PIN that is harder to guess than a run or repeat.');
+    storage.setRaw(LAST_EMAIL_KEY, e);
+    setChecking(true);
+    setErr('');
+    const { data, error } = await supabase!.auth.signUp({
+      email: e,
+      password: p,
+      options: { emailRedirectTo: location.origin },
+    });
+    setChecking(false);
+    if (error) {
+      setErr(
+        /disabled|not enabled/i.test(error.message)
+          ? 'Email sign-up is currently disabled — tap Continue with Google above.'
+          : /already registered/i.test(error.message)
+            ? 'An account with this email already exists. Try Email + PIN or Continue with Google.'
+            : error.message,
+      );
+      return;
+    }
+    if (!data.session) {
+      // Confirm email is ON in Supabase: show one-time verification code/link screen.
+      setState('sent');
+      setResendIn(30);
+    }
+  };
+
   const send = async () => {
     const e = email.trim();
     if (!/^\S+@\S+\.\S+$/.test(e)) return setErr('Enter your email address.');
@@ -85,28 +166,35 @@ function SignIn() {
     const { error } = await supabase!.auth.signInWithOtp({ email: e, options: { emailRedirectTo: location.origin } });
     if (error) {
       setState('');
-      setErr(error.message);
+      setErr(
+        /disabled|not enabled/i.test(error.message)
+          ? 'Email sign-in is currently disabled — please Continue with Google above.'
+          : error.message,
+      );
     } else {
       setState('sent');
       setResendIn(30);
     }
   };
+
   const hr = new Date().getHours();
   const hello = hr < 12 ? 'Good morning! Ready to check in?' : hr < 18 ? 'Good afternoon! Ready to check in?' : 'Good evening! Ready to check in?';
   const hasEmail = /^\S+@\S+\.\S+$/.test(email.trim());
   const readyToGo = state === 'sent' || hasEmail || pin.length === PIN_LENGTH;
+
   return (
     <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, textAlign: 'center', width: 'min(360px, 100%)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, textAlign: 'center', width: 'min(370px, 100%)' }}>
         <Logo size={64} mood={readyToGo ? 'happy' : 'calm'} interactive followCursor cheer="Welcome back!" />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <h1 style={{ fontSize: 30, fontFamily: 'var(--font-serif)', fontWeight: 500 }}>Maxie</h1>
           <span style={{ fontSize: 15, fontFamily: 'var(--font-serif)', color: 'var(--ink-muted)' }}>{hello}</span>
         </div>
+
         {state === 'sent' ? (
           <>
             <span style={{ fontSize: 15, color: 'var(--text-soft)', lineHeight: 1.5 }}>
-              Check <strong>{email.trim()}</strong> for a sign-in link, or paste the 6-digit code below.
+              Check <strong>{email.trim()}</strong> for a confirmation link, or paste the 6-digit code below.
             </span>
             <form
               style={{ display: 'flex', gap: 8, width: '100%' }}
@@ -133,17 +221,12 @@ function SignIn() {
                 style={{ letterSpacing: 4, textAlign: 'center', fontWeight: 600 }}
               />
               <button type="submit" className={s.btnPrimary} disabled={checking} style={{ flex: 'none' }}>
-                {checking ? 'Checking…' : 'Sign in'}
+                {checking ? 'Checking…' : 'Verify'}
               </button>
             </form>
             {err && <span className={s.error}>{err}</span>}
             <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-              <button
-                type="button"
-                className={s.textBtnSm}
-                disabled={resendIn > 0}
-                onClick={() => void send()}
-              >
+              <button type="button" className={s.textBtnSm} disabled={resendIn > 0} onClick={() => void send()}>
                 {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend link'}
               </button>
               <button
@@ -155,58 +238,52 @@ function SignIn() {
                   setErr('');
                 }}
               >
-                Use another email
+                Back
               </button>
             </div>
           </>
         ) : (
           <>
-            <div className={s.segment} role="group" aria-label="Sign in with" style={{ alignSelf: 'center' }}>
-              <button type="button" aria-pressed={method === 'link'} onClick={() => setMethod('link')}>
-                Email link
-              </button>
+            {/* 1-tap Google Sign-In via Supabase Auth */}
+            <button
+              type="button"
+              className={s.googleSignInBtn}
+              disabled={googleBusy || checking}
+              onClick={() => void signInWithGoogle()}
+            >
+              <GoogleGIcon />
+              <span>{googleBusy ? 'Opening Google…' : 'Continue with Google'}</span>
+            </button>
+
+            <div className={s.authDivider}>
+              <span>or with email</span>
+            </div>
+
+            <div className={s.segment} role="group" aria-label="Email sign-in options" style={{ alignSelf: 'center' }}>
               <button type="button" aria-pressed={method === 'pin'} onClick={() => setMethod('pin')}>
                 Email + PIN
               </button>
+              <button type="button" aria-pressed={method === 'signup'} onClick={() => setMethod('signup')}>
+                Create account
+              </button>
+              <button type="button" aria-pressed={method === 'link'} onClick={() => setMethod('link')}>
+                Email link
+              </button>
             </div>
-            {method === 'link' ? (
+
+            {method === 'pin' && (
               <form
                 style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}
                 onSubmit={e => {
                   e.preventDefault();
-                  send();
+                  void signInWithPin();
                 }}
               >
-                <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>We'll email you a one-tap link. No password needed.</span>
-                <input
-                  className={s.input}
-                  type="email"
-                  autoComplete="email"
-                  autoFocus
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  aria-label="Email"
-                />
-                {err && <span className={s.error}>{err}</span>}
-                <button type="submit" className={s.btnPrimary} disabled={state === 'sending'}>
-                  {state === 'sending' ? 'Sending…' : 'Send sign-in link'}
-                </button>
-              </form>
-            ) : (
-              <form
-                style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}
-                onSubmit={e => {
-                  e.preventDefault();
-                  signInWithPin();
-                }}
-              >
-                <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>Signs in automatically once you enter your {PIN_LENGTH}-digit PIN.</span>
+                <span style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>Signs in immediately once you enter your {PIN_LENGTH}-digit PIN.</span>
                 <input
                   className={s.input}
                   type="email"
                   autoComplete="username"
-                  autoFocus={!hasEmail}
                   placeholder="you@example.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
@@ -217,7 +294,6 @@ function SignIn() {
                   type="password"
                   inputMode="numeric"
                   autoComplete="current-password"
-                  autoFocus={hasEmail}
                   placeholder="6-digit PIN"
                   maxLength={PIN_LENGTH}
                   value={pin}
@@ -231,11 +307,76 @@ function SignIn() {
                   style={{ letterSpacing: 6, textAlign: 'center', fontWeight: 600 }}
                 />
                 {err && <span className={s.error}>{err}</span>}
-                <button type="submit" className={s.btnPrimary} disabled={checking}>
+                <button type="submit" className={s.btnPrimary} disabled={checking || googleBusy}>
                   {checking ? 'Signing in…' : 'Sign in'}
                 </button>
-                <button type="button" className={s.textBtnSm} onClick={() => setMethod('link')} style={{ alignSelf: 'center' }}>
-                  Forgot your PIN? Use an email link
+              </form>
+            )}
+
+            {method === 'signup' && (
+              <form
+                style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}
+                onSubmit={e => {
+                  e.preventDefault();
+                  void signUpWithPin();
+                }}
+              >
+                <span style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
+                  Create your account with an email and a {PIN_LENGTH}-digit PIN.
+                </span>
+                <input
+                  className={s.input}
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  aria-label="Email"
+                />
+                <input
+                  className={s.input}
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  placeholder={`Choose a ${PIN_LENGTH}-digit PIN`}
+                  maxLength={PIN_LENGTH}
+                  value={pin}
+                  onChange={e => {
+                    const next = e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH);
+                    setPin(next);
+                    setErr('');
+                  }}
+                  aria-label="New 6-digit PIN"
+                  style={{ letterSpacing: 6, textAlign: 'center', fontWeight: 600 }}
+                />
+                {err && <span className={s.error}>{err}</span>}
+                <button type="submit" className={s.btnPrimary} disabled={checking || googleBusy}>
+                  {checking ? 'Creating account…' : 'Create account'}
+                </button>
+              </form>
+            )}
+
+            {method === 'link' && (
+              <form
+                style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}
+                onSubmit={e => {
+                  e.preventDefault();
+                  void send();
+                }}
+              >
+                <span style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>We&apos;ll email you a one-tap link. No PIN needed.</span>
+                <input
+                  className={s.input}
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  aria-label="Email"
+                />
+                {err && <span className={s.error}>{err}</span>}
+                <button type="submit" className={s.btnPrimary} disabled={state === 'sending' || googleBusy}>
+                  {state === 'sending' ? 'Sending…' : 'Send sign-in link'}
                 </button>
               </form>
             )}
@@ -243,6 +384,29 @@ function SignIn() {
         )}
       </div>
     </div>
+  );
+}
+
+function GoogleGIcon() {
+  return (
+    <svg width={18} height={18} viewBox="0 0 24 24" aria-hidden="true" style={{ flex: 'none' }}>
+      <path
+        fill="#4285F4"
+        d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.27 14.29c-.24-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"
+      />
+    </svg>
   );
 }
 
@@ -255,7 +419,7 @@ export const signOut = async () => {
 export async function setPin(pin: string): Promise<string | null> {
   const p = pin.replace(/\D/g, '');
   if (p.length !== PIN_LENGTH) return `Your PIN needs ${PIN_LENGTH} digits.`;
-  if (/^(\d)\1+$/.test(p) || '0123456789'.includes(p) || '9876543210'.includes(p)) return 'Pick a PIN that is harder to guess than a run or repeat.';
+  if (isWeakPin(p)) return 'Pick a PIN that is harder to guess than a run or repeat.';
   const { error } = await supabase!.auth.updateUser({ password: p });
   return error ? error.message : null;
 }

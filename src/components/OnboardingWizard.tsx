@@ -19,7 +19,7 @@ import {
 } from '../lib/gmail';
 import { DEFAULT_INCOME, useSettings } from '../lib/settings';
 import { fmtShort, type Currency } from '../lib/format';
-import { onVercel } from '../lib/supabase';
+import { onVercel, supabase } from '../lib/supabase';
 import { C } from '../lib/tokens';
 
 export const ONBOARDING_STEP_KEY = 'maxie.onboarding.step';
@@ -91,6 +91,21 @@ export function OnboardingWizard({
 
   const isId = lang === 'id';
   const target = mode === 'auto' ? AUTO_LABEL : pick;
+
+  // Auto-prefill display name when signed in via Google OAuth and no name is saved yet.
+  useEffect(() => {
+    if (!onVercel || !supabase || settings.name) return;
+    let alive = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!alive) return;
+      const meta = data.user?.user_metadata as Record<string, unknown> | undefined;
+      const rawName = String(meta?.full_name || meta?.name || '').trim();
+      if (rawName) setName(cur => cur || rawName.slice(0, 40));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [settings.name]);
 
   // Load Gmail labels & metadata-only sample preview on Step 2 with Google connected.
   useEffect(() => {
