@@ -23,7 +23,7 @@ import { TRANSFER_CATEGORY } from '../data/categories';
 import { merchantKey } from '../data/transactions';
 
 /** One category's numbers for this view (see Categories' makeView). */
-export type CardRow = { c: CatView; cur: number; last: number; lim: number; mine: TxView[] };
+export type CardRow = { c: CatView; cur: number; last: number; lim: number; mine: TxView[]; st?: { key: 'over' | 'near' | 'ok'; ink: string; bar: string } };
 
 const DAY_LETTER = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const DAY_NAME = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -213,7 +213,6 @@ export function BudgetCard({
   const days = Array.from({ length: 7 }, (_, i) => new Date(cycle.today.getFullYear(), cycle.today.getMonth(), cycle.today.getDate() - 6 + i));
   const week = days.map(d => ({ d, value: sum(mine.filter(t => t.date.getTime() === d.getTime()).map(t => t.net)) }));
   const wMax = Math.max(1, ...week.map(x => x.value));
-  const spendDays = week.filter(x => x.value > 0).length;
 
   // A top-up that's most of the spending here is probably a transfer, not spending.
   const topup = mine.find(t => TOPUP.test(t.title) && t.net >= cur * 0.4 && t.net > 0);
@@ -312,16 +311,24 @@ export function BudgetCard({
     );
 
   const places = topPlaces(mine);
-  const one = mine.length === 1 ? mine[0] : null;
   const smoothUnder = cur > 0 && lim > 0 && todayFrac != null && todayFrac > 0.15 && cur < lim * todayFrac * 0.85;
+  const isNear = !over && (r.st?.key === 'near' || (lim > 0 && pctUsed >= settings.warnAt));
+  const statusTone: 'over' | 'near' | 'calm' | 'muted' =
+    over > 0 ? 'over' : lim === 0 || cur === 0 ? 'muted' : isNear ? 'near' : smoothUnder ? 'calm' : 'muted';
   const vibe = categoryVibe(c.name, { cur, lim, over, smoothUnder, pctUsed, isId });
   const shareAmt = Math.min(room, step);
+
+  // One consistent prioritized delight chip on the meta footer so adjacent cards keep the exact same height.
+  const hasStamp = !!(challenge && challenge.kind === 'nospend' && (challenge.key === 'running' || challenge.key === 'done'));
+  const showStreak = !hasStamp && streak >= 2 && !settings.quietMode;
+  const showQuiet = !hasStamp && !showStreak && quietDays != null && quietDays >= 2 && !settings.quietMode;
 
   return (
     <section
       id={'cat-' + c.name}
       className={s.mxCard}
       data-over={over > 0 || undefined}
+      data-near={isNear || undefined}
       data-rebalanced={justRebalanced || undefined}
       aria-label={`${c.name} budget`}
     >
@@ -330,57 +337,71 @@ export function BudgetCard({
           <Icon d={c.icon} size={19} />
         </span>
         <span className={s.mxTitles}>
-          <span className={s.mxLabelRow}>
-            <span className={s.mxLabel}>{c.name}</span>
-            {streak >= 2 && !settings.quietMode && (
-              <span className={s.mxStreakBadge} title={`${streak} consecutive cycles within limit`}>
-                <FlameIcon size={12} /> {streak} cycles
-              </span>
-            )}
-            {quietDays != null && quietDays >= 2 && !settings.quietMode && (
-              <span className={s.mxQuietPill} title={`${quietDays} quiet days without spending in ${c.name}`}>
-                {quietDays} quiet days
-              </span>
-            )}
-            {challenge && challenge.kind === 'nospend' && (challenge.key === 'running' || challenge.key === 'done') && (
-              <span className={s.mxMiniStamps} title={challenge.text} aria-label={challenge.text}>
-                {Array.from({ length: challenge.totalDays }, (_, i) => {
-                  const hit = challenge.key === 'done' || i < challenge.day;
-                  return <span key={i} className={s.mxMiniDot} data-hit={hit || undefined} data-done={challenge.key === 'done' || undefined} />;
-                })}
-              </span>
-            )}
-          </span>
-          <span className={s.mxSub}>
-            {short(cur)} of {short(lim)}
-            {vibe && (
-              <span className={smoothUnder || cur === 0 ? s.mxSmoothNote : s.mxVibeNote}> · {vibe}</span>
-            )}
-          </span>
+          <span className={`${s.mxLabel} ${s.ellipsis}`}>{c.name}</span>
         </span>
-        <span className={s.mxStatus} data-over={over > 0 || undefined}>
-          {over > 0 && <Icon d={IC.alert} size={15} />}
-          {over > 0 ? `${(phone ? short : full)(over)} over` : `${(phone ? short : full)(room)} left`}
+        <span className={s.mxStatus} data-tone={statusTone} data-over={over > 0 || undefined}>
+          {(over > 0 || isNear) && <Icon d={IC.alert} size={14} />}
+          {over > 0
+            ? `${(phone ? short : full)(over)} over`
+            : lim > 0
+              ? `${(phone ? short : full)(room)} left`
+              : `${(phone ? short : full)(cur)} spent`}
         </span>
         <Icon d={IC.chevDown} size={18} color={C.textMuted} style={{ flex: 'none', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.16s ease-out' }} />
       </button>
-      <div
-        className={s.mxMeter}
-        style={{ background: over > 0 ? 'var(--danger-soft)' : c.tint }}
-        role="meter"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={pctUsed}
-        aria-label={`${c.name} budget used`}
-      >
-        <span className={s.mxMeterFill} style={{ width: Math.min(100, (cur / (lim || 1)) * 100) + '%', background: over > 0 ? 'var(--danger)' : c.color }} />
-        {lim > 0 && todayFrac != null && todayFrac > 0 && todayFrac < 1 && (
-          <span className={s.mxMeterPace} style={{ left: todayFrac * 100 + '%' }} title={`On-plan pace today: ${full(lim * todayFrac)}`} />
-        )}
+      {lim > 0 && (
+        <div
+          className={s.mxMeter}
+          style={{ background: over > 0 ? 'var(--danger-soft)' : isNear ? 'var(--amber-tint)' : c.tint }}
+          role="meter"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pctUsed}
+          aria-label={`${c.name} budget used`}
+        >
+          <span
+            className={s.mxMeterFill}
+            style={{ width: Math.min(100, (cur / (lim || 1)) * 100) + '%', background: over > 0 ? 'var(--danger)' : isNear ? 'var(--amber)' : c.color }}
+          />
+          {todayFrac != null && todayFrac > 0 && todayFrac < 1 && (
+            <span className={s.mxMeterPace} style={{ left: todayFrac * 100 + '%' }} title={`On-plan pace today: ${full(lim * todayFrac)}`} />
+          )}
+        </div>
+      )}
+      <div className={s.mxMetaFoot}>
+        <span className={s.mxMetaLeft}>
+          {lim > 0
+            ? `${short(cur)} of ${short(lim)} · ${pctUsed}%`
+            : c.name === 'Buffer'
+              ? mine.length > 0
+                ? `${mine.length} to sort`
+                : 'All sorted'
+              : 'No monthly limit'}
+        </span>
+        <span className={s.mxMetaRight}>
+          {hasStamp && challenge ? (
+            <span className={s.mxMiniStamps} title={challenge.text} aria-label={challenge.text}>
+              {Array.from({ length: challenge.totalDays }, (_, i) => {
+                const hit = challenge.key === 'done' || i < challenge.day;
+                return <span key={i} className={s.mxMiniDot} data-hit={hit || undefined} data-done={challenge.key === 'done' || undefined} />;
+              })}
+            </span>
+          ) : showStreak ? (
+            <span className={s.mxStreakBadge} title={`${streak} consecutive cycles within limit`}>
+              <FlameIcon size={12} /> {streak} cycles
+            </span>
+          ) : showQuiet ? (
+            <span className={s.mxQuietPill} title={`${quietDays} quiet days without spending in ${c.name}`}>
+              {quietDays} quiet days
+            </span>
+          ) : vibe ? (
+            <span className={`${s.ellipsis} ${smoothUnder || cur === 0 ? s.mxSmoothNote : isNear ? s.mxNearNote : s.mxVibeNote}`}>{vibe}</span>
+          ) : null}
+        </span>
       </div>
       {open && (
         <div className={s.mxBody}>
-          {spendDays >= 3 && (
+          {mine.length > 0 && (
             <div className={s.mxWeek} aria-label="Last 7 days">
               {week.map(x => {
                 const iso = toISO(x.d);
@@ -403,18 +424,11 @@ export function BudgetCard({
               })}
             </div>
           )}
-          {one ? (
-            <p className={s.mxSummary}>
-              One expense:{' '}
-              <button type="button" className={s.mxInlineLink} onClick={() => onShowTransactions(c.name, { q: tidyName(one.title) })}>
-                <strong>{tidyName(one.title)}</strong>
-              </button>
-              , {full(one.net)} on {DAY_NAME[one.date.getDay()]}.
-            </p>
+          {places.length > 0 ? (
+            <PlaceList places={places} onPick={merchant => onShowTransactions(c.name, { q: merchant })} />
           ) : (
-            places.length > 0 && <PlaceList places={places} onPick={merchant => onShowTransactions(c.name, { q: merchant })} />
+            <p className={s.mxSummary}>Nothing spent here yet — clean slate.</p>
           )}
-          {mine.length === 0 && <p className={s.mxSummary}>Nothing spent here yet — clean slate.</p>}
           {suggestion}
           {onNudgeLimit && (
             <div className={s.mxNudgeBar}>
@@ -478,7 +492,7 @@ export function BudgetCard({
           {extra}
           <div className={s.mxLinks}>
             <button type="button" className={s.mxLink} onClick={() => onShowTransactions(c.name)}>
-              {one ? 'See the expense' : 'See transactions'}
+              See transactions
             </button>
             {onShareRoom && room >= step / 2 && shareTargets.length > 0 && (
               <button type="button" className={s.mxLink} onClick={() => setSharing(v => !v)}>

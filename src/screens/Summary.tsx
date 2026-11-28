@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import s from '../styles/ui.module.css';
 import { IC, Icon } from '../components/Icon';
 import { Logo, type MaxieMood } from '../components/Logo';
@@ -1111,10 +1112,7 @@ function DailyBars({ cycle, budget: b, onOpenDay }: { cycle: Cycle; budget: Budg
   );
 }
 
-/** A category colour's matching label ink: `var(--category-7)` → `var(--on-category-7)`. */
-const onColor = (color: string) => color.replace('var(--category-', 'var(--on-category-');
-
-type Cell = { name: string; value: number; color: string; on: string; detail?: string; x: number; y: number; w: number; h: number };
+type Cell = { name: string; value: number; color: string; tint: string; detail?: string; x: number; y: number; w: number; h: number };
 
 /** Squarified treemap layout: rectangles close to square, biggest first. */
 function squarify(items: Omit<Cell, 'x' | 'y' | 'w' | 'h'>[], W: number, H: number): Cell[] {
@@ -1157,13 +1155,12 @@ function squarify(items: Omit<Cell, 'x' | 'y' | 'w' | 'h'>[], W: number, H: numb
   return out;
 }
 
-/** Whether a box has room for its label (name and value/share); small boxes go in the legend. */
-const labelFits = (w: number, h: number, name: string) => name.length * 7.6 + 24 <= w && h >= 46;
+/** Whether a ceramic bento tile has comfortable room for its dot + label + value. */
+const labelFits = (w: number, h: number, name: string) => name.length * 7.2 + 34 <= w && w >= 68 && h >= 44;
 
 /**
- * Where it went (Maxie CategoryTreemap): flush boxes sized by spending (outer corners radius-md only, no inner gaps
- * or borders), All vs Everyday toggle so fixed bills don't dwarf discretionary spend, whole percentages, hover/keyboard
- * tooltip, clickable Other cell, legend for small boxes, and a visually hidden table.
+ * Where it went (Soft Ceramic Bento Mosaic): calm paper-tinted bento tiles with rounded corners, breathing gaps,
+ * dot accent, prominent values on larger tiles, and soft rounded legend chips for compact categories.
  */
 function WhereMap({
   cycle,
@@ -1182,43 +1179,49 @@ function WhereMap({
   const [box, setBox] = useState<HTMLDivElement | null>(null);
   const [hover, setHover] = useState<Cell | null>(null);
   const W = useWidth(box);
-  const H = phone ? 240 : 300;
+  const H = phone ? 236 : 292;
   const hasFixed = b.cats.some(c => c.type === 'fixed' && c.spent > 0);
   const hasVar = b.cats.some(c => c.type === 'variable' && c.spent > 0);
   const activeScope = hasFixed && hasVar ? scope : 'all';
   const cats = b.cats
     .filter(c => c.spent > 0 && (activeScope === 'all' || c.type === 'variable'))
     .sort((x, y) => y.spent - x.spent);
-  const total = sum(cats.map(c => c.spent));
-  // Eight categories at most, then the rest together as Other.
-  const main = cats.slice(0, 8);
-  const restCats = cats.slice(8);
+  const rawTotal = sum(cats.map(c => c.spent));
+  // Keep tiles readable: up to 6 main tiles, folding tiny tail slices (<3.5% beyond top 4) into Other when 2+ exist.
+  const cut = cats.findIndex((c, i) => i >= 6 || (i >= 4 && rawTotal > 0 && c.spent / rawTotal < 0.035 && cats.length - i >= 2));
+  const splitAt = cut === -1 ? cats.length : cut;
+  const main = cats.slice(0, splitAt);
+  const restCats = cats.slice(splitAt);
   const rest = sum(restCats.map(c => c.spent));
-  // Biggest first, Other too, so the boxes read largest to smallest.
   const items: Omit<Cell, 'x' | 'y' | 'w' | 'h'>[] = [
-    ...main.map(c => ({ name: c.name, value: c.spent, color: c.color, on: onColor(c.color) })),
+    ...main.map(c => ({ name: c.name, value: c.spent, color: c.color, tint: c.tint })),
     ...(rest > 0
       ? [
           {
             name: 'Other',
             value: rest,
-            color: 'var(--category-other-fill)',
-            on: 'var(--on-category-other)',
+            color: 'var(--category-other)',
+            tint: 'var(--surface-100)',
             detail: restCats.map(c => c.name).join(', '),
           },
         ]
       : []),
   ].sort((x, y) => y.value - x.value);
+  const total = rawTotal;
   const cells = W ? squarify(items, W, H) : [];
   const pct = (v: number) => {
     const p = Math.round((v / total) * 100);
     return p < 1 ? '<1%' : `${p}%`;
   };
-  // Flush cells: no gaps, borders, or inner rounding; only outer corners (radius-md on container).
+  // Soft 5px bento spacing between rounded ceramic tiles.
   const laid = cells.map(c => {
-    const x = Math.round(c.x), y = Math.round(c.y);
-    const w = Math.round(c.x + c.w) - x, h = Math.round(c.y + c.h) - y;
-    return { ...c, x, y, w, h, label: labelFits(w, h, c.name) };
+    const x0 = Math.round(c.x);
+    const y0 = Math.round(c.y);
+    const x1 = Math.round(c.x + c.w);
+    const y1 = Math.round(c.y + c.h);
+    const w = Math.max(0, x1 - x0 - 5);
+    const h = Math.max(0, y1 - y0 - 5);
+    return { ...c, x: x0 + 2, y: y0 + 2, w, h, label: labelFits(w, h, c.name), roomy: w >= 120 && h >= 74 };
   });
   const unlabelled = laid.filter(c => !c.label);
   const openCell = (name: string) => (name === 'Other' ? onOpenCategories() : onOpenCategory(name));
@@ -1262,14 +1265,33 @@ function WhereMap({
                   onFocus={() => setHover(c)}
                   onBlur={() => setHover(null)}
                   aria-label={`${c.name}: ${full(c.value)} (${pct(c.value)})${c.detail ? ` — ${c.detail}` : ''}`}
-                  style={{ left: c.x, top: c.y, width: Math.max(0, c.w), height: Math.max(0, c.h), background: c.color, color: c.on }}
+                  style={
+                    {
+                      left: c.x,
+                      top: c.y,
+                      width: c.w,
+                      height: c.h,
+                      background: c.tint,
+                      '--tm-color': c.color,
+                    } as CSSProperties
+                  }
                 >
                   {c.label && (
                     <>
-                      <span className={s.sxTmName}>{c.name}</span>
-                      <span className={s.sxTmPct}>
-                        {c.w >= 135 ? `${short(c.value)} (${pct(c.value)})` : pct(c.value)}
+                      <span className={s.sxTmTop}>
+                        <span className={s.sxTmDot} style={{ background: c.color }} aria-hidden="true" />
+                        <span className={s.sxTmName}>{c.name}</span>
                       </span>
+                      {c.roomy ? (
+                        <span className={s.sxTmMeta}>
+                          <span className={s.sxTmVal}>{short(c.value)}</span>
+                          <span className={s.sxTmPct}>{pct(c.value)}</span>
+                        </span>
+                      ) : (
+                        <span className={s.sxTmPct}>
+                          {c.w >= 115 ? `${short(c.value)} · ${pct(c.value)}` : pct(c.value)}
+                        </span>
+                      )}
                     </>
                   )}
                 </button>
@@ -1296,7 +1318,8 @@ function WhereMap({
               {unlabelled.map(p => (
                 <button key={p.name} type="button" className={s.sxTmKey} onClick={() => openCell(p.name)} title={p.detail ? `${full(p.value)} — ${p.detail}` : full(p.value)}>
                   <span className={s.sxLegendDot} style={{ background: p.color }} />
-                  {p.name} {short(p.value)} ({pct(p.value)})
+                  <span>{p.name}</span>
+                  <span style={{ color: C.textMuted }}>{short(p.value)} ({pct(p.value)})</span>
                 </button>
               ))}
             </div>

@@ -359,16 +359,32 @@ export function ChallengeBox({
   onClear: () => void;
 }) {
   const { settings, short } = useSettings();
-  if (!state)
+  const [picking, setPicking] = useState(false);
+  if (!state) {
+    if (!picking) {
+      return (
+        <button type="button" className={s.btnOutlineSm} onClick={() => setPicking(true)} title={`Start a playful mini-quest for ${name}`}>
+          <TargetIcon size={14} />
+          Try a mini-quest
+          <Icon d={IC.chevDown} size={13} />
+        </button>
+      );
+    }
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: C.textMuted }}>Try a playful mini-quest for {name}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: C.textMuted }}>Pick a mini-quest for {name}</span>
+          <button type="button" className={s.textBtnSm} style={{ padding: 0 }} onClick={() => setPicking(false)}>
+            Cancel
+          </button>
+        </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           <button
             type="button"
             className={s.btnOutlineSm}
             onClick={() => {
               haptic('success', settings.quietMode);
+              setPicking(false);
               onStart({ days: 3, kind: 'nospend' });
             }}
             title={`Spend nothing on ${name} for 3 days`}
@@ -381,6 +397,7 @@ export function ChallengeBox({
             className={s.btnOutlineSm}
             onClick={() => {
               haptic('success', settings.quietMode);
+              setPicking(false);
               onStart({ days: 7, kind: 'nospend' });
             }}
             title={`Spend nothing on ${name} for 7 days`}
@@ -394,6 +411,7 @@ export function ChallengeBox({
               className={s.btnOutlineSm}
               onClick={() => {
                 haptic('success', settings.quietMode);
+                setPicking(false);
                 onStart({ kind: 'beat_last', target: lastSpent });
               }}
               title={`Finish this cycle under last cycle's ${short(lastSpent)}`}
@@ -405,6 +423,7 @@ export function ChallengeBox({
         </div>
       </div>
     );
+  }
 
   if (state.kind === 'beat_last' && state.target) {
     const pct = Math.min(100, Math.round(((state.spent ?? 0) / state.target) * 100));
