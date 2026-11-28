@@ -59,17 +59,17 @@ const BITE_QUIPS = [
 ];
 
 const FULL_LINES = [
-  "Whoa... I'm officially a loaf. Gimme 7 secs.",
-  'Belly at 100%. Too full to sprint — back in a sec!',
-  "I'm full! Maxie needs a 7-second snack nap.",
-  "Okay okay, I'm stuffed! Rolling back soon...",
-  'Too many treats... give me 7 seconds to digest!',
+  "Oof... I'm officially a happy loaf. Need a tiny breather.",
+  "Belly's at 100%. Too cozy to sprint right now!",
+  "Okay okay, I'm stuffed! Just resting my paws for a bit.",
+  'Too many good snacks... catching a quick food nap.',
+  "I'm full! Give my little tummy a moment to settle.",
 ];
 
 const EXTRA_FULL_LINES = [
-  'Still full! Seriously, my collar just popped.',
-  'Nice try — belly says absolutely not.',
-  'Not even one tiny crumb fits right now.',
+  'Still full! My collar is working overtime here.',
+  'Nice try — my belly says save it for later.',
+  'Not even one tiny crumb fits right now, friend.',
 ];
 
 // Natural brown-black fur coat palette inspired by Maxie in CycleStoryModal
@@ -100,9 +100,9 @@ function CycleStoryHusky({
   chonk?: number;
   pose?: 'run' | 'eat' | 'leap';
 }) {
-  const bellyScale = 1 + Math.min(4, Math.max(0, chonk)) * 0.14;
-  const bellyShift = (bellyScale - 1) * 16;
-  const cheekScale = 1 + Math.min(4, Math.max(0, chonk)) * 0.04;
+  const chonkVal = Math.min(4, Math.max(0, chonk));
+  const bellyScale = 1 + chonkVal * 0.14;
+  const cheekScale = 1 + chonkVal * 0.04;
   const eating = pose === 'eat';
   const running = pose === 'run';
 
@@ -119,21 +119,32 @@ function CycleStoryHusky({
       aria-hidden="true"
     >
       {/* Plumed curled Siberian husky tail (brown-black outer, cream underside) */}
-      <g className={running || pose === 'leap' ? s.huskyTailWag : undefined} style={{ transformOrigin: '24px 44px' }}>
+      <g
+        className={running || pose === 'leap' ? s.huskyTailWag : undefined}
+        style={{ transformBox: 'view-box', transformOrigin: '26px 42px' }}
+      >
         <path d="M22 45 C7 38 1 20 13 11 C23 5 32 14 29 30 Z" fill={FUR_DARK} />
         <path d="M23 43 C11 36 8 22 16 15 C22 11 27 17 25 29 Z" fill={FUR_CREAM} />
       </g>
 
-      {/* Far legs */}
-      <g className={running ? s.huskyLegB : undefined} style={{ transformOrigin: '38px 54px' }}>
-        <path d="M36 53 L23 76 Q20 80 25 81 L31 79 L44 56 Z" fill={FUR_CREAM_SHADE} />
+      {/* Far legs (tucked up inside hip/shoulder sockets so stride never detaches) */}
+      <g
+        className={running ? s.huskyLegB : undefined}
+        style={{ transformBox: 'view-box', transformOrigin: '40px 49px' }}
+      >
+        <path d="M36 47 C36 43 45 43 46 49 L44 56 L31 79 L25 81 Q20 80 23 76 Z" fill={FUR_CREAM_SHADE} />
       </g>
-      <g className={running ? s.huskyLegA : undefined} style={{ transformOrigin: '76px 51px' }}>
-        <path d="M75 50 L96 67 Q100 71 96 74 L90 73 L69 55 Z" fill={FUR_CREAM_SHADE} />
+      <g
+        className={running ? s.huskyLegA : undefined}
+        style={{ transformBox: 'view-box', transformOrigin: '73px 47px' }}
+      >
+        <path d="M70 46 C70 42 79 42 79 48 L96 67 Q100 71 96 74 L90 73 L69 54 Z" fill={FUR_CREAM_SHADE} />
       </g>
 
-      {/* Sturdy brown-black torso + warm sable shoulder + round ivory belly/chest ruff */}
-      <g transform={`translate(0 ${(-bellyShift * 0.32).toFixed(2)}) scale(1 ${bellyScale.toFixed(2)})`} style={{ transformOrigin: '56px 43px' }}>
+      {/* Sturdy brown-black torso + warm sable shoulder + round ivory belly expanding downward from spine */}
+      <g
+        transform={`translate(56 36) scale(${(1 + chonkVal * 0.03).toFixed(2)} ${bellyScale.toFixed(2)}) translate(-56 -36)`}
+      >
         <path d="M24 44 C28 27 48 22 75 26 C87 28 93 36 89 48 C84 58 67 61 46 59 C32 57 22 52 24 44 Z" fill={FUR_DARK} />
         <path d="M35 33 Q56 26 75 30 Q65 39 41 38 Z" fill={FUR_SABLE} opacity="0.82" />
         <path
@@ -143,12 +154,18 @@ function CycleStoryHusky({
         <path d="M87 42 L94 46 L88 50 L91 54 L83 55 Z" fill={FUR_CREAM} />
       </g>
 
-      {/* Near legs */}
-      <g className={running ? s.huskyLegA : undefined} style={{ transformOrigin: '46px 53px' }}>
-        <path d="M43 52 L34 77 Q32 82 37 82 L43 80 L53 55 Z" fill={FUR_CREAM} />
+      {/* Near legs (anchored firmly inside torso with rounded thigh/shoulder caps) */}
+      <g
+        className={running ? s.huskyLegA : undefined}
+        style={{ transformBox: 'view-box', transformOrigin: '46px 49px' }}
+      >
+        <path d="M41 47 C42 42 52 43 53 49 L53 55 L43 80 L37 82 Q32 82 34 77 Z" fill={FUR_CREAM} />
       </g>
-      <g className={running ? s.huskyLegB : undefined} style={{ transformOrigin: '74px 48px' }}>
-        <path d="M70 49 L89 72 Q92 76 97 74 L98 69 L79 45 Z" fill={FUR_CREAM} />
+      <g
+        className={running ? s.huskyLegB : undefined}
+        style={{ transformBox: 'view-box', transformOrigin: '74px 46px' }}
+      >
+        <path d="M68 45 C69 40 78 40 79 45 L98 69 L97 74 Q92 76 89 72 L70 51 Z" fill={FUR_CREAM} />
       </g>
 
       {/* Terracotta collar + brass tag */}

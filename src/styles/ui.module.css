@@ -12114,15 +12114,15 @@ button.sumPulsePill:hover {
   pointer-events: none;
 }
 .huskyLegA {
-  transform-box: fill-box;
+  transform-box: view-box;
   animation: huskyStrideA 0.28s ease-in-out infinite alternate;
 }
 .huskyLegB {
-  transform-box: fill-box;
+  transform-box: view-box;
   animation: huskyStrideB 0.28s ease-in-out infinite alternate;
 }
 .huskyTailWag {
-  transform-box: fill-box;
+  transform-box: view-box;
   animation: huskyTailWag 0.38s ease-in-out infinite alternate;
 }
 .huskyChomp {
@@ -12211,12 +12211,12 @@ button.sumPulsePill:hover {
 }
 
 @keyframes huskyStrideA {
-  from { transform: rotate(-16deg); }
-  to { transform: rotate(18deg); }
+  from { transform: rotate(-14deg); }
+  to { transform: rotate(15deg); }
 }
 @keyframes huskyStrideB {
-  from { transform: rotate(18deg); }
-  to { transform: rotate(-16deg); }
+  from { transform: rotate(15deg); }
+  to { transform: rotate(-14deg); }
 }
 @keyframes huskyTailWag {
   from { transform: rotate(-10deg); }
