@@ -1127,7 +1127,7 @@ function ReplyWidget({
   return null;
 }
 
-/** Gemini's text: headings, "- " bullets, "1. " numbered lists, **bold**, *italic*, and `code`. */
+/** Gemini's text: headings, Markdown tables, "- " bullets, "1. " numbered lists, **bold**, *italic*, and `code`. */
 export function Rich({ text }: { text: string }) {
   const inline = (line: string): ReactNode[] => {
     const tokens = line.split(/(\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`]+`)/g);
@@ -1143,40 +1143,89 @@ export function Rich({ text }: { text: string }) {
       return part;
     });
   };
-  const lines = text.split('\n').filter(l => l.trim());
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {lines.map((l, i) => {
-        const heading = l.match(/^\s*#{1,3}\s+(.+)/);
-        if (heading)
-          return (
-            <p key={i} className={s.chatRichHeading}>
-              {inline(heading[1])}
-            </p>
-          );
-        if (/^\s*[-*•]\s+/.test(l))
-          return (
-            <div key={i} style={{ display: 'flex', gap: 8 }}>
-              <span aria-hidden="true">•</span>
-              <span>{inline(l.replace(/^\s*[-*•]\s+/, ''))}</span>
-            </div>
-          );
-        const numbered = l.match(/^\s*(\d+\.)\s+(.+)/);
-        if (numbered)
-          return (
-            <div key={i} style={{ display: 'flex', gap: 8 }}>
-              <span style={{ fontWeight: 600, flex: 'none', minWidth: 18 }}>{numbered[1]}</span>
-              <span>{inline(numbered[2])}</span>
-            </div>
-          );
-        return (
-          <p key={i} style={{ margin: 0 }}>
-            {inline(l)}
-          </p>
-        );
-      })}
-    </div>
-  );
+  const splitRow = (line: string) =>
+    line
+      .trim()
+      .replace(/^\|/, '')
+      .replace(/\|$/, '')
+      .split('|')
+      .map(c => c.trim());
+  const isSep = (line: string) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(line);
+  const isTableRow = (line: string) => line.includes('|') && splitRow(line).length >= 2;
+
+  const raw = text.replace(/\r\n/g, '\n').split('\n');
+  const blocks: ReactNode[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const l = raw[i];
+    if (!l.trim()) continue;
+    if (i + 1 < raw.length && isTableRow(l) && isSep(raw[i + 1])) {
+      const headers = splitRow(l);
+      const rows: string[][] = [];
+      let j = i + 2;
+      while (j < raw.length && raw[j].trim() && isTableRow(raw[j])) {
+        rows.push(splitRow(raw[j]));
+        j++;
+      }
+      blocks.push(
+        <div key={`tbl-${i}`} className={s.chatTableWrap}>
+          <table className={s.chatTable}>
+            <thead>
+              <tr>
+                {headers.map((h, hi) => (
+                  <th key={hi}>{inline(h)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, ri) => (
+                <tr key={ri}>
+                  {headers.map((_, ci) => (
+                    <td key={ci}>{inline(r[ci] ?? '')}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
+      i = j - 1;
+      continue;
+    }
+    const heading = l.match(/^\s*#{1,3}\s+(.+)/);
+    if (heading) {
+      blocks.push(
+        <p key={i} className={s.chatRichHeading}>
+          {inline(heading[1])}
+        </p>,
+      );
+      continue;
+    }
+    if (/^\s*[-*•]\s+/.test(l)) {
+      blocks.push(
+        <div key={i} style={{ display: 'flex', gap: 8 }}>
+          <span aria-hidden="true">•</span>
+          <span>{inline(l.replace(/^\s*[-*•]\s+/, ''))}</span>
+        </div>,
+      );
+      continue;
+    }
+    const numbered = l.match(/^\s*(\d+\.)\s+(.+)/);
+    if (numbered) {
+      blocks.push(
+        <div key={i} style={{ display: 'flex', gap: 8 }}>
+          <span style={{ fontWeight: 600, flex: 'none', minWidth: 18 }}>{numbered[1]}</span>
+          <span>{inline(numbered[2])}</span>
+        </div>,
+      );
+      continue;
+    }
+    blocks.push(
+      <p key={i} style={{ margin: 0 }}>
+        {inline(l)}
+      </p>,
+    );
+  }
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>{blocks}</div>;
 }
 
 export function Problem({ p, onRetry }: { p: { kind: string; detail?: string }; onRetry: () => void }) {
